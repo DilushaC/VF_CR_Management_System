@@ -1,0 +1,66 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@{
+    ViewData["Title"] = "Login";
+    Layout = null;
+}
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - CR_Management_System</title>
+
+    <!-- App favicon -->
+    <link rel="shortcut icon" href="~/assets/images/favicon.ico">
+
+    <!-- Vendor css -->
+    <link href="~/assets/css/vendor.min.css" rel="stylesheet" type="text/css" />
+
+    <!-- App css -->
+    <link href="~/assets/css/app.min.css" rel="stylesheet" type="text/css" id="app-style" />
+
+    <!-- Icons css -->
+    <link href="~/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+
+    <!-- Theme Config Js -->
+    <script src="~/assets/js/config.js"></script>
+</head>
+
+<body>
+    <div class="auth-bg d-flex min-vh-100 justify-content-center align-items-center">
+        <div class="row g-0 justify-content-center w-100 m-xxl-5 px-xxl-4 m-3">
+            <div class="col-xl-4 col-lg-5 col-md-6">
+                <div class="card overflow-hidden text-center h-100 p-xxl-4 p-3 mb-0">
+                    <a href="index.html" class="auth-brand mb-4">
+                        <img src="~/assets/Vallibel_Finance_logo.png" alt="logo"
+                             style="height:80px; class="logo-dark">
+                    </a>
+
+                    <h4 class="fw-semibold mb-2 fs-18">CR Management System</h4>
+
+                    <p class="text-muted mb-4">Enter your Employee Number and AD Password</p>
+
+                    <form action="~/Home/Index" class="text-start mb-3">
+                        <div class="mb-3">
+                            <label class="form-label" for="example-email">UserName</label>
+                            <input type="text" id="example-email" name="example-email" class="form-control" placeholder="Enter your Employee Number">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="example-password">Password</label>
+                            <input type="password" id="example-password" class="form-control" placeholder="Enter your AD password">
+                        </div>
+
+                        <div class="d-grid">
+                            <button class="btn btn-primary fw-semibold" href="~/CRManagement/Index" type="submit">Login</button>
+                        </div>
+                    </form>
+                    <p class="mt-auto mb-0">
+                        <script>document.write(new Date().getFullYear())</script> © CRMS - By <span class="fw-bold text-decoration-underline text-uppercase text-reset fs-12">Vallibel Finance IT</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
