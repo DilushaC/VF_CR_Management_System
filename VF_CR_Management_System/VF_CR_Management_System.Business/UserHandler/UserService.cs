@@ -32,11 +32,11 @@ namespace VF_CR_Management_System.Business.UserHandler
             // 2. Get User
             const string userQuery = @"
                 SELECT *
-                FROM SystemUser
-                WHERE EmployeeId = @EmployeeId AND IsActive = 1";
+                FROM Users
+                WHERE UserName = @UserName AND IsActive = 1";
 
             var userParams = new DynamicParameters();
-            userParams.Add("@EmployeeId", username);
+            userParams.Add("@UserName", username);
 
             var userData = _connectionService.ReturnWithPara(userQuery, userParams);
             if (userData == null || userData.Rows.Count == 0)

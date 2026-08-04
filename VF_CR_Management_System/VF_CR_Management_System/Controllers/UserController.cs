@@ -21,8 +21,10 @@ namespace VF_CR_Management_System.Presentation.Controllers
             return View();
         }
 
+        [HttpGet]
         public ActionResult Login()
         {
+            HttpContext.Session.Clear();
             return View();
         }
 

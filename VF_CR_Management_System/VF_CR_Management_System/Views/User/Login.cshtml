@@ -1,66 +1,233 @@
 ﻿@*
     For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 *@
+@model VF_CR_Management_System.Data.Models.UserModel
+
 @{
     ViewData["Title"] = "Login";
     Layout = null;
 }
 
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - CR_Management_System</title>
 
     <!-- App favicon -->
-    <link rel="shortcut icon" href="~/assets/images/favicon.ico">
+    <link rel="shortcut icon" href="~/assets/Vallibel-logo.ico">
 
     <!-- Vendor css -->
     <link href="~/assets/css/vendor.min.css" rel="stylesheet" type="text/css" />
-
     <!-- App css -->
     <link href="~/assets/css/app.min.css" rel="stylesheet" type="text/css" id="app-style" />
-
     <!-- Icons css -->
     <link href="~/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
 
     <!-- Theme Config Js -->
     <script src="~/assets/js/config.js"></script>
-</head>
 
+    <style>
+        body {
+            background: #2a0710;
+            background: linear-gradient(160deg, #3a0a17 0%, #240610 50%, #180308 100%);
+            min-height: 100vh;
+        }
+
+        .auth-bg {
+            background: transparent;
+        }
+
+        .card {
+            background-color: #5c1526;
+            border: 1px solid #7d2038;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+        }
+
+            .card h4,
+            .card p,
+            .card .form-label {
+                color: #f2d9df;
+            }
+
+        .system-name {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: #ffffff;
+            text-shadow: 0 2px 12px rgba(139, 0, 40, 0.6);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-control {
+            background-color: #4a1020;
+            border: 1px solid #8a2a44;
+            color: #f2d9df;
+        }
+
+            .form-control:focus {
+                background-color: #4a1020;
+                border-color: #c85070;
+                box-shadow: 0 0 0 0.2rem rgba(200, 80, 112, 0.35);
+                color: #ffffff;
+            }
+
+            .form-control::placeholder {
+                color: #c090a0;
+            }
+
+        .btn-primary {
+            background-color: #a8203f;
+            border-color: #a8203f;
+            font-weight: 600;
+        }
+
+            .btn-primary:hover,
+            .btn-primary:active {
+                background-color: #c02a4d;
+                border-color: #c02a4d;
+            }
+
+        .card p.mt-auto span {
+            color: #e0b0be;
+        }
+    </style>
+</head>
 <body>
     <div class="auth-bg d-flex min-vh-100 justify-content-center align-items-center">
         <div class="row g-0 justify-content-center w-100 m-xxl-5 px-xxl-4 m-3">
             <div class="col-xl-4 col-lg-5 col-md-6">
                 <div class="card overflow-hidden text-center h-100 p-xxl-4 p-3 mb-0">
-                    <a href="index.html" class="auth-brand mb-4">
-                        <img src="~/assets/Vallibel_Finance_logo.png" alt="logo"
-                             style="height:80px; class="logo-dark">
+
+                    <a href="" class="auth-brand mb-4">
+                        <img src="~/assets/Vallibel_Finance_logo.png" alt="logo" style="height:80px;" class="logo-dark">
                     </a>
 
-                    <h4 class="fw-semibold mb-2 fs-18">CR Management System</h4>
+                    <h1 class="system-name">CR Management System</h1>
 
-                    <p class="text-muted mb-4">Enter your Employee Number and AD Password</p>
+                    <form class="text-start mb-3"
+                          asp-action="Login"
+                          asp-controller="User"
+                          method="post"
+                          id="loginForm">
 
-                    <form action="~/Home/Index" class="text-start mb-3">
                         <div class="mb-3">
-                            <label class="form-label" for="example-email">UserName</label>
-                            <input type="text" id="example-email" name="example-email" class="form-control" placeholder="Enter your Employee Number">
+                            <label asp-for="UserName" class="form-label">User Name</label>
+                            <input asp-for="UserName"
+                                   class="form-control"
+                                   placeholder="Enter your Employee Number"
+                                   required />
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label" for="example-password">Password</label>
-                            <input type="password" id="example-password" class="form-control" placeholder="Enter your AD password">
+                            <label asp-for="Password" class="form-label">Password</label>
+                            <div class="input-group input-group-merge">
+                                <input asp-for="Password"
+                                       type="password"
+                                       class="form-control"
+                                       placeholder="Enter your AD password"
+                                       required />
+                            </div>
                         </div>
 
                         <div class="d-grid">
-                            <button class="btn btn-primary fw-semibold" href="~/CRManagement/Index" type="submit">Login</button>
+                            <button type="button" class="btn btn-primary fw-semibold" onclick="submitLogin()">
+                                Login
+                            </button>
                         </div>
+
+                        <div class="alert alert-danger text-center mt-3" id="Error" style="display:none;"></div>
+
                     </form>
+
                     <p class="mt-auto mb-0">
-                        <script>document.write(new Date().getFullYear())</script> © CRMS - By <span class="fw-bold text-decoration-underline text-uppercase text-reset fs-12">Vallibel Finance IT</span>
+                        <script>document.write(new Date().getFullYear())</script> © CRMS - By
+                        <span class="fw-bold text-decoration-underline text-uppercase text-reset fs-12">Vallibel Finance IT</span>
                     </p>
+
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- bundle -->
+    <link rel="stylesheet" href="~/assets/vendor/sweetalert2/sweetalert2.min.css">
+    <script src="~/assets/js/vendor.min.js"></script>
+    <script src="~/assets/js/app.min.js"></script>
+    <script src="~/assets/vendor/sweetalert2/sweetalert2.min.js"></script>
+    <script type="text/javascript">
+
+        $(document).on('keypress', '#loginForm input', function (e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                submitLogin();
+            }
+        });
+
+        $("#Error").hide();
+
+        function submitLogin() {
+            var form = $("#loginForm");
+
+            $.ajax({
+                url: "/User/Login",
+                type: "POST",
+                data: form.serialize(),
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+
+                beforeSend: function () {
+                    Swal.fire({
+                        title: "Please wait...",
+                        text: "Checking credentials",
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                },
+
+                success: function (response) {
+                    Swal.close();
+
+                    console.log(response.pageUrls);
+
+                    if (response.success) {
+                        let username = response.loggedUser;
+
+                        Swal.fire({
+                            title: 'Login Success!',
+                            text: "Welcome back " + username,
+                            icon: 'success',
+                            timer: 1500,
+                            showConfirmButton: false
+                        }).then(() => {
+                            window.location.href = response.redirectUrl;
+                        });
+
+                    } else if (response.redirectUrl != null) {
+                        window.location.href = response.redirectUrl;
+
+                    } else {
+                        Swal.fire({
+                            title: "Login Failed!",
+                            text: response.message,
+                            icon: "error"
+                        });
+                    }
+                },
+
+                error: function (xhr, status, error) {
+                    Swal.close();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Something went wrong! Please try again.'
+                    });
+                }
+            });
+        }
+
+    </script>
 </body>
+</html>
