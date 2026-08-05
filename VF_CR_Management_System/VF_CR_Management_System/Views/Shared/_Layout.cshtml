@@ -1,9 +1,18 @@
-﻿<!DOCTYPE html>
+﻿@using System.Text.Json
+@using VF_CR_Management_System.Data.Models
+
+@{
+    var username = Context.Session.GetString("UserName");
+    var designation = Context.Session.GetString("Designation");
+    var department = Context.Session.GetString("Department");
+    var email = Context.Session.GetString("Email");
+}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - CR_Management_System</title>
+    <title>@ViewData["Title"] - CRMS</title>
     <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />
     <meta content="Coderthemes" name="author" />
 
@@ -129,7 +138,7 @@
                     <!-- Topbar Page Title -->
                     <div class="topbar-item d-none d-md-flex">
                         <div>
-                            <h4 class="page-title fs-18 fw-bold mb-0">Welcome to CR Portal</h4>
+                            <h4 class="page-title fs-18 fw-bold mb-0">Welcome to CR Management System</h4>
                         </div>
                     </div>
                 </div>
@@ -163,10 +172,11 @@
                         <div class="dropdown">
                             <a class="topbar-link dropdown-toggle drop-arrow-none px-2" data-bs-toggle="dropdown"
                                data-bs-offset="0,25" type="button" aria-haspopup="false" aria-expanded="false">
-                                <img src="~/assets/images/users/avatar-1.jpg" width="32" class="rounded-circle me-lg-2 d-flex"
-                                     alt="user-image">
                                 <span class="d-lg-flex flex-column gap-1 d-none">
-                                    <h5 class="my-0">Maxine K.</h5>
+                                    <h5 class="my-0">@username</h5>
+                                    <small class="text-muted" style="font-size: 11px; margin-top: -4px;">
+                                        @designation - @department
+                                    </small>
                                 </span>
                                 <i class="ri-arrow-down-s-line d-none d-lg-block align-middle ms-2"></i>
                             </a>

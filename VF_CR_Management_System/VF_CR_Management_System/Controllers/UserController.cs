@@ -44,6 +44,7 @@ namespace VF_CR_Management_System.Presentation.Controllers
                 HttpContext.Session.SetString("UserName", user.DisplayName);
                 HttpContext.Session.SetString("Designation", user.DisplayDesignation);
                 HttpContext.Session.SetString("Department", user.DisplayDepartment);
+                HttpContext.Session.SetString("Email", user.Email);
 
                 return Json(new
                 {

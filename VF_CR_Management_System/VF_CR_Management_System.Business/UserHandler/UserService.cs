@@ -49,6 +49,7 @@ namespace VF_CR_Management_System.Business.UserHandler
                 DisplayName = response.Data.DisplayName,
                 DisplayDesignation = response.Data.Title,
                 DisplayDepartment = response.Data.Department,
+                Email = response.Data.Email,
             };
 
             return user;

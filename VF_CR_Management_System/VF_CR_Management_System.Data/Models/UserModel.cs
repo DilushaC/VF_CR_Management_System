@@ -13,6 +13,7 @@ namespace VF_CR_Management_System.Data.Models
         public string Password { get; set; }
         public string DisplayName { get; set; }
         public string DisplayDesignation { get; set; }
+        public string Email { get; set; }
         public string DisplayDepartment { get; set; }
         public bool IsActive { get; set; }
     }

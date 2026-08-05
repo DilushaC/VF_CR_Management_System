@@ -13,6 +13,7 @@ namespace CR_Management_System.Controllers
             _logger = logger;
         }
 
+        [HttpGet]
         public IActionResult Index()
         {
             return View();
