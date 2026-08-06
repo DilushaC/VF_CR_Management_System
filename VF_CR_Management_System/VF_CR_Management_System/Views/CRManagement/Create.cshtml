@@ -1,6 +1,6 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
+﻿@{
+    ViewData["Title"] = "Create CR";
+}
 @{
 
     var username = Context.Session.GetString("UserName");
@@ -19,44 +19,112 @@
             <div class="card-body">
                 <div class="row">
                     <form>
-                        <div class="col-lg-6">
+                        <div class="row">
 
-                            <div class="mb-3">
-                                <label for="simpleinput" class="form-label">Change Request Title</label>
-                                <input type="text" id="simpleinput" class="form-control">
+                            <!-- Left Column -->
+                            <div class="col-lg-6">
+
+                                <div class="mb-3">
+                                    <label class="form-label">Change Request Title</label>
+                                    <input type="text" class="form-control">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Requester Name</label>
+                                    <input type="text" class="form-control" value="@username" disabled>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Designation</label>
+                                    <input type="text" class="form-control" value="@designation" disabled>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Department</label>
+                                    <input type="text" class="form-control" value="@department" disabled>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" value="@email" disabled>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Change Description</label>
+                                    <textarea class="form-control" rows="5"></textarea>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Business Justification</label>
+                                    <textarea class="form-control" rows="5"></textarea>
+                                </div>
+
                             </div>
-                            <div class="mb-3">
-                                <label for="simpleinput" class="form-label">Requester Name</label>
-                                <input type="text" id="requester" class="form-control" value="@username" disabled="">
+
+                            <!-- Right Column -->
+                            <div class="col-lg-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Request Date</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           value="@DateTime.Now.ToString("dd/MM/yyyy")"
+                                           disabled />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Requested Completion Date</label>
+                                    <input class="form-control" id="example-date" type="date" name="date">
+                                </div>
+
+                                <h6 class="fs-15 mt-3">Change Type</h6>
+                                <div class="mt-2">
+                                    <div class="form-check form-check-inline">
+                                        <input type="radio" id="customRadio3" name="customRadio1" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio3">Bug Fix</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input type="radio" id="customRadio4" name="customRadio1" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio4">Report Development</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input type="radio" id="customRadio4" name="customRadio1" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio4">Enhancement</label>
+                                    </div>
+                                </div>
+
+                                <h6 class="fs-15 mt-3">Colors</h6>
+
+                                <div class="form-check mb-2">
+                                    <input type="radio" id="customRadiocolor1" name="customRadiocolor1" class="form-check-input" checked>
+                                    <label class="form-check-label" for="customRadiocolor1">Default Radio</label>
+                                </div>
+                                <div class="form-check form-radio-success mb-2">
+                                    <input type="radio" id="customRadiocolor2" name="customRadiocolor2" class="form-check-input" checked>
+                                    <label class="form-check-label" for="customRadiocolor2">Success Radio</label>
+                                </div>
+                                <div class="form-check form-radio-info mb-2">
+                                    <input type="radio" id="customRadiocolor3" name="customRadiocolor3" class="form-check-input" checked>
+                                    <label class="form-check-label" for="customRadiocolor3">Info Radio</label>
+                                </div>
+                                <div class="form-check form-radio-secondary mb-2">
+                                    <input type="radio" id="customRadiocolor6" name="customRadiocolor6" class="form-check-input" checked>
+                                    <label class="form-check-label" for="customRadiocolor6">Secondary Radio</label>
+                                </div>
+                                <div class="form-check form-radio-warning mb-2">
+                                    <input type="radio" id="customRadiocolor4" name="customRadiocolor4" class="form-check-input" checked>
+                                    <label class="form-check-label" for="customRadiocolor4">Warning Radio</label>
+                                </div>
+                                <div class="form-check form-radio-danger mb-2">
+                                    <input type="radio" id="customRadiocolor5" name="customRadiocolor5" class="form-check-input" checked>
+                                    <label class="form-check-label" for="customRadiocolor5">Danger Radio</label>
+                                </div>
+                                <div class="form-check form-radio-dark">
+                                    <input type="radio" id="customRadiocolor7" name="customRadiocolor7" class="form-check-input" checked>
+                                    <label class="form-check-label" for="customRadiocolor7">Dark Radio</label>
+                                </div>
                             </div>
-                            <div class="mb-3">
-                                <label for="simpleinput" class="form-label">Designation</label>
-                                <input type="text" id="designation" class="form-control" value="@designation" disabled="">
-                            </div>
-                            <div class="mb-3">
-                                <label for="simpleinput" class="form-label">Department</label>
-                                <input type="text" id="department" class="form-control" value="@department" disabled="">
-                            </div>
-                            <div class="mb-3">
-                                <label for="example-email" class="form-label">Email</label>
-                                <input type="email" id="email" class="form-control" value="@email" disabled="">
-                            </div>
-                            <div class="mb-3">
-                                <label for="example-textarea" class="form-label">Text area</label>
-                                <textarea class="form-control" id="example-textarea" rows="5"></textarea>
-                            </div>
-                        </div> <!-- end col -->
-                        <div class="col-lg-6">
-                            <div class="mb-3">
-                                <label for="example-fileinput" class="form-label">Default file input</label>
-                                <input type="file" id="example-fileinput" class="form-control">
-                            </div>
-                            <div class="mb-3">
-                                <label for="example-number" class="form-label">Number</label>
-                                <input class="form-control" id="example-number" type="number" name="number">
-                            </div>
+
                         </div>
-
                     </form>
                     <!-- end col -->
                 </div>
