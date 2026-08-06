@@ -8,5 +8,10 @@ namespace CR_Management_System.Presentation.Controllers
         {
             return View();
         }
+
+        public IActionResult Create()
+        {
+            return View();
+        }
     }
 }
