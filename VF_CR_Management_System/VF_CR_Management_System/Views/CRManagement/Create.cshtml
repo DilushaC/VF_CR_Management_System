@@ -2,133 +2,155 @@
     ViewData["Title"] = "Create CR";
 }
 @{
-
     var username = Context.Session.GetString("UserName");
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
-
 }
+
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header border-bottom border-dashed d-flex align-items-center">
-                <h4 class="header-title">Create Change Request for CR Number : CR10000021212121</h4>
+                <h4 class="header-title mb-0">Create Change Request for CR Number : CR10000021212121</h4>
             </div>
 
             <div class="card-body">
-                <div class="row">
-                    <form>
-                        <div class="row">
+                <form>
+                    <div class="row g-3">
 
-                            <!-- Left Column -->
-                            <div class="col-lg-6">
+                        <!-- Left Column -->
+                        <div class="col-lg-6">
+                            <div class="mb-3">
+                                <label class="form-label">Change Request Title</label>
+                                <input type="text" class="form-control" placeholder="Enter change request title">
+                            </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Change Request Title</label>
-                                    <input type="text" class="form-control">
-                                </div>
-
-                                <div class="mb-3">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
                                     <label class="form-label">Requester Name</label>
                                     <input type="text" class="form-control" value="@username" disabled>
                                 </div>
-
-                                <div class="mb-3">
+                                <div class="col-md-6">
                                     <label class="form-label">Designation</label>
                                     <input type="text" class="form-control" value="@designation" disabled>
                                 </div>
+                            </div>
 
-                                <div class="mb-3">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
                                     <label class="form-label">Department</label>
                                     <input type="text" class="form-control" value="@department" disabled>
                                 </div>
-
-                                <div class="mb-3">
+                                <div class="col-md-6">
                                     <label class="form-label">Email</label>
                                     <input type="email" class="form-control" value="@email" disabled>
                                 </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label">Change Description</label>
-                                    <textarea class="form-control" rows="5"></textarea>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label">Business Justification</label>
-                                    <textarea class="form-control" rows="5"></textarea>
-                                </div>
-
                             </div>
 
-                            <!-- Right Column -->
-                            <div class="col-lg-6">
-                                <div class="mb-3">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
                                     <label class="form-label">Request Date</label>
-                                    <input type="text"
-                                           class="form-control"
-                                           value="@DateTime.Now.ToString("dd/MM/yyyy")"
-                                           disabled />
+                                    <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
                                 </div>
-
-                                <div class="mb-3">
+                                <div class="col-md-6">
                                     <label class="form-label">Requested Completion Date</label>
                                     <input class="form-control" id="example-date" type="date" name="date">
                                 </div>
+                            </div>
 
-                                <h6 class="fs-15 mt-3">Change Type</h6>
-                                <div class="mt-2">
-                                    <div class="form-check form-check-inline">
+                            <div class="mb-3">
+                                <label class="form-label">Change Summary &amp; Business Justification</label>
+                                <textarea class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Activities/Tasks</label>
+                                <textarea class="form-control" rows="4" placeholder="List the activities or tasks involved..."></textarea>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label">Fixed Asset Information</label>
+                                <textarea class="form-control" rows="4" placeholder="Enter fixed asset details, if applicable..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="col-lg-6 d-flex flex-column">
+                            <div class="card border mb-3">
+                                <div class="card-header bg-light-subtle">
+                                    <h6 class="fs-15 mb-0">Change Type</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-check mb-2">
                                         <input type="radio" id="customRadio3" name="customRadio1" class="form-check-input">
                                         <label class="form-check-label" for="customRadio3">Bug Fix</label>
                                     </div>
-                                    <div class="form-check form-check-inline">
+                                    <div class="form-check mb-2">
                                         <input type="radio" id="customRadio4" name="customRadio1" class="form-check-input">
                                         <label class="form-check-label" for="customRadio4">Report Development</label>
                                     </div>
-                                    <div class="form-check form-check-inline">
-                                        <input type="radio" id="customRadio4" name="customRadio1" class="form-check-input">
-                                        <label class="form-check-label" for="customRadio4">Enhancement</label>
+                                    <div class="form-check mb-2">
+                                        <input type="radio" id="customRadio5" name="customRadio1" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio5">Enhancement</label>
                                     </div>
-                                </div>
-
-                                <h6 class="fs-15 mt-3">Colors</h6>
-
-                                <div class="form-check mb-2">
-                                    <input type="radio" id="customRadiocolor1" name="customRadiocolor1" class="form-check-input" checked>
-                                    <label class="form-check-label" for="customRadiocolor1">Default Radio</label>
-                                </div>
-                                <div class="form-check form-radio-success mb-2">
-                                    <input type="radio" id="customRadiocolor2" name="customRadiocolor2" class="form-check-input" checked>
-                                    <label class="form-check-label" for="customRadiocolor2">Success Radio</label>
-                                </div>
-                                <div class="form-check form-radio-info mb-2">
-                                    <input type="radio" id="customRadiocolor3" name="customRadiocolor3" class="form-check-input" checked>
-                                    <label class="form-check-label" for="customRadiocolor3">Info Radio</label>
-                                </div>
-                                <div class="form-check form-radio-secondary mb-2">
-                                    <input type="radio" id="customRadiocolor6" name="customRadiocolor6" class="form-check-input" checked>
-                                    <label class="form-check-label" for="customRadiocolor6">Secondary Radio</label>
-                                </div>
-                                <div class="form-check form-radio-warning mb-2">
-                                    <input type="radio" id="customRadiocolor4" name="customRadiocolor4" class="form-check-input" checked>
-                                    <label class="form-check-label" for="customRadiocolor4">Warning Radio</label>
-                                </div>
-                                <div class="form-check form-radio-danger mb-2">
-                                    <input type="radio" id="customRadiocolor5" name="customRadiocolor5" class="form-check-input" checked>
-                                    <label class="form-check-label" for="customRadiocolor5">Danger Radio</label>
-                                </div>
-                                <div class="form-check form-radio-dark">
-                                    <input type="radio" id="customRadiocolor7" name="customRadiocolor7" class="form-check-input" checked>
-                                    <label class="form-check-label" for="customRadiocolor7">Dark Radio</label>
+                                    <div class="form-check mb-2">
+                                        <input type="radio" id="customRadio6" name="customRadio1" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio6">Infrastructure Changes</label>
+                                    </div>
+                                    <div class="form-check mb-0">
+                                        <input type="radio" id="customRadio7" name="customRadio1" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio7">Other</label>
+                                    </div>
                                 </div>
                             </div>
 
+                            <div class="card border mb-3">
+                                <div class="card-header bg-light-subtle">
+                                    <h6 class="fs-15 mb-0">Change Priority</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-check form-check-inline form-radio-success mb-0">
+                                        <input type="radio" id="customRadio8" name="customRadio2" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio8">Low</label>
+                                    </div>
+                                    <div class="form-check form-check-inline form-radio-secondary mb-0">
+                                        <input type="radio" id="customRadio9" name="customRadio2" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio9">Medium</label>
+                                    </div>
+                                    <div class="form-check form-check-inline form-radio-warning mb-0">
+                                        <input type="radio" id="customRadio10" name="customRadio2" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio10">High</label>
+                                    </div>
+                                    <div class="form-check form-check-inline form-radio-danger mb-0">
+                                        <input type="radio" id="customRadio11" name="customRadio2" class="form-check-input">
+                                        <label class="form-check-label" for="customRadio11">Emergency</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row g-3 mb-0">
+                                <div class="col-md-6">
+                                    <label class="form-label">Effort Estimate (Days)</label>
+                                    <input type="number" class="form-control" placeholder="Enter estimated effort in days" min="0" step="0.5">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Vendor Name</label>
+                                    <select class="form-select">
+                                        <option value="" selected disabled>Select vendor</option>
+                                        <option value="vendor1">Vendor 1</option>
+                                        <option value="vendor2">Vendor 2</option>
+                                        <option value="vendor3">Vendor 3</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                    </form>
-                    <!-- end col -->
-                </div>
-                <!-- end row-->
+
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                        <button type="button" class="btn btn-light">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Submit Change Request</button>
+                    </div>
+                </form>
             </div> <!-- end card-body -->
         </div> <!-- end card -->
     </div><!-- end col -->
