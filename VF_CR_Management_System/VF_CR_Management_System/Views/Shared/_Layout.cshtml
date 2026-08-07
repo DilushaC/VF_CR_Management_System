@@ -75,20 +75,61 @@
                     </li>
 
                     <li class="side-nav-item">
-                        <a href="~/CRManagement/Index" class="side-nav-link">
+                        <a data-bs-toggle="collapse" href="#sidebarMultiLevel" aria-expanded="false"
+                           aria-controls="sidebarMultiLevel" class="side-nav-link">
                             <span class="menu-icon"><i class="ri-ticket-2-line"></i></span>
                             <span class="menu-text"> Change Requests </span>
+                            <span class="menu-arrow"></span>
                         </a>
+                        <div class="collapse" id="sidebarMultiLevel">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="~/CRManagement/Index" class="side-nav-link">
+                                        <span class="menu-text">Requests</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="~/CRManagement/Create" class="side-nav-link">
+                                        <span class="menu-text">Create</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="~/CRManagement/Assesment" class="side-nav-link">
+                                        <span class="menu-text">Assesment</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="~/CRManagement/AssesmentSecurity" class="side-nav-link">
+                                        <span class="menu-text">Security</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="~/CRManagement/Testing" class="side-nav-link">
+                                        <span class="menu-text">Testing</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="~/CRManagement/ReleaseDeployment" class="side-nav-link">
+                                        <span class="menu-text">Deployment</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="~/CRManagement/ReviewClosure" class="side-nav-link">
+                                        <span class="menu-text">Closure</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </li>
 
                     <li class="side-nav-title mt-2">Masters</li>
 
-                    <li class="side-nav-item">
-                        <a href="~/CRManagement/Index" class="side-nav-link">
+@*                     <li class="side-nav-item">
+                        <a href="" class="side-nav-link">
                             <span class="menu-icon"><i class="ri-ticket-2-line"></i></span>
                             <span class="menu-text">Workflow Management</span>
                         </a>
-                    </li>
+                    </li> *@
                 </ul>
 
                 <!-- Help Box -->
@@ -134,13 +175,6 @@
                     <button class="topnav-toggle-button px-2" data-bs-toggle="collapse" data-bs-target="#topnav-menu-content">
                         <i class="ri-menu-5-line fs-24"></i>
                     </button>
-
-                    <!-- Topbar Page Title -->
-                    <div class="topbar-item d-none d-md-flex">
-                        <div>
-                            <h4 class="page-title fs-18 fw-bold mb-0">Welcome to CR Management System</h4>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="d-flex align-items-center gap-2">

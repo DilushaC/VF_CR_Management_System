@@ -13,5 +13,30 @@ namespace CR_Management_System.Presentation.Controllers
         {
             return View();
         }
+
+        public IActionResult Assesment()
+        {
+            return View();
+        }
+
+        public IActionResult AssesmentSecurity()
+        {
+            return View();
+        }
+
+        public IActionResult Testing()
+        {
+            return View();
+        }
+
+        public IActionResult ReleaseDeployment()
+        {
+            return View();
+        }
+
+        public IActionResult ReviewClosure()
+        {
+            return View();
+        }
     }
 }

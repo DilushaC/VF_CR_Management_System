@@ -1,0 +1,92 @@
+﻿@{
+    ViewData["Title"] = "CR Assesment - Closure";
+}
+@{
+    var username = Context.Session.GetString("UserName");
+    var designation = Context.Session.GetString("Designation");
+    var department = Context.Session.GetString("Department");
+    var email = Context.Session.GetString("Email");
+}
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header border-bottom border-dashed d-flex align-items-center">
+                <h4 class="header-title mb-0">Section  : Post-Implementation Review &amp; Closure - CR10000021212121</h4>
+            </div>
+
+            <div class="card-body">
+                <form>
+                    <div class="row g-3">
+
+                        <!-- Left Column -->
+                        <div class="col-lg-6">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Implementer Name</label>
+                                    <input type="text" class="form-control" value="@username" disabled>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Designation</label>
+                                    <input type="text" class="form-control" value="@designation" disabled>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Department</label>
+                                    <input type="text" class="form-control" value="@department" disabled>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" value="@email" disabled>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Release Date</label>
+                                    <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Is system downtime required?</label>
+                                <textarea class="form-control" rows="6" placeholder="If yes, list of services/systems impacted"></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="col-lg-6 d-flex flex-column">
+
+                            <div class="card border mb-3">
+                                <div class="card-header bg-light-subtle">
+                                    <h6 class="fs-15 mb-0">Release &amp; Deployment</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-2">
+                                        <label class="form-label">Release, Deployment and Roll-back Plan </label>
+                                        <textarea class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-2">
+                                        <label class="form-label">Production Transfer Approval</label>
+                                        <textarea class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                        <button type="button" class="btn btn-light">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Submit Change Request</button>
+                    </div>
+                </form>
+            </div> <!-- end card-body -->
+        </div> <!-- end card -->
+    </div><!-- end col -->
+</div><!-- end row -->
