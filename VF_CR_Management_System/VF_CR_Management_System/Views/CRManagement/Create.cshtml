@@ -21,15 +21,17 @@
 
                         <!-- Left Column -->
                         <div class="col-lg-6">
-                            <div class="mb-3">
-                                <label class="form-label">Change Request Title</label>
-                                <input type="text" class="form-control" placeholder="Enter change request title">
-                            </div>
-
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
-                                    <label class="form-label">Requester Name</label>
-                                    <input type="text" class="form-control" value="@username" disabled>
+                                    <p class="mb-1 fw-bold text-muted">Requester Name</p>
+                                    <select class="form-control select2" data-toggle="select2">
+                                        <option value="" selected disabled hidden>Select Requester</option>
+                                        <option value="John Smith">Sobitha Weerasekara</option>
+                                        <option value="Jane Doe">Indika Edirisinghe</option>
+                                        <option value="Michael Brown">Palinda Budhdhika</option>
+                                        <option value="Emily Davis">Ruwan Wijesooriya</option>
+                                        <option value="Robert Wilson">Sameera Rajapaksha</option>
+                                    </select>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Designation</label>
