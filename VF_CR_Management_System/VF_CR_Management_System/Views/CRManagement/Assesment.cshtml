@@ -85,7 +85,11 @@
 
                                     <div id="vendorSupportDetails" class="mt-2" style="display: none;">
                                         <label class="form-label">Vendor Name</label>
-                                        <input type="text" class="form-control" placeholder="Enter vendor details">
+                                        <input type="text" class="form-control">
+                                    </div>
+                                    <div id="proposalNumber" class="mt-2" style="display: none;">
+                                        <label class="form-label">Proposal Number</label>
+                                        <input type="text" class="form-control">
                                     </div>
                                 </div>
                             </div>
@@ -109,12 +113,15 @@
         var vendorYes = document.getElementById('vendorSupportYes');
         var vendorNo = document.getElementById('vendorSupportNo');
         var vendorDetails = document.getElementById('vendorSupportDetails');
+        var proposalNumberDetails = document.getElementById('proposalNumber');
 
         function toggleVendorDetails() {
             if (vendorYes.checked) {
                 vendorDetails.style.display = 'block';
+                proposalNumberDetails.style.display = 'block';
             } else {
                 vendorDetails.style.display = 'none';
+                proposalNumberDetails.style.display = 'none';
             }
         }
 
