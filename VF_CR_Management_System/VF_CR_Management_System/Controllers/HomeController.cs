@@ -1,6 +1,7 @@
-using System.Diagnostics;
 using CR_Management_System.Models;
 using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
+using VF_CR_Management_System.Models;
 
 namespace CR_Management_System.Controllers
 {
@@ -16,7 +17,15 @@ namespace CR_Management_System.Controllers
         [HttpGet]
         public IActionResult Index()
         {
-            return View();
+            var model = new DashboardViewModel
+            {
+                TotalCRs = 24,
+                PendingApprovals = 20,
+                TotalHolds = 1,
+                RejectedCRs = 3
+            };
+
+            return View(model);
         }
 
         public IActionResult Privacy()
