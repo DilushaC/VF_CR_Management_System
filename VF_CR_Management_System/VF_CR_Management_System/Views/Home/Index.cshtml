@@ -4,13 +4,6 @@
 @{
     ViewData["Title"] = "Home Page";
 }
-
-<div class="topbar-item d-none d-md-flex mb-3">
-    <div>
-        <h4 class="page-title fs-18 fw-bold mb-0">Welcome to CR Management System</h4>
-    </div>
-</div>
-
 <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1">
     <div class="col">
         <div class="card">
@@ -38,7 +31,7 @@
                 <div class="d-flex align-items-center gap-2 justify-content-between">
                     <div>
                         <h5 class="text-muted fs-13 fw-bold text-uppercase" title="Revenue">
-                            Pending Approvals
+                            Approved CRs
                         </h5>
                         <h3 class="my-2 py-1 fw-bold">@Model.PendingApprovals</h3>
                     </div>
@@ -58,13 +51,13 @@
                 <div class="d-flex align-items-center gap-2 justify-content-between">
                     <div>
                         <h5 class="text-muted fs-13 fw-bold text-uppercase" title="New Users">
-                            Total Holds
+                            Deployed CRs
                         </h5>
                         <h3 class="my-2 py-1 fw-bold">@Model.TotalHolds</h3>
                     </div>
                     <div class="avatar-xl flex-shrink-0">
-                        <span class="avatar-title bg-warning-subtle text-warning rounded-circle fs-42">
-                            <iconify-icon icon="solar:stopwatch-pause-bold"></iconify-icon>
+                        <span class="avatar-title bg-warning-subtle text-success rounded-circle fs-42">
+                            <iconify-icon icon="solar:golf-bold-duotone"></iconify-icon>
                         </span>
                     </div>
                 </div>
