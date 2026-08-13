@@ -31,14 +31,18 @@ namespace VF_CR_Management_System.Presentation.Controllers
         [HttpPost]
         public async Task<IActionResult> Login(string username, string password)
         {
+            int allowedProductId = _configuration.GetValue<int>("AllowedProducts:ProductId");
             try
             {
-                var user = await _userService.ValidateUserAsync(username, password);
+                var user = await _userService.ValidateUserAsync(username, password, allowedProductId);
 
                 if (user == null)
                 {
                     return Json(new { success = false, message = "Invalid login" });
                 }
+
+                if (user.ProductIds == null || !user.ProductIds.Contains(allowedProductId))
+                    return Json(new { success = false, message = "Unauthorized product access" });
 
                 // Session storage
                 HttpContext.Session.SetString("UserName", user.DisplayName);

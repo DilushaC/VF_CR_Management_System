@@ -16,5 +16,6 @@ namespace VF_CR_Management_System.Data.Models
         public string Email { get; set; }
         public string DisplayDepartment { get; set; }
         public bool IsActive { get; set; }
+        public List<int> ProductIds { get; set; } = new List<int>();
     }
 }

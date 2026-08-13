@@ -51,8 +51,8 @@
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label">Any other comments ?</label>
-                                <textarea class="form-control" rows="6"></textarea>
+                                <label class="form-label">Any other comments?</label>
+                                <textarea class="form-control" rows="10"></textarea>
                             </div>
                         </div>
 
@@ -63,30 +63,30 @@
                                     <h6 class="fs-15 mb-0">Release &amp; Deployment</h6>
                                 </div>
                                 <div class="card-body">
-                                    <div class="row g-3">
-                                        <div class="col-md-6">
-                                            <label class="form-label">How well did the outcome of the change meet expectations?</label>
-                                            <textarea class="form-control" rows="4" placeholder="Write the explanation here..."></textarea>
+                                    <div class="row g-3 h-100">
+                                        <div class="col-md-6 d-flex flex-column">
+                                            <label class="form-label">How well did the outcome meet expectations?</label>
+                                            <textarea class="form-control flex-fill" style="min-height:100px;" placeholder="Write the explanation here..."></textarea>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-6 d-flex flex-column">
                                             <label class="form-label">What were the most significant issues?</label>
-                                            <textarea class="form-control" rows="4" placeholder="Write the explanation here..."></textarea>
+                                            <textarea class="form-control flex-fill" style="min-height:100px;" placeholder="Write the explanation here..."></textarea>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-6 d-flex flex-column">
                                             <label class="form-label">What were the main lessons learned?</label>
-                                            <textarea class="form-control" rows="4" placeholder="Write the explanation here..."></textarea>
+                                            <textarea class="form-control flex-fill" style="min-height:100px;" placeholder="Write the explanation here..."></textarea>
                                         </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">What improvements/action items are recommended as an outcome?</label>
-                                            <textarea class="form-control" rows="4" placeholder="Write the explanation here..."></textarea>
+                                        <div class="col-md-6 d-flex flex-column">
+                                            <label class="form-label">What action items are recommended?</label>
+                                            <textarea class="form-control flex-fill" style="min-height:100px;" placeholder="Write the explanation here..."></textarea>
                                         </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">Was the change delivered within the planned timeline?</label>
-                                            <textarea class="form-control" rows="4" placeholder="Write the explanation here..."></textarea>
+                                        <div class="col-md-6 d-flex flex-column">
+                                            <label class="form-label">Delivered within the planned timeline?</label>
+                                            <textarea class="form-control flex-fill" style="min-height:100px;" placeholder="Write the explanation here..."></textarea>
                                         </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">Any additional risks or follow-up actions required?</label>
-                                            <textarea class="form-control" rows="4" placeholder="Write the explanation here..."></textarea>
+                                        <div class="col-md-6 d-flex flex-column">
+                                            <label class="form-label">Any additional risks or follow-ups required?</label>
+                                            <textarea class="form-control flex-fill" style="min-height:100px;" placeholder="Write the explanation here..."></textarea>
                                         </div>
                                     </div>
                                 </div>
@@ -96,10 +96,12 @@
                     </div>
 
                     <!-- Actions -->
-                    <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
-                        <button type="button" class="btn btn-danger">Cancel</button>
-                        <button type="button" class="btn btn-warning">Save</button>
-                        <button type="submit" class="btn btn-primary">Submit</button>
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                        <button type="button" class="btn btn-outline-danger">Cancel</button>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-warning">Save</button>
+                            <button type="submit" class="btn btn-primary">Submit</button>
+                        </div>
                     </div>
                 </form>
             </div> <!-- end card-body -->

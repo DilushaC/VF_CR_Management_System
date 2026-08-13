@@ -22,7 +22,7 @@ namespace VF_CR_Management_System.Business.UserHandler
             _aDAuthentication = aDAuthentication;
         }
 
-        public async Task<UserModel?> ValidateUserAsync(string username, string password)
+        public async Task<UserModel?> ValidateUserAsync(string username, string password, int productId)
         {
             // 1. Authenticate AD
             var response = await _aDAuthentication.AuthenticatewithAD(username, password);
@@ -46,11 +46,35 @@ namespace VF_CR_Management_System.Business.UserHandler
 
             var user = new UserModel
             {
+                Id = userRow.Field<int>("Id"),
                 DisplayName = response.Data.DisplayName,
                 DisplayDesignation = response.Data.Title,
                 DisplayDepartment = response.Data.Department,
                 Email = response.Data.Email,
+                IsActive = userRow.Field<bool>("IsActive")
             };
+
+            // 3. Get ProductIds
+            const string productQuery = @"
+                SELECT ProductId
+                FROM UserProducts
+                WHERE UserId = @UserId";
+
+            var productParams = new DynamicParameters();
+            productParams.Add("@UserId", user.Id);
+
+            var productData = _connectionService.ReturnWithPara(productQuery, productParams);
+            if (productData != null && productData.Rows.Count > 0)
+            {
+                user.ProductIds = productData
+                    .AsEnumerable()
+                    .Select(r => r.Field<int>("ProductId"))
+                    .Distinct()
+                    .ToList();
+            }
+
+            if (!user.ProductIds.Any())
+                return user;
 
             return user;
         }

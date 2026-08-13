@@ -16,7 +16,7 @@
             </div>
 
             <div class="card-body">
-                <form>
+                <form id="crForm">
                     <div class="row g-3">
 
                         <!-- Left Column -->
@@ -24,14 +24,15 @@
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
                                     <p class="mb-1 fw-bold text-muted">Requester Name</p>
-                                    <select class="form-control select2" data-toggle="select2">
+                                    <input type="text" class="form-control" value="@username" disabled>
+@*                                     <select class="form-control select2" data-toggle="select2">
                                         <option value="" selected disabled hidden>Select Requester</option>
-                                        <option value="John Smith">Sobitha Weerasekara</option>
-                                        <option value="Jane Doe">Indika Edirisinghe</option>
-                                        <option value="Michael Brown">Palinda Budhdhika</option>
-                                        <option value="Emily Davis">Ruwan Wijesooriya</option>
-                                        <option value="Robert Wilson">Sameera Rajapaksha</option>
-                                    </select>
+                                        <option value="Sobitha Weerasekara">Sobitha Weerasekara</option>
+                                        <option value="Indika Edirisinghe">Indika Edirisinghe</option>
+                                        <option value="Palinda Budhdhika">Palinda Budhdhika</option>
+                                        <option value="Ruwan Wijesooriya">Ruwan Wijesooriya</option>
+                                        <option value="Sameera Rajapaksha">Sameera Rajapaksha</option>
+                                    </select> *@
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Designation</label>
@@ -54,6 +55,9 @@
                                 <div class="col-md-6">
                                     <label class="form-label">Request Date</label>
                                     <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
+                                </div>
+                                <div class="col-md-6">
+                                    <!-- reserved for a future field (e.g. CR Reference No.) to balance this row -->
                                 </div>
                             </div>
 
@@ -121,13 +125,76 @@
                     </div>
 
                     <!-- Actions -->
-                    <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
-                        <button type="button" class="btn btn-danger">Cancel</button>
-                        <button type="button" class="btn btn-warning">Save</button>
-                        <button type="submit" class="btn btn-primary">Submit</button>
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                        <button type="button" class="btn btn-outline-danger">Cancel</button>
+                        <div class="d-flex gap-2">
+                            <button type="button" id="btn-save" class="btn btn-warning">Save</button>
+                            <button type="submit" id="btn-submit" class="btn btn-primary">Submit</button>
+                        </div>
                     </div>
                 </form>
             </div> <!-- end card-body -->
         </div> <!-- end card -->
     </div><!-- end col -->
 </div><!-- end row -->
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var form = document.getElementById('crForm');
+            var saveBtn = document.getElementById('btn-save');
+            var submitBtn = document.getElementById('btn-submit');
+
+            // SAVE button — confirm before saving
+            saveBtn.addEventListener('click', function () {
+                Swal.fire({
+                    title: 'Save this Change Request?',
+                    text: "Your progress will be saved, but the CR won't be submitted yet.",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, save it',
+                    cancelButtonText: 'Cancel',
+                    customClass: {
+                        confirmButton: 'btn btn-warning me-2',
+                        cancelButton: 'btn btn-light'
+                    },
+                    buttonsStyling: false
+                }).then(function (result) {
+                    if (result.isConfirmed) {
+                        // TODO: hook up actual save logic here (AJAX call, partial submit, etc.)
+                        Swal.fire({
+                            title: 'Saved!',
+                            text: 'Your Change Request has been saved.',
+                            icon: 'success',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                    }
+                });
+            });
+
+            // SUBMIT button — confirm before submitting the form
+            form.addEventListener('submit', function (event) {
+                event.preventDefault(); // stop the form from submitting immediately
+
+                Swal.fire({
+                    title: 'Submit this Change Request?',
+                    text: "Once submitted, you won't be able to edit this CR.",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, submit it',
+                    cancelButtonText: 'Cancel',
+                    customClass: {
+                        confirmButton: 'btn btn-primary me-2',
+                        cancelButton: 'btn btn-light'
+                    },
+                    buttonsStyling: false
+                }).then(function (result) {
+                    if (result.isConfirmed) {
+                        // Actually submit the form now that the user confirmed
+                        form.submit();
+                    }
+                });
+            });
+        });
+    </script>
+}
