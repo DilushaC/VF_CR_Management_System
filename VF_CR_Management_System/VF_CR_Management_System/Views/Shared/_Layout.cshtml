@@ -6,6 +6,44 @@
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
+    var userId = Context.Session.GetString("UserId");
+    var pageURLs = Context.Session.GetString("PageUrls");
+
+    List<string> allowedPages = new List<string>();
+    List<string> pagePermissions = new List<string>();
+    List<string> iconClasses = new List<string>();
+
+    var menuJson = Context.Session.GetString("MenuItems");
+
+    // Deserialize
+    List<MenuItem> menus = string.IsNullOrWhiteSpace(menuJson)
+        ? new List<MenuItem>()
+        : JsonSerializer.Deserialize<List<MenuItem>>(menuJson,
+            new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            }) ?? new List<MenuItem>();
+
+    // Only ACTIVE main menus (ParentMenuItemId == null)
+    List<MenuItem> mainMenus = menus
+        .Where(m => m.ParentMenuItemId == null && m.IsActive)
+        .OrderBy(m => m.DisplayOrder)
+        .ToList();
+
+    // Current path (no query string, no trailing slash, lowercased)
+    var currentPath = Context.Request.Path.ToString()
+        .ToLower()
+        .TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(currentPath))
+        currentPath = "/";
+
+    // Exact-match helper: "/role/management" == "/role/management"  — no partial hits
+    Func<string, bool> matches = (url) =>
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        var normalized = "/" + url.ToLower().TrimStart('/').TrimEnd('/');
+        return currentPath == normalized;
+    };
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -69,77 +107,112 @@
 
             <div data-simplebar>
 
-                <!--- Sidenav Menu -->
-                <ul class="side-nav">
-                    <li class="side-nav-title">General</li>
+                <ul class="side-nav" id="side-menu">
 
-                    <li class="side-nav-item">
-                        <a href="~/Home/Index" class="side-nav-link">
-                            <span class="menu-icon"><i class="ri-dashboard-3-line"></i></span>
-                            <span class="menu-text"> Dashboard </span>
-                        </a>
-                    </li>
+                    @foreach (var categoryGroup in mainMenus
+                                        .GroupBy(m => m.CategoryName)
+                                        .OrderBy(g => g.Key))
+                    {
+                        <li class="side-nav-title side-nav-title-sm text-uppercase fw-bold mt-2">
+                            @(string.IsNullOrWhiteSpace(categoryGroup.Key) ? "MENU" : categoryGroup.Key)
+                        </li>
 
-                    <li class="side-nav-title mt-2">
-                        Main Process
-                    </li>
+                        @foreach (var mainMenu in categoryGroup.OrderBy(m => m.DisplayOrder))
+                        {
+                            var level1Menus = menus
+                            .Where(m => m.ParentMenuItemId == mainMenu.Id && m.IsActive)
+                            .OrderBy(m => m.DisplayOrder)
+                            .ToList();
 
-                    <li class="side-nav-item">
-                        <a data-bs-toggle="collapse" href="#sidebarMultiLevel" aria-expanded="false"
-                           aria-controls="sidebarMultiLevel" class="side-nav-link">
-                            <span class="menu-icon"><i class="ri-ticket-2-line"></i></span>
-                            <span class="menu-text"> Change Requests </span>
-                            <span class="menu-arrow"></span>
-                        </a>
-                        <div class="collapse" id="sidebarMultiLevel">
-                            <ul class="sub-menu">
-                                <li class="side-nav-item">
-                                    <a href="~/CRManagement/Index" class="side-nav-link">
-                                        <span class="menu-text">Requests</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="~/CRManagement/Create" class="side-nav-link">
-                                        <span class="menu-text">Create</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="~/CRManagement/Assesment" class="side-nav-link">
-                                        <span class="menu-text">Assesment</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="~/CRManagement/AssesmentSecurity" class="side-nav-link">
-                                        <span class="menu-text">Security</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="~/CRManagement/Testing" class="side-nav-link">
-                                        <span class="menu-text">Testing</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="~/CRManagement/ReleaseDeployment" class="side-nav-link">
-                                        <span class="menu-text">Deployment</span>
-                                    </a>
-                                </li>
-                                <li class="side-nav-item">
-                                    <a href="~/CRManagement/ReviewClosure" class="side-nav-link">
-                                        <span class="menu-text">Closure</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
+                            var mainCollapseId = $"sidebar_{mainMenu.Id}";
 
-                    <li class="side-nav-title mt-2">Masters</li>
+                            bool isMainActive = matches(mainMenu.PageUrl) || level1Menus.Any(l1 =>
+                            matches(l1.PageUrl) || menus.Any(l2 => l2.ParentMenuItemId == l1.Id && l2.IsActive && matches(l2.PageUrl)));
 
-@*                     <li class="side-nav-item">
-                        <a href="" class="side-nav-link">
-                            <span class="menu-icon"><i class="ri-ticket-2-line"></i></span>
-                            <span class="menu-text">Workflow Management</span>
-                        </a>
-                    </li> *@
+                            @if (level1Menus.Any())
+                            {
+                                <li class="side-nav-item">
+                                    <a data-bs-toggle="collapse" href="#@mainCollapseId"
+                                       aria-expanded="@(isMainActive.ToString().ToLower())"
+                                       aria-controls="@mainCollapseId"
+                                       class="side-nav-link @(isMainActive ? "" : "collapsed")">
+                                        <i class="@(string.IsNullOrWhiteSpace(mainMenu.IconClass) ? "ri-asterisk" : mainMenu.IconClass)"></i>
+                                        <span class="menu-text"> @mainMenu.MenuTitle </span>
+                                        <span class="menu-arrow"></span>
+                                    </a>
+                                    <div class="collapse @(isMainActive ? "show" : "")" id="@mainCollapseId">
+                                        <ul class="sub-menu">
+
+                                            @foreach (var level1 in level1Menus)
+                                            {
+                                                var level2Menus = menus
+                                                .Where(m => m.ParentMenuItemId == level1.Id && m.IsActive)
+                                                .OrderBy(m => m.DisplayOrder)
+                                                .ToList();
+
+                                                var level1CollapseId = $"sidebar_{level1.Id}";
+
+                                                bool isLevel1Active = matches(level1.PageUrl) || level2Menus.Any(l2 => matches(l2.PageUrl));
+
+                                                <li class="side-nav-item">
+                                                    @if (level2Menus.Any())
+                                                    {
+                                                        <a data-bs-toggle="collapse" href="#@level1CollapseId"
+                                                           aria-expanded="@(isLevel1Active.ToString().ToLower())"
+                                                           aria-controls="@level1CollapseId"
+                                                           class="side-nav-link @(isLevel1Active ? "" : "collapsed")">
+                                                            <span class="menu-text"> @level1.MenuTitle </span>
+                                                            <span class="menu-arrow"></span>
+                                                        </a>
+                                                        <div class="collapse @(isLevel1Active ? "show" : "")" id="@level1CollapseId">
+                                                            <ul class="sub-menu">
+
+                                                                @foreach (var level2 in level2Menus)
+                                                                {
+                                                                    bool isLevel2Active = matches(level2.PageUrl);
+
+                                                                    <li class="side-nav-item">
+                                                                        <a href="@Url.Content("~/" + level2.PageUrl)"
+                                                                           class="side-nav-link @(isLevel2Active ? "active" : "")">
+                                                                            <span class="menu-text">@level2.MenuTitle</span>
+                                                                        </a>
+                                                                    </li>
+                                                                }
+
+                                                            </ul>
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        bool isLevel1DirectActive = matches(level1.PageUrl);
+
+                                                        <a href="@Url.Content("~/" + level1.PageUrl)"
+                                                           class="side-nav-link @(isLevel1DirectActive ? "active" : "")">
+                                                            <span class="menu-text">@level1.MenuTitle</span>
+                                                        </a>
+                                                    }
+                                                </li>
+                                            }
+
+                                        </ul>
+                                    </div>
+                                </li>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(mainMenu.PageUrl))
+                            {
+                                bool isDirectMainActive = matches(mainMenu.PageUrl);
+
+                                <li class="side-nav-item">
+                                    <a href="@Url.Content("~/" + mainMenu.PageUrl)"
+                                       class="side-nav-link @(isDirectMainActive ? "active" : "")">
+                                        <i class="@(string.IsNullOrWhiteSpace(mainMenu.IconClass) ? "ri-asterisk" : mainMenu.IconClass)"></i>
+                                        <span class="menu-text"> @mainMenu.MenuTitle </span>
+                                    </a>
+                                </li>
+                            }
+                        }
+                    }
+
                 </ul>
 
                 <!-- Help Box -->
@@ -709,5 +782,22 @@
     <script src="~/js/site.js" asp-append-version="true"></script> *@
 
     @await RenderSectionAsync("Scripts", required: false)
+
+    <style>
+        .sub-menu {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+
+            .sub-menu li {
+                list-style: none;
+            }
+
+            .sub-menu .side-nav-link {
+                font-size: 14px;
+                padding-left: 2.5rem;
+            }
+    </style>
 </body>
 </html>

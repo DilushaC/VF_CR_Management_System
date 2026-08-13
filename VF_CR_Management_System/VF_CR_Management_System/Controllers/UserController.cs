@@ -1,7 +1,9 @@
-﻿using VF_CR_Management_System.Business.UserHandler;
-using VF_CR_Management_System.Presentation.Filters;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using System.Reflection;
+using System.Text.Json;
+using VF_CR_Management_System.Business.UserHandler;
+using VF_CR_Management_System.Data.Models;
+using VF_CR_Management_System.Presentation.Filters;
 
 namespace VF_CR_Management_System.Presentation.Controllers
 {
@@ -49,6 +51,15 @@ namespace VF_CR_Management_System.Presentation.Controllers
                 HttpContext.Session.SetString("Designation", user.DisplayDesignation);
                 HttpContext.Session.SetString("Department", user.DisplayDepartment);
                 HttpContext.Session.SetString("Email", user.Email);
+                HttpContext.Session.SetString("UserId", user.Id.ToString());
+
+                // Store PageUrls
+                var pageUrlsJson = JsonSerializer.Serialize(user.PageUrls ?? new List<string>());
+                HttpContext.Session.SetString("PageUrls", pageUrlsJson);
+
+                // Store MenuItems
+                var menuJson = JsonSerializer.Serialize(user.MenuItems ?? new List<MenuItem>());
+                HttpContext.Session.SetString("MenuItems", menuJson);
 
                 return Json(new
                 {

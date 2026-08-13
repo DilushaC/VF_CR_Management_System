@@ -17,5 +17,7 @@ namespace VF_CR_Management_System.Data.Models
         public string DisplayDepartment { get; set; }
         public bool IsActive { get; set; }
         public List<int> ProductIds { get; set; } = new List<int>();
+        public List<string> PageUrls { get; set; } = new List<string>();
+        public List<MenuItem> MenuItems { get; set; } = new List<MenuItem>();
     }
 }

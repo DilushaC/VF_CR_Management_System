@@ -20,7 +20,7 @@ namespace CR_Management_System.Controllers
             var model = new DashboardViewModel
             {
                 TotalCRs = 24,
-                PendingApprovals = 20,
+                PendingApprovals = 5,
                 TotalHolds = 1,
                 RejectedCRs = 3
             };

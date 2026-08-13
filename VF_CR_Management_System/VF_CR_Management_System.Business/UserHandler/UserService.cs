@@ -76,6 +76,78 @@ namespace VF_CR_Management_System.Business.UserHandler
             if (!user.ProductIds.Any())
                 return user;
 
+            // 4. Get MenuItems with PageUrls properly
+            const string menuQuery = @"
+                SELECT DISTINCT
+                    m.Id,
+                    m.MenuTitle,
+                    m.ParentMenuId,
+                    m.PageId,
+                    m.IconClass,
+                    m.DisplayOrder,
+                    m.IsActive,
+                    m.ProductId,
+                    m.MenuCategoryId,
+                    c.CategoryName,
+                    p.PageUrl
+                FROM MenuItems m
+                LEFT JOIN Pages p 
+                    ON m.PageId = p.Id
+                LEFT JOIN MenuCategories c 
+                    ON m.MenuCategoryId = c.Id
+                LEFT JOIN RolePagePermissions rpp
+                    ON m.PageId = rpp.PageId
+                LEFT JOIN UserRoles ur
+                    ON rpp.RoleId = ur.RoleId
+                WHERE m.IsActive = 1
+                  AND m.ProductId = @ProductId
+                  AND (
+                        ur.UserId = @UserId
+                        OR m.PageId IS NULL
+                      )
+                ORDER BY m.DisplayOrder";
+
+
+
+            var menuParams = new DynamicParameters();
+            menuParams.Add("@UserId", user.Id);
+            menuParams.Add("@ProductId", productId);
+
+
+            var menuData = _connectionService.ReturnWithPara(menuQuery, menuParams);
+
+            if (menuData != null && menuData.Rows.Count > 0)
+            {
+                // Deduplicate by MenuItem Id to avoid duplicates caused by multiple products
+                user.MenuItems = menuData.AsEnumerable()
+                    .Select(r => new MenuItem
+                    {
+                        Id = r.Field<int>("Id"),
+                        MenuTitle = r.Field<string>("MenuTitle"),
+                        ParentMenuItemId = r.Field<int?>("ParentMenuId"),
+                        PageId = r.Field<int?>("PageId"),
+                        IconClass = r.Field<string?>("IconClass"),
+                        DisplayOrder = r.Field<int>("DisplayOrder"),
+                        IsActive = r.Field<bool>("IsActive"),
+                        ProductId = r.Field<int?>("ProductId"),
+                        CategoryId = r.Field<int?>("MenuCategoryId"),
+                        CategoryName = r.Field<string?>("CategoryName"),
+                        PageUrl = r.Field<string?>("PageUrl")
+                    })
+                    .GroupBy(m => m.Id)
+                    .Select(g => g.First())
+                    .OrderBy(m => m.DisplayOrder)
+                    .ToList();
+
+            }
+
+            // 5. Populate PageUrls for session
+            user.PageUrls = user.MenuItems
+                .Where(m => !string.IsNullOrWhiteSpace(m.PageUrl))
+                .Select(m => m.PageUrl!.StartsWith("/") ? m.PageUrl : "/" + m.PageUrl)
+                .Distinct()
+                .ToList();
+
             return user;
         }
 
