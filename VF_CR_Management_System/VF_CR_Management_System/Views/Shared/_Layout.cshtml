@@ -784,6 +784,12 @@
     @await RenderSectionAsync("Scripts", required: false)
 
     <style>
+
+        .page-content .page-container {
+            background-color: #ffffff !important;
+            padding: 24px 20px !important;
+        }
+
         .sub-menu {
             list-style: none;
             padding-left: 0;
@@ -798,6 +804,199 @@
                 font-size: 14px;
                 padding-left: 2.5rem;
             }
+
+        /* ===== Light Red Theme Override ===== */
+        :root,
+        [data-bs-theme="light"] {
+            --ct-primary: #e57373;
+            --ct-primary-rgb: 229, 115, 115;
+            --ct-primary-text-emphasis: #b71c1c;
+        }
+
+        /* ===== Sidebar Background ===== */
+        .sidenav-menu {
+            background-color: rgb(199, 167, 168) !important;
+            border-right: 1px solid rgb(170, 138, 139);
+        }
+
+            .sidenav-menu .side-nav-title {
+                color: #5c1414 !important;
+                opacity: 0.8;
+            }
+
+            .sidenav-menu .side-nav-link {
+                color: #4a1414 !important;
+            }
+
+                .sidenav-menu .side-nav-link i {
+                    color: #7f1d1d !important;
+                }
+
+                .sidenav-menu .side-nav-link:hover {
+                    background-color: rgb(170, 138, 139) !important;
+                    color: #3a0e0e !important;
+                }
+
+                .sidenav-menu .side-nav-link.active,
+                .sidenav-menu .side-nav-link[aria-expanded="true"] {
+                    background-color: rgb(89, 17, 32) !important;
+                    color: #ffffff !important;
+                }
+
+                    .sidenav-menu .side-nav-link.active i,
+                    .sidenav-menu .side-nav-link[aria-expanded="true"] i {
+                        color: #ffffff !important;
+                    }
+
+            .sidenav-menu .sub-menu {
+                background-color: rgb(185, 151, 152);
+            }
+
+                .sidenav-menu .sub-menu .side-nav-link {
+                    color: #4a1414 !important;
+                }
+
+                    .sidenav-menu .sub-menu .side-nav-link.active {
+                        color: #ffffff !important;
+                        background-color: rgb(89, 17, 32) !important;
+                    }
+
+            .sidenav-menu .help-box {
+                background-color: rgb(89, 17, 32) !important;
+            }
+
+                .sidenav-menu .help-box h5,
+                .sidenav-menu .help-box p {
+                    color: #ffffff !important;
+                }
+
+                .sidenav-menu .help-box .btn {
+                    background-color: #ffffff !important;
+                    border-color: #ffffff !important;
+                    color: rgb(89, 17, 32) !important;
+                }
+
+        /* Sidebar active link (base classes, used outside .sidenav-menu too) */
+        .side-nav .side-nav-link.active,
+        .side-nav .side-nav-item .side-nav-link[aria-expanded="true"] {
+            color: #ffffff !important;
+            background-color: rgb(89, 17, 32) !important;
+        }
+
+            .side-nav .side-nav-link.active i,
+            .side-nav .side-nav-link[aria-expanded="true"] i {
+                color: #ffffff !important;
+            }
+
+        /* ===== Buttons ===== */
+        .bg-primary,
+        .btn-primary {
+            background-color: rgb(89, 17, 32) !important;
+            border-color: rgb(89, 17, 32) !important;
+            color: #ffffff !important;
+        }
+
+            .btn-primary:hover,
+            .btn-primary:focus,
+            .btn-primary:active {
+                background-color: rgb(70, 13, 25) !important;
+                border-color: rgb(70, 13, 25) !important;
+            }
+
+        .text-primary {
+            color: rgb(89, 17, 32) !important;
+        }
+
+        /* ===== Text field styling ===== */
+        .form-control,
+        .form-select {
+            border-color: #ef9a9a;
+        }
+
+            .form-control:focus,
+            .form-select:focus {
+                border-color: rgb(89, 17, 32) !important;
+                box-shadow: 0 0 0 0.2rem rgba(89, 17, 32, 0.25) !important;
+                outline: none;
+            }
+
+            .form-control::selection,
+            .form-select::selection,
+            textarea::selection,
+            input::selection {
+                background-color: rgb(89, 17, 32);
+                color: #ffffff;
+            }
+
+            .form-control::placeholder {
+                color: #c67373;
+                opacity: 0.7;
+            }
+
+        /* ===== Topbar Background ===== */
+        .app-topbar {
+            background-color: rgb(230, 216, 213) !important;
+            border-bottom: 1px solid rgb(199, 167, 168);
+        }
+
+            .app-topbar .topbar-link {
+                color: #4a1414 !important;
+            }
+
+                .app-topbar .topbar-link:hover {
+                    background-color: rgb(199, 167, 168) !important;
+                    color: #3a0e0e !important;
+                }
+
+            .app-topbar .sidenav-toggle-button i,
+            .app-topbar .topnav-toggle-button i {
+                color: #7f1d1d !important;
+            }
+
+            .app-topbar .nav-user h5 {
+                color: #3a0e0e !important;
+            }
+
+            .app-topbar .nav-user small {
+                color: #5c1414 !important;
+            }
+
+        /* Color top line under topbar */
+        .color-line {
+            background-color: rgb(89, 17, 32) !important;
+        }
+
+        /* ===== Card Styling - Light Red ===== */
+        .card {
+            border: 1px solid #ffcdd2 !important;
+        }
+
+        .card-header {
+            background-color: #ffebee !important;
+            border-bottom: 1px solid #ffcdd2 !important;
+            color: #6d2c2c !important;
+        }
+
+            .card-header h4,
+            .card-header h5,
+            .card-header .card-title {
+                color: #7f0000 !important;
+            }
+
+        .card-body {
+            background-color: #ffffff !important;
+            color: #4a2020 !important;
+        }
+
+        .card-footer {
+            background-color: #ffebee !important;
+            border-top: 1px solid #ffcdd2 !important;
+        }
+
+        /* If it's the content wrapper specifically */
+        .page-content .page-container {
+            background-color: #ffffff !important;
+        }
     </style>
 </body>
 </html>
