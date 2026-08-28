@@ -75,24 +75,28 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio3" name="customRadio1" class="form-check-input">
+                                        <input type="radio" id="customRadio3" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio3">Bug Fix</label>
                                     </div>
                                     <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio4" name="customRadio1" class="form-check-input">
+                                        <input type="radio" id="customRadio4" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio4">Report Development</label>
                                     </div>
                                     <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio5" name="customRadio1" class="form-check-input">
+                                        <input type="radio" id="customRadio5" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio5">Enhancement</label>
                                     </div>
                                     <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio6" name="customRadio1" class="form-check-input">
+                                        <input type="radio" id="customRadio6" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio6">Infrastructure Changes</label>
                                     </div>
                                     <div class="form-check mb-0">
-                                        <input type="radio" id="customRadio7" name="customRadio1" class="form-check-input">
+                                        <input type="radio" id="customRadio7" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio7">Other</label>
+                                    </div>
+                                    <!-- Textarea shown only when "Other" is selected -->
+                                    <div id="otherTextareaWrapper" class="mt-2" style="display: none;">
+                                        <textarea id="otherTextarea" class="form-control form-control-sm" rows="2" placeholder="Please specify..."></textarea>
                                     </div>
                                 </div>
                             </div>
@@ -196,5 +200,11 @@
                 });
             });
         });
+
+        function toggleOtherTextarea() {
+            const otherRadio = document.getElementById('customRadio7');
+            const wrapper = document.getElementById('otherTextareaWrapper');
+            wrapper.style.display = otherRadio.checked ? 'block' : 'none';
+        }
     </script>
 }
