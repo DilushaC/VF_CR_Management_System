@@ -15,7 +15,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             _connectionService = connectionService;
         }
 
-        public Task<bool> CreateChangeRequestAsync(IFormCollection collection, string userName)
+        public Task<bool> CreateChangeRequestAsync(IFormCollection collection, string userName, string empId)
         {
             // Required fields
             if (!int.TryParse(collection["ChangeTypeID"], out var changeTypeId))
@@ -44,22 +44,22 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var crNumber = GenerateNextCrNumber();
 
             const string sql = @"
-                INSERT INTO ChangeRequests
-                    (CRNumber, UserName, Summary, ChangeTypeID, OtherChangeType, PriorityID,
+                INSERT INTO ChangeRequest
+                    (CRNumber, UserName,EmpID, Summary, ChangeTypeID, PriorityID,
                      RequestedDate, StatusID, Active)
                 VALUES
-                    (@CRNumber, @UserName, @Summary, @ChangeTypeID, @OtherChangeType, @PriorityID,
+                    (@CRNumber, @UserName, @EmpID, @Summary, @ChangeTypeID, @PriorityID,
                      @RequestedDate, @StatusID, @Active)";
 
             var parameters = new DynamicParameters();
             parameters.Add("@CRNumber", crNumber);
             parameters.Add("@UserName", userName);
+            parameters.Add("@EmpID", empId);
             parameters.Add("@Summary", summary);
             parameters.Add("@ChangeTypeID", changeTypeId);
-            parameters.Add("@OtherChangeType", changeTypeId == 5 ? otherChangeType : null);
             parameters.Add("@PriorityID", priorityId);
             parameters.Add("@RequestedDate", DateTime.Now);
-            parameters.Add("@StatusID", 1); // e.g. "Pending" - adjust to your workflow's initial status
+            parameters.Add("@StatusID", 1); 
             parameters.Add("@Active", true);
 
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
@@ -72,7 +72,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var year = DateTime.Now.Year;
 
             const string countSql = @"
-                SELECT COUNT(1) FROM ChangeRequests
+                SELECT COUNT(1) FROM ChangeRequest
                 WHERE YEAR(RequestedDate) = @Year";
 
             var result = _connectionService.ExecuteScalar(countSql, new { Year = year });

@@ -27,8 +27,9 @@ namespace VF_CR_Management_System.Controllers
             try
             {
                 var userName = HttpContext.Session.GetString("UserName");
+                var empNo = HttpContext.Session.GetString("EmpNo");
 
-                bool created = await _changeRequestService.CreateChangeRequestAsync(collection, userName);
+                bool created = await _changeRequestService.CreateChangeRequestAsync(collection, userName, empNo);
                 if (created)
                 {
                     return Json(new
