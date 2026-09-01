@@ -3,6 +3,7 @@
 
 @{
     var username = Context.Session.GetString("UserName");
+    var empNo = Context.Session.GetString("EmpNo");
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
@@ -290,7 +291,7 @@
                             <a class="topbar-link dropdown-toggle drop-arrow-none px-2" data-bs-toggle="dropdown"
                                data-bs-offset="0,25" type="button" aria-haspopup="false" aria-expanded="false">
                                 <span class="d-lg-flex flex-column gap-1 d-none">
-                                    <h5 class="my-0">@username</h5>
+                                    <h5 class="my-0">@username - @empNo</h5>
                                     <small class="text-muted" style="font-size: 11px; margin-top: -4px;">
                                         @designation - @department
                                     </small>

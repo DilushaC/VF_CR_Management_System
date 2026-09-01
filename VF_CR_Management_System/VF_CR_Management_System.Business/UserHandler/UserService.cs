@@ -38,7 +38,7 @@ namespace VF_CR_Management_System.Business.UserHandler
             var userParams = new DynamicParameters();
             userParams.Add("@UserName", username);
 
-            var userData = _connectionService.ReturnWithPara(userQuery, userParams);
+            var userData = _connectionService.ReturnWithPara2(userQuery, userParams);
             if (userData == null || userData.Rows.Count == 0)
                 return null;
 
@@ -48,6 +48,7 @@ namespace VF_CR_Management_System.Business.UserHandler
             {
                 Id = userRow.Field<int>("Id"),
                 DisplayName = response.Data.DisplayName,
+                UserName = response.Data.Username,
                 DisplayDesignation = response.Data.Title,
                 DisplayDepartment = response.Data.Department,
                 Email = response.Data.Email,
@@ -63,7 +64,7 @@ namespace VF_CR_Management_System.Business.UserHandler
             var productParams = new DynamicParameters();
             productParams.Add("@UserId", user.Id);
 
-            var productData = _connectionService.ReturnWithPara(productQuery, productParams);
+            var productData = _connectionService.ReturnWithPara2(productQuery, productParams);
             if (productData != null && productData.Rows.Count > 0)
             {
                 user.ProductIds = productData
@@ -114,7 +115,7 @@ namespace VF_CR_Management_System.Business.UserHandler
             menuParams.Add("@ProductId", productId);
 
 
-            var menuData = _connectionService.ReturnWithPara(menuQuery, menuParams);
+            var menuData = _connectionService.ReturnWithPara2(menuQuery, menuParams);
 
             if (menuData != null && menuData.Rows.Count > 0)
             {

@@ -1,4 +1,5 @@
 using VF_CR_Management_System.Business.Authentication;
+using VF_CR_Management_System.Business.ChangeRequestHandler;
 using VF_CR_Management_System.Business.ConnectionHandler;
 using VF_CR_Management_System.Business.UserHandler;
 using VF_CR_Management_System.Data.Context;
@@ -13,6 +14,7 @@ builder.Services.AddScoped<ADAuthentication>();
 builder.Services.AddScoped<DapperContext>();
 builder.Services.AddScoped<_ConnectionService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IChangeRequestService, ChangeRequestService>();
 
 // Add session services
 builder.Services.AddDistributedMemoryCache();

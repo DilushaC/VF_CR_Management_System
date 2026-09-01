@@ -1,4 +1,5 @@
-﻿@{
+﻿@model VF_CR_Management_System.Data.Models.ChangeRequest
+@{
     ViewData["Title"] = "Create CR";
 }
 @{
@@ -12,27 +13,22 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header border-bottom border-dashed d-flex align-items-center">
-                <h4 class="header-title mb-0">Section 1 : Change Request and Requirement - CR10000021212121</h4>
+                <h4 class="header-title mb-0">Section 1 : Change Request and Requirement</h4>
             </div>
 
             <div class="card-body">
-                <form id="crForm">
+                <form id="crForm" asp-controller="CRManagement" asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
                     <div class="row g-3">
 
                         <!-- Left Column -->
                         <div class="col-lg-6">
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
-                                    <p class="mb-1 fw-bold text-muted">Requester Name</p>
+                                    <label class="form-label">Requester Name</label>
                                     <input type="text" class="form-control" value="@username" disabled>
-@*                                     <select class="form-control select2" data-toggle="select2">
-                                        <option value="" selected disabled hidden>Select Requester</option>
-                                        <option value="Sobitha Weerasekara">Sobitha Weerasekara</option>
-                                        <option value="Indika Edirisinghe">Indika Edirisinghe</option>
-                                        <option value="Palinda Budhdhika">Palinda Budhdhika</option>
-                                        <option value="Ruwan Wijesooriya">Ruwan Wijesooriya</option>
-                                        <option value="Sameera Rajapaksha">Sameera Rajapaksha</option>
-                                    </select> *@
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Designation</label>
@@ -62,8 +58,10 @@
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label">Change Summary &amp; Business Justification</label>
-                                <textarea class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
+                                <label class="form-label" for="Summary">Change Summary &amp; Business Justification</label>
+                                <textarea id="Summary" name="Summary" class="form-control" rows="6"
+                                          placeholder="Write the explanation here...">@Model?.Summary</textarea>
+                                <span asp-validation-for="Summary" class="text-danger"></span>
                             </div>
                         </div>
 
@@ -75,29 +73,31 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio3" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
+                                        <input type="radio" id="customRadio3" name="ChangeTypeID" value="1" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio3">Bug Fix</label>
                                     </div>
                                     <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio4" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
+                                        <input type="radio" id="customRadio4" name="ChangeTypeID" value="2" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio4">Report Development</label>
                                     </div>
                                     <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio5" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
+                                        <input type="radio" id="customRadio5" name="ChangeTypeID" value="3" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio5">Enhancement</label>
                                     </div>
                                     <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio6" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
+                                        <input type="radio" id="customRadio6" name="ChangeTypeID" value="4" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio6">Infrastructure Changes</label>
                                     </div>
                                     <div class="form-check mb-0">
-                                        <input type="radio" id="customRadio7" name="customRadio1" class="form-check-input" onchange="toggleOtherTextarea()">
+                                        <input type="radio" id="customRadio7" name="ChangeTypeID" value="5" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio7">Other</label>
                                     </div>
                                     <!-- Textarea shown only when "Other" is selected -->
                                     <div id="otherTextareaWrapper" class="mt-2" style="display: none;">
-                                        <textarea id="otherTextarea" class="form-control form-control-sm" rows="2" placeholder="Please specify..."></textarea>
+                                        <textarea id="otherTextarea" name="OtherChangeType" class="form-control form-control-sm" rows="2" placeholder="Please specify..."></textarea>
                                     </div>
+                                    <span asp-validation-for="ChangeTypeID" class="text-danger"></span>
+                                    <span asp-validation-for="OtherChangeType" class="text-danger"></span>
                                 </div>
                             </div>
 
@@ -107,21 +107,22 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="form-check form-check-inline form-radio-success mb-0">
-                                        <input type="radio" id="customRadio8" name="customRadio2" class="form-check-input">
+                                        <input type="radio" id="customRadio8" name="PriorityID" value="1" class="form-check-input">
                                         <label class="form-check-label" for="customRadio8">Low</label>
                                     </div>
                                     <div class="form-check form-check-inline form-radio-secondary mb-0">
-                                        <input type="radio" id="customRadio9" name="customRadio2" class="form-check-input">
+                                        <input type="radio" id="customRadio9" name="PriorityID" value="2" class="form-check-input">
                                         <label class="form-check-label" for="customRadio9">Medium</label>
                                     </div>
                                     <div class="form-check form-check-inline form-radio-warning mb-0">
-                                        <input type="radio" id="customRadio10" name="customRadio2" class="form-check-input">
+                                        <input type="radio" id="customRadio10" name="PriorityID" value="3" class="form-check-input">
                                         <label class="form-check-label" for="customRadio10">High</label>
                                     </div>
                                     <div class="form-check form-check-inline form-radio-danger mb-0">
-                                        <input type="radio" id="customRadio11" name="customRadio2" class="form-check-input">
+                                        <input type="radio" id="customRadio11" name="PriorityID" value="4" class="form-check-input">
                                         <label class="form-check-label" for="customRadio11">Emergency</label>
                                     </div>
+                                    <span asp-validation-for="PriorityID" class="text-danger d-block mt-1"></span>
                                 </div>
                             </div>
                         </div>
@@ -130,10 +131,10 @@
 
                     <!-- Actions -->
                     <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <button type="button" class="btn btn-outline-danger">Cancel</button>
+                        <button type="button" class="btn btn-outline-danger" onclick="window.location.href='@Url.Action("Index")'">Cancel</button>
                         <div class="d-flex gap-2">
                             <button type="button" id="btn-save" class="btn btn-danger">Save</button>
-                            <button type="submit" id="btn-submit" class="btn btn-primary">Submit & Approve</button>
+                            <button type="submit" id="btn-submit" class="btn btn-primary">Submit &amp; Approve</button>
                         </div>
                     </div>
                 </form>
@@ -146,9 +147,8 @@
         document.addEventListener("DOMContentLoaded", function () {
             var form = document.getElementById('crForm');
             var saveBtn = document.getElementById('btn-save');
-            var submitBtn = document.getElementById('btn-submit');
 
-            // SAVE button — confirm before saving
+            // SAVE button — confirm, then submit as a draft (StatusID handled server-side if you add a Save action)
             saveBtn.addEventListener('click', function () {
                 Swal.fire({
                     title: 'Save this Change Request?',
@@ -164,19 +164,14 @@
                     buttonsStyling: false
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        // TODO: hook up actual save logic here (AJAX call, partial submit, etc.)
-                        Swal.fire({
-                            title: 'Saved!',
-                            text: 'Your Change Request has been saved.',
-                            icon: 'success',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        });
+                        // TODO: point this at a dedicated "Save draft" endpoint if the behaviour
+                        // needs to differ from Submit (e.g. different StatusID, skip validation).
+                        submitChangeRequest();
                     }
                 });
             });
 
-            // SUBMIT button — confirm before submitting the form
+            // SUBMIT button — confirm, then post via AJAX (the controller returns JSON, not a redirect)
             form.addEventListener('submit', function (event) {
                 event.preventDefault(); // stop the form from submitting immediately
 
@@ -194,12 +189,54 @@
                     buttonsStyling: false
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        // Actually submit the form now that the user confirmed
-                        form.submit();
+                        submitChangeRequest();
                     }
                 });
             });
         });
+
+        function submitChangeRequest() {
+            var form = document.getElementById('crForm');
+            var formData = new FormData(form);
+
+            fetch(form.action, {
+                method: 'POST',
+                body: formData
+            })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        Swal.fire({
+                            title: 'Submitted!',
+                            text: data.message,
+                            icon: 'success',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        }).then(function () {
+                            if (data.redirectUrl) {
+                                window.location.href = data.redirectUrl;
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            title: 'Could not submit',
+                            text: data.message,
+                            icon: 'error',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                    }
+                })
+                .catch(function (err) {
+                    Swal.fire({
+                        title: 'Something went wrong',
+                        text: err.message,
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                });
+        }
 
         function toggleOtherTextarea() {
             const otherRadio = document.getElementById('customRadio7');

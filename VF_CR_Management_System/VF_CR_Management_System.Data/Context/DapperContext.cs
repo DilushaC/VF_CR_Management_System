@@ -14,15 +14,19 @@ namespace VF_CR_Management_System.Data.Context
     {
         private readonly IConfiguration _configuration;
         private readonly string _connectionString;
+        private readonly string _connectionString2;
 
 
         public DapperContext(IConfiguration configuration)
         {
             _configuration = configuration;
             _connectionString = _configuration.GetConnectionString("Connection");
+            _connectionString2 = _configuration.GetConnectionString("Connection2");
         }
 
         public IDbConnection CreateConnection()
                 => new SqlConnection(_connectionString);
+        public IDbConnection CreateConnection2()
+        => new SqlConnection(_connectionString2);
     }
 }

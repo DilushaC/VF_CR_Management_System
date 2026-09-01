@@ -71,6 +71,15 @@ namespace VF_CR_Management_System.Business.ConnectionHandler
             return dataTable;
         }
 
+        public DataTable ReturnWithPara2(string query, DynamicParameters parameters)
+        {
+            using var connection = _context.CreateConnection2();
+            using var reader = connection.ExecuteReader(query, parameters, commandTimeout: int.MaxValue);
+            var dataTable = new DataTable();
+            dataTable.Load(reader);
+            return dataTable;
+        }
+
         public int ExecuteWithPara(string query, DynamicParameters parameters)
         {
             using var connection = _context.CreateConnection();
