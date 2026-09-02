@@ -22,49 +22,78 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please select a change type.");
             }
-
             if (!int.TryParse(collection["PriorityID"], out var priorityId))
             {
                 throw new ArgumentException("Please select a change priority.");
             }
-
             var summary = collection["Summary"].ToString();
             if (string.IsNullOrWhiteSpace(summary))
             {
                 throw new ArgumentException("Please provide a change summary and business justification.");
             }
-
-            // "Other" (ChangeTypeID == 5) requires the free-text description
             var otherChangeType = collection["OtherChangeType"].ToString();
             if (changeTypeId == 5 && string.IsNullOrWhiteSpace(otherChangeType))
             {
                 throw new ArgumentException("Please specify the change type.");
             }
+            if (!int.TryParse(collection["ModuleID"], out var moduleId))
+            {
+                throw new ArgumentException("Please select a Module.");
+            }
+            if (!int.TryParse(collection["ApproverID"], out var approverId))
+            {
+                throw new ArgumentException("Please select a Approver.");
+            }
 
             var crNumber = GenerateNextCrNumber();
 
-            const string sql = @"
+            // 1. Insert ChangeRequest, and get back the new identity Id in the same round-trip
+            const string crSql = @"
                 INSERT INTO ChangeRequest
-                    (CRNumber, UserName,EmpID, Summary, ChangeTypeID, PriorityID,
+                    (CRNumber, RequesterUserName, Summary, ChangeTypeID, PriorityID, ModuleID, 
                      RequestedDate, StatusID, Active)
                 VALUES
-                    (@CRNumber, @UserName, @EmpID, @Summary, @ChangeTypeID, @PriorityID,
-                     @RequestedDate, @StatusID, @Active)";
+                    (@CRNumber, @RequesterUserName, @Summary, @ChangeTypeID, @PriorityID, @ModuleID,
+                     @RequestedDate, @StatusID, @Active);
+                SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
-            var parameters = new DynamicParameters();
-            parameters.Add("@CRNumber", crNumber);
-            parameters.Add("@UserName", userName);
-            parameters.Add("@EmpID", empId);
-            parameters.Add("@Summary", summary);
-            parameters.Add("@ChangeTypeID", changeTypeId);
-            parameters.Add("@PriorityID", priorityId);
-            parameters.Add("@RequestedDate", DateTime.Now);
-            parameters.Add("@StatusID", 1); 
-            parameters.Add("@Active", true);
+            var crParameters = new DynamicParameters();
+            crParameters.Add("@CRNumber", crNumber);
+            crParameters.Add("@RequesterUserName", empId);
+            crParameters.Add("@Summary", summary);
+            crParameters.Add("@ChangeTypeID", changeTypeId);
+            crParameters.Add("@PriorityID", priorityId);
+            crParameters.Add("@ModuleID", moduleId);
+            crParameters.Add("@RequestedDate", DateTime.Now);
+            crParameters.Add("@StatusID", 1);
+            crParameters.Add("@Active", true);
 
-            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+            // ExecuteScalar (same method used in GenerateNextCrNumber) runs the INSERT
+            // then returns the SELECT SCOPE_IDENTITY() result as an object.
+            var scalarResult = _connectionService.ExecuteScalar(crSql, crParameters);
+            var newCrId = scalarResult != null ? Convert.ToInt32(scalarResult) : 0;
 
-            return Task.FromResult(rowsAffected > 0);
+            if (newCrId <= 0)
+                return Task.FromResult(false);
+
+            // 2. Insert Approval step using the real ChangeRequest.Id (int), not CRNumber
+            const string approvalSql = @"
+                INSERT INTO Approval
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+            var approvalParameters = new DynamicParameters();
+            approvalParameters.Add("@CRID", newCrId);
+            approvalParameters.Add("@StepID", 7);
+            approvalParameters.Add("@AssignedBy", empId);
+            approvalParameters.Add("@AssignedTo", approverId);
+            approvalParameters.Add("@AssignedDate", DateTime.Now);
+            approvalParameters.Add("@Active", true);
+
+            int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
+
+            return Task.FromResult(approvalRowsAffected > 0);
         }
 
         private string GenerateNextCrNumber()
