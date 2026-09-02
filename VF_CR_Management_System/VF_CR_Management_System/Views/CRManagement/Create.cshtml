@@ -1,6 +1,9 @@
 ﻿@model VF_CR_Management_System.Data.Models.ChangeRequest
+@using VF_CR_Management_System.Data.Models
 @{
     ViewData["Title"] = "Create CR";
+    var users = ViewBag.Users as List<UserModel>;
+    var modules = ViewBag.Modules as List<Module>;
 }
 @{
     var username = Context.Session.GetString("UserName");
@@ -123,6 +126,45 @@
                                         <label class="form-check-label" for="customRadio11">Emergency</label>
                                     </div>
                                     <span asp-validation-for="PriorityID" class="text-danger d-block mt-1"></span>
+                                </div>
+                            </div>
+                            <div class="card border mb-3">
+                                <div class="card-header bg-light-subtle">
+                                    <h6 class="fs-15 mb-0">Module</h6>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label" for="ModuleID">Select Module</label>
+                                    <select id="ModuleID" name="ModuleID" class="form-control select2" data-toggle="select2">
+                                        <option value="" selected disabled hidden>Select Module</option>
+                                        @if (ViewBag.Modules != null)
+                                        {
+                                            @foreach (var module in ViewBag.Modules)
+                                            {
+                                                <option value="@module.Id">@module.ModuleName</option>
+                                            }
+                                        }
+                                    </select>
+                                    <span asp-validation-for="ModuleID" class="text-danger"></span>
+                                </div>
+                            </div>
+
+                            <div class="card border mb-3">
+                                <div class="card-header bg-light-subtle">
+                                    <h6 class="fs-15 mb-0">Approver Selection</h6>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label" for="UserID">Select User</label>
+                                    <select id="UserID" name="UserID" class="form-control select2" data-toggle="select2">
+                                        <option value="" selected disabled hidden>Select User</option>
+                                        @if (ViewBag.Users != null)
+                                        {
+                                            @foreach (var user in ViewBag.Users)
+                                            {
+                                                <option value="@user.Id">@user.FirstName @user.LastName</option>
+                                            }
+                                        }
+                                    </select>
+@*                                     <span asp-validation-for="UserID" class="text-danger"></span> *@
                                 </div>
                             </div>
                         </div>

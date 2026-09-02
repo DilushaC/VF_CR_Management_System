@@ -1,6 +1,7 @@
 using VF_CR_Management_System.Business.Authentication;
 using VF_CR_Management_System.Business.ChangeRequestHandler;
 using VF_CR_Management_System.Business.ConnectionHandler;
+using VF_CR_Management_System.Business.ModuleHandler;
 using VF_CR_Management_System.Business.UserHandler;
 using VF_CR_Management_System.Data.Context;
 
@@ -15,6 +16,7 @@ builder.Services.AddScoped<DapperContext>();
 builder.Services.AddScoped<_ConnectionService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IChangeRequestService, ChangeRequestService>();
+builder.Services.AddScoped<IModuleService, ModuleService>();
 
 // Add session services
 builder.Services.AddDistributedMemoryCache();

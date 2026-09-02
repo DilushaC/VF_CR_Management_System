@@ -25,6 +25,9 @@ namespace VF_CR_Management_System.Data.Models
         [Required(ErrorMessage = "Please select a change priority.")]
         public int PriorityID { get; set; }
 
+        [Required(ErrorMessage = "Please select an approver.")]
+        public string ApproverID { get; set; }
+
         public int WorkflowID { get; set; }
 
         public int StatusID { get; set; }

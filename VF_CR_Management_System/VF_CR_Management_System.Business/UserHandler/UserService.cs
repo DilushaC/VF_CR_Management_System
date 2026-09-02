@@ -152,5 +152,33 @@ namespace VF_CR_Management_System.Business.UserHandler
             return user;
         }
 
+        public async Task<List<UserModel>> GetAllUsersAsync()
+        {
+            const string usersQuery = @"
+                SELECT Id, UserName, FirstName, LastName, IsActive
+                FROM Users
+                WHERE IsActive = 1
+                ORDER BY UserName";
+
+            var userParams = new DynamicParameters();
+            var userData = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+            if (userData == null || userData.Rows.Count == 0)
+                return new List<UserModel>();
+
+            var users = userData.AsEnumerable()
+                .Select(r => new UserModel
+                {
+                    Id = r.Field<int>("Id"),
+                    UserName = r.Field<string>("UserName"),
+                    FirstName = r.Field<string>("FirstName"),
+                    LastName = r.Field<string>("LastName"),
+                    IsActive = r.Field<bool>("IsActive")
+                })
+                .ToList();
+
+            return users;
+        }
+
     }
 }

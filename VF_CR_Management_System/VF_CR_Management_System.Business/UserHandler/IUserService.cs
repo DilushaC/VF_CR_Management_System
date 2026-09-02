@@ -10,6 +10,6 @@ namespace VF_CR_Management_System.Business.UserHandler
     public interface IUserService
     {
         Task<UserModel> ValidateUserAsync(string username, string password, int productId);
-
+        Task<List<UserModel>> GetAllUsersAsync();
     }
 }
