@@ -135,7 +135,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var result = _connectionService.ExecuteScalar(countSql, new { Year = year, Month = month });
             var countThisMonth = result != null ? Convert.ToInt32(result) : 0;
 
-            return $"CR/{year}/{month:D2}/{(countThisMonth + 1):D6}";
+            return $"CR/{year}/{month:D2}/{(countThisMonth + 1):D5}";
         }
     }
 }
