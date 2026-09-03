@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using System;
 using System.Threading.Tasks;
 using VF_CR_Management_System.Business.ConnectionHandler;
+using VF_CR_Management_System.Data.Models;
 
 namespace VF_CR_Management_System.Business.ChangeRequestHandler
 {
@@ -40,7 +41,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please select a Module.");
             }
-            if (!int.TryParse(collection["ApproverID"], out var approverId))
+            if (!int.TryParse(collection["ImplementerID"], out var ImplementerId))
             {
                 throw new ArgumentException("Please select a Approver.");
             }
@@ -87,7 +88,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             approvalParameters.Add("@CRID", newCrId);
             approvalParameters.Add("@StepID", 7);
             approvalParameters.Add("@AssignedBy", empId);
-            approvalParameters.Add("@AssignedTo", approverId);
+            approvalParameters.Add("@AssignedTo", ImplementerId);
             approvalParameters.Add("@AssignedDate", DateTime.Now);
             approvalParameters.Add("@Active", true);
 
@@ -96,18 +97,45 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return Task.FromResult(approvalRowsAffected > 0);
         }
 
+        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync()
+        {
+            const string sql = @"
+                SELECT
+                    cr.CRID,
+                    cr.CRNumber,
+                    cr.Summary,
+                    ct.ChangeTypeName AS ChangeType,
+                    p.PriorityName    AS Priority,
+                    m.ModuleName      AS Module,
+                    s.StatusName      AS Status,
+                    cr.RequesterUserName AS RequestedBy,
+                    cr.RequestedDate
+                FROM [CRManagementDB].[dbo].[ChangeRequest] cr
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority]   p  ON p.PriorityID   = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID    = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID    = cr.StatusID
+                WHERE cr.Active = 1
+                ORDER BY cr.RequestedDate DESC";
+
+            var result = _connectionService.Query<ChangeRequest>(sql);
+
+            return Task.FromResult<IEnumerable<ChangeRequest>>(result);
+        }
+
         private string GenerateNextCrNumber()
         {
-            var year = DateTime.Now.Year;
+            var now = DateTime.Now;
+            var year = now.Year;
+            var month = now.Month;
 
             const string countSql = @"
                 SELECT COUNT(1) FROM ChangeRequest
-                WHERE YEAR(RequestedDate) = @Year";
+                WHERE YEAR(RequestedDate) = @Year AND MONTH(RequestedDate) = @Month";
+            var result = _connectionService.ExecuteScalar(countSql, new { Year = year, Month = month });
+            var countThisMonth = result != null ? Convert.ToInt32(result) : 0;
 
-            var result = _connectionService.ExecuteScalar(countSql, new { Year = year });
-            var countThisYear = result != null ? Convert.ToInt32(result) : 0;
-
-            return $"CR-{year}-{(countThisYear + 1):D6}";
+            return $"CR/{year}/{month:D2}/{(countThisMonth + 1):D6}";
         }
     }
 }

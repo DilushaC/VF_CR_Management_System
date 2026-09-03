@@ -102,9 +102,10 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpGet]
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            return View();
+            var changeRequests = await _changeRequestService.GetAllChangeRequestsAsync();
+            return View(changeRequests);
         }
     }
 }
