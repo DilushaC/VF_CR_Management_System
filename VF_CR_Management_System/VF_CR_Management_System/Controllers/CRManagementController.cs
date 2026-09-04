@@ -104,6 +104,8 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> Index(string filter = "all")
         {
+            var users = await _userService.GetAllUsersAsync();
+            ViewBag.Users = users;
             var empNo = HttpContext.Session.GetString("EmpNo");
             var changeRequests = await _changeRequestService.GetAllChangeRequestsAsync(empNo, filter);
             ViewBag.CurrentFilter = filter;

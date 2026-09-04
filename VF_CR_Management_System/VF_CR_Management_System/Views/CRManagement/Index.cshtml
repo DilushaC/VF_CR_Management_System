@@ -116,12 +116,6 @@
                                                 <i class="ri-eye-line"></i>
                                             </button>
                                             <button type="button"
-                                                    class="btn btn-sm btn-success btn-approve"
-                                                    data-id="@cr.CRID"
-                                                    title="Approve">
-                                                <i class="ri-check-line"></i>
-                                            </button>
-                                            <button type="button"
                                                     class="btn btn-sm btn-danger btn-reject"
                                                     data-id="@cr.CRID"
                                                     title="Reject">
@@ -181,10 +175,28 @@
                         <textarea class="form-control" id="modal-summary" rows="4" readonly></textarea>
                     </div>
                 </div>
+
+                <div class="card border mt-3 mb-0">
+                    <div class="card-body">
+                        <label class="form-label" for="modal-approver">Select Implementer</label>
+                        <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
+                            <option value="" selected disabled hidden>Select User</option>
+                            @if (ViewBag.Users != null)
+                            {
+                                @foreach (var user in ViewBag.Users)
+                                {
+                                    <option value="@user.UserName">@user.FirstName @user.LastName</option>
+                                }
+                            }
+                        </select>
+                        <span id="modal-approver-error" class="text-danger d-none">Please select an approver.</span>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <a href="#" id="modal-edit-link" class="btn btn-primary">Open Full Edit</a>
+                <button type="button" id="modal-approve-btn" class="btn btn-success">Approve</button>
+                <button type="button" id="modal-approve-btn" class="btn btn-danger">Reject</button>
             </div>
         </div>
     </div>
@@ -205,26 +217,6 @@
                 e.preventDefault();
                 var selected = $(this).data('filter');
                 window.location.href = '@Url.Action("Index", "CRManagement")' + '?filter=' + selected;
-            });
-
-            $('#basic-datatable').on('click', '.btn-approve', function () {
-                var id = $(this).data('id');
-                if (confirm('Are you sure you want to approve this Change Request?')) {
-                    $.ajax({
-                        url: '@Url.Action("Approve", "CRManagement")',
-                        type: 'POST',
-                        data: { id: id },
-                        headers: {
-                            "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                        },
-                        success: function () {
-                            location.reload();
-                        },
-                        error: function () {
-                            alert('Failed to approve the CR. Please try again.');
-                        }
-                    });
-                }
             });
 
             $('#basic-datatable').on('click', '.btn-reject', function () {
@@ -273,8 +265,54 @@
             crDetailsModal.querySelector('#modal-requesteddate').value = requesteddate || '';
             crDetailsModal.querySelector('#modal-summary').value = summary || '';
 
+            // Track which CR this modal instance is currently showing, so the
+            // Approve button below knows which CRID to submit.
+            $(crDetailsModal).data('crid', crid);
+
+            // Reset the approver dropdown for each new CR opened
+            $('#modal-approver').val('').trigger('change');
+            $('#modal-approver-error').addClass('d-none');
+
             var editLink = crDetailsModal.querySelector('#modal-edit-link');
             editLink.setAttribute('href', '@Url.Action("Edit", "CRManagement")' + '/' + crid);
+        });
+
+        // select2 needs to be (re)initialized after the modal is in the DOM/visible,
+        // otherwise the dropdown widget can render with zero width inside a modal.
+        $(crDetailsModal).on('shown.bs.modal', function () {
+            $('#modal-approver').select2({
+                dropdownParent: $(crDetailsModal)
+            });
+        });
+
+        $('#modal-approve-btn').on('click', function () {
+            var crid = $(crDetailsModal).data('crid');
+            var approverId = $('#modal-approver').val();
+
+            if (!approverId) {
+                $('#modal-approver-error').removeClass('d-none');
+                return;
+            }
+            $('#modal-approver-error').addClass('d-none');
+
+            if (!confirm('Are you sure you want to approve this Change Request?')) {
+                return;
+            }
+
+            $.ajax({
+                url: '@Url.Action("Approve", "CRManagement")',
+                type: 'POST',
+                data: { id: crid, ApproverID: approverId },
+                headers: {
+                    "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                },
+                success: function () {
+                    location.reload();
+                },
+                error: function () {
+                    alert('Failed to approve the CR. Please try again.');
+                }
+            });
         });
     </script>
 }
