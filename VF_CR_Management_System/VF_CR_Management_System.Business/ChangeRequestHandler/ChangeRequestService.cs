@@ -97,9 +97,46 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return Task.FromResult(approvalRowsAffected > 0);
         }
 
-        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync()
+        private string GenerateNextCrNumber()
         {
-            const string sql = @"
+            var now = DateTime.Now;
+            var year = now.Year;
+            var month = now.Month;
+
+            const string countSql = @"
+                SELECT COUNT(1) FROM ChangeRequest
+                WHERE YEAR(RequestedDate) = @Year AND MONTH(RequestedDate) = @Month";
+            var result = _connectionService.ExecuteScalar(countSql, new { Year = year, Month = month });
+            var countThisMonth = result != null ? Convert.ToInt32(result) : 0;
+
+            return $"CR/{year}/{month:D2}/{(countThisMonth + 1):D5}";
+        }
+
+        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync(string empNo, string filter)
+        {
+            string filterCondition = filter switch
+            {
+                "createdByMe" => "AND cr.RequesterUserName = @EmpNo",
+                "assignedToMe" => @"AND EXISTS (
+                                        SELECT 1
+                                        FROM [CRManagementDB].[dbo].[Approval] a
+                                        WHERE a.CRID = cr.CRID
+                                            AND a.AssignedTo = @EmpNo
+                                            AND a.Active = 1
+                                    )",
+                        _ => @"AND (
+                            cr.RequesterUserName = @EmpNo
+                            OR EXISTS (
+                                SELECT 1
+                                FROM [CRManagementDB].[dbo].[Approval] a
+                                WHERE a.CRID = cr.CRID
+                                    AND a.AssignedTo = @EmpNo
+                                    AND a.Active = 1
+                            )
+                        )"
+                    };
+
+                var sql = $@"
                 SELECT
                     cr.CRID,
                     cr.CRNumber,
@@ -116,26 +153,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID    = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID    = cr.StatusID
                 WHERE cr.Active = 1
+                  {filterCondition}
                 ORDER BY cr.RequestedDate DESC";
 
-            var result = _connectionService.Query<ChangeRequest>(sql);
-
+            var result = _connectionService.Query<ChangeRequest>(sql, new { EmpNo = empNo });
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
-        }
-
-        private string GenerateNextCrNumber()
-        {
-            var now = DateTime.Now;
-            var year = now.Year;
-            var month = now.Month;
-
-            const string countSql = @"
-                SELECT COUNT(1) FROM ChangeRequest
-                WHERE YEAR(RequestedDate) = @Year AND MONTH(RequestedDate) = @Month";
-            var result = _connectionService.ExecuteScalar(countSql, new { Year = year, Month = month });
-            var countThisMonth = result != null ? Convert.ToInt32(result) : 0;
-
-            return $"CR/{year}/{month:D2}/{(countThisMonth + 1):D5}";
         }
     }
 }

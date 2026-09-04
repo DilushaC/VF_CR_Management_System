@@ -11,6 +11,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
     public interface IChangeRequestService
     {
         Task<bool> CreateChangeRequestAsync(IFormCollection collection, string userName, string empNo);
-        Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync();
+        Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync(string empNo, string filter);
     }
 }

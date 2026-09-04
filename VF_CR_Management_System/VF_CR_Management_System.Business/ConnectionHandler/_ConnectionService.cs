@@ -30,6 +30,12 @@ namespace VF_CR_Management_System.Business.ConnectionHandler
             return connection.Query<T>(query).ToList();
         }
 
+        public List<T> Query<T>(string query, object parameters)
+        {
+            using var connection = _context.CreateConnection();
+            return connection.Query<T>(query, parameters).ToList();
+        }
+
         public async Task<DataTable> SingleQueryReturn(string query, int id)
         {
             using var connection = _context.CreateConnection();
