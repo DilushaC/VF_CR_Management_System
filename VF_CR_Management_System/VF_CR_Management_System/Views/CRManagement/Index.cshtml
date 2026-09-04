@@ -138,14 +138,18 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="crDetailsModalLabel">Change Request Details</h5>
+                <div class="ms-auto d-flex align-items-center">
+                    <label class="col-form-label fw-semibold me-2">CR Number:</label>
+                    <input type="text"
+                           class="form-control"
+                           id="modal-crnumber"
+                           readonly
+                           style="width: 200px;">
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">CR Number:</label>
-                        <input type="text" class="form-control" id="modal-crnumber" readonly>
-                    </div>
                     <div class="col-md-6">
                         <label class="col-form-label fw-semibold">Status:</label>
                         <input type="text" class="form-control" id="modal-status" readonly>
@@ -170,28 +174,29 @@
                         <label class="col-form-label fw-semibold">Requested Date:</label>
                         <input type="text" class="form-control" id="modal-requesteddate" readonly>
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-6">
                         <label class="col-form-label fw-semibold">Summary &amp; Business Justification:</label>
                         <textarea class="form-control" id="modal-summary" rows="4" readonly></textarea>
                     </div>
-                </div>
-
-                <div class="card border mt-3 mb-0">
-                    <div class="card-body">
-                        <label class="form-label" for="modal-approver">Select Implementer</label>
-                        <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
-                            <option value="" selected disabled hidden>Select User</option>
-                            @if (ViewBag.Users != null)
-                            {
-                                @foreach (var user in ViewBag.Users)
+                    <div class="col-md-6">
+                        <div class="card-body">
+                            <label class="form-label" for="modal-approver">Select Implementer</label>
+                            <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
+                                <option value="" selected disabled hidden>Select User</option>
+                                @if (ViewBag.Users != null)
                                 {
-                                    <option value="@user.UserName">@user.FirstName @user.LastName</option>
+                                    @foreach (var user in ViewBag.Users)
+                                    {
+                                        <option value="@user.UserName">@user.FirstName @user.LastName</option>
+                                    }
                                 }
-                            }
-                        </select>
-                        <span id="modal-approver-error" class="text-danger d-none">Please select an approver.</span>
+                            </select>
+                            <span id="modal-approver-error" class="text-danger d-none">Please select an approver.</span>
+                        </div>
                     </div>
                 </div>
+
+
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
