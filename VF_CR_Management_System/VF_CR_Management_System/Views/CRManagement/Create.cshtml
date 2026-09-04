@@ -22,6 +22,10 @@
             <div class="card-body">
                 <form id="crForm" asp-controller="CRManagement" asp-action="Create" method="post">
                     @Html.AntiForgeryToken()
+
+                    <!-- Holds 1 (Save) or 2 (Submit & Approve), set by JS right before submission -->
+                    <input type="hidden" id="StatusID" name="StatusID" value="">
+
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
                     <div class="row g-3">
@@ -150,11 +154,11 @@
 
                             <div class="card border mb-3">
                                 <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Implementer Selection</h6>
+                                    <h6 class="fs-15 mb-0">Approver Selection</h6>
                                 </div>
                                 <div class="card-body">
                                     <label class="form-label" for="UserID">Select User</label>
-                                    <select id="ImplementerID" name="ImplementerID" class="form-control select2" data-toggle="select2">
+                                    <select id="ApproverID" name="ApproverID" class="form-control select2" data-toggle="select2">
                                         <option value="" selected disabled hidden>Select User</option>
                                         @if (ViewBag.Users != null)
                                         {
@@ -164,7 +168,7 @@
                                             }
                                         }
                                     </select>
-@*                                     <span asp-validation-for="UserID" class="text-danger"></span> *@
+                                    @*                                     <span asp-validation-for="UserID" class="text-danger"></span> *@
                                 </div>
                             </div>
                         </div>
@@ -175,8 +179,8 @@
                     <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
                         <button type="button" class="btn btn-outline-danger" onclick="window.location.href='@Url.Action("Index")'">Cancel</button>
                         <div class="d-flex gap-2">
-                            <button type="button" id="btn-save" class="btn btn-danger">Save</button>
-                            <button type="submit" id="btn-submit" class="btn btn-primary">Submit &amp; Approve</button>
+                            <button type="button" id="btn-save" class="btn btn-danger" data-status="1">Save</button>
+                            <button type="submit" id="btn-submit" class="btn btn-primary" data-status="2">Submit &amp; Approve</button>
                         </div>
                     </div>
                 </form>
@@ -189,8 +193,10 @@
         document.addEventListener("DOMContentLoaded", function () {
             var form = document.getElementById('crForm');
             var saveBtn = document.getElementById('btn-save');
+            var submitBtn = document.getElementById('btn-submit');
+            var statusInput = document.getElementById('StatusID');
 
-            // SAVE button — confirm, then submit as a draft (StatusID handled server-side if you add a Save action)
+            // SAVE button — StatusID = 1 (draft)
             saveBtn.addEventListener('click', function () {
                 Swal.fire({
                     title: 'Save this Change Request?',
@@ -206,14 +212,13 @@
                     buttonsStyling: false
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        // TODO: point this at a dedicated "Save draft" endpoint if the behaviour
-                        // needs to differ from Submit (e.g. different StatusID, skip validation).
+                        statusInput.value = saveBtn.dataset.status; // "1"
                         submitChangeRequest();
                     }
                 });
             });
 
-            // SUBMIT button — confirm, then post via AJAX (the controller returns JSON, not a redirect)
+            // SUBMIT button — StatusID = 2 (submitted/approved)
             form.addEventListener('submit', function (event) {
                 event.preventDefault(); // stop the form from submitting immediately
 
@@ -231,6 +236,7 @@
                     buttonsStyling: false
                 }).then(function (result) {
                     if (result.isConfirmed) {
+                        statusInput.value = submitBtn.dataset.status; // "2"
                         submitChangeRequest();
                     }
                 });

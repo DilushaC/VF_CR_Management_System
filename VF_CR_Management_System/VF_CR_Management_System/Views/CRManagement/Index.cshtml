@@ -7,17 +7,57 @@
     <div class="col-12">
         <div class="card">
             <div class="card-body">
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
                     <h4 class="header-title mb-0">Change Requests</h4>
-                    <div>
-                        <select id="crFilter" class="form-select form-select-sm">
-                            <option value="all" selected="@(currentFilter == "all")">All</option>
-                            <option value="createdByMe" selected="@(currentFilter == "createdByMe")">Created by Me</option>
-                            <option value="assignedToMe" selected="@(currentFilter == "assignedToMe")">Assigned to Me</option>
-                        </select>
-                    </div>
+
+                    <ul class="nav nav-pills mb-0 cr-filter-tabs" id="crFilterTabs">
+                        <li class="nav-item">
+                            <a href="#" data-filter="all" aria-expanded="@(currentFilter == "all" ? "true" : "false")"
+                               class="nav-link rounded-0 @(currentFilter == "all" ? "active" : "")">
+                                All
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" data-filter="createdByMe" aria-expanded="@(currentFilter == "createdByMe" ? "true" : "false")"
+                               class="nav-link rounded-0 @(currentFilter == "createdByMe" ? "active" : "")">
+                                Created by Me
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" data-filter="assignedToMe" aria-expanded="@(currentFilter == "assignedToMe" ? "true" : "false")"
+                               class="nav-link rounded-0 @(currentFilter == "assignedToMe" ? "active" : "")">
+                                Assigned to Me
+                            </a>
+                        </li>
+                    </ul>
                 </div>
-                <hr />
+
+                <style>
+                    .cr-filter-tabs {
+                        gap: 0.5rem;
+                    }
+
+                        .cr-filter-tabs .nav-item .nav-link {
+                            font-size: 0.8125rem !important;
+                            padding: 0.3rem 0.75rem !important;
+                            color: #7a3b47 !important;
+                            background-color: #f7eef0 !important;
+                            font-weight: 500;
+                            border: none;
+                            border-radius: 0.25rem;
+                        }
+
+                            .cr-filter-tabs .nav-item .nav-link:hover {
+                                background-color: #e3c3ca !important;
+                                color: #7a3b47 !important;
+                            }
+
+                            .cr-filter-tabs .nav-item .nav-link.active {
+                                background-color: #8f3b4c !important;
+                                color: #ffffff !important;
+                            }
+                </style>
+
                 <table id="basic-datatable" class="table table-striped dt-responsive nowrap w-100">
                     <thead>
                         <tr>
@@ -36,17 +76,15 @@
                         {
                             @foreach (var cr in Model)
                             {
+                                var isDraft = cr.CRNumber != null &&
+                                cr.CRNumber.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase);
                                 <tr>
-                                    <td>@cr.CRNumber</td>
+                                    <td title="@cr.CRNumber">@(isDraft ? "WAITING" : cr.CRNumber)</td>
                                     <td>@cr.ChangeType</td>
                                     <td>
                                         @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
                                         {
                                             <span class="badge bg-danger">@cr.Priority</span>
-                                        }
-                                        else if (string.Equals(cr.Priority, "Low", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            <span class="badge bg-success">@cr.Priority</span>
                                         }
                                         else
                                         {
@@ -97,8 +135,9 @@
                 responsive: true
             });
 
-            $('#crFilter').on('change', function () {
-                var selected = $(this).val();
+            $('#crFilterTabs').on('click', 'a.nav-link', function (e) {
+                e.preventDefault();
+                var selected = $(this).data('filter');
                 window.location.href = '@Url.Action("Index", "CRManagement")' + '?filter=' + selected;
             });
 
