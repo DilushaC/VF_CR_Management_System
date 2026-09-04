@@ -157,26 +157,36 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             string filterCondition = filter switch
             {
                 "createdByMe" => "AND cr.RequesterUserName = @EmpNo",
-                "assignedToMe" => @"AND EXISTS (
-                                        SELECT 1
-                                        FROM [CRManagementDB].[dbo].[Approval] a
-                                        WHERE a.CRID = cr.CRID
-                                            AND a.AssignedTo = @EmpNo
-                                            AND a.Active = 1
-                                    )",
-                        _ => @"AND (
-                            cr.RequesterUserName = @EmpNo
-                            OR EXISTS (
-                                SELECT 1
-                                FROM [CRManagementDB].[dbo].[Approval] a
-                                WHERE a.CRID = cr.CRID
-                                    AND a.AssignedTo = @EmpNo
-                                    AND a.Active = 1
-                            )
-                        )"
-                    };
 
-                var sql = $@"
+                // Drafts (CRNumber still 'Waiting...') were never really submitted/assigned,
+                // so exclude them from the assignment-based check.
+                "assignedToMe" => @"AND cr.CRNumber NOT LIKE 'Waiting%'
+                                AND EXISTS (
+                                    SELECT 1
+                                    FROM [CRManagementDB].[dbo].[Approval] a
+                                    WHERE a.CRID = cr.CRID
+                                        AND a.AssignedTo = @EmpNo
+                                        AND a.Active = 1
+                                )",
+
+                // "All": creator still sees their own drafts, but the assignment branch
+                // excludes drafts so they don't leak into other people's assigned lists.
+                _ => @"AND (
+                    cr.RequesterUserName = @EmpNo
+                    OR (
+                        cr.CRNumber NOT LIKE 'Waiting%'
+                        AND EXISTS (
+                            SELECT 1
+                            FROM [CRManagementDB].[dbo].[Approval] a
+                            WHERE a.CRID = cr.CRID
+                                AND a.AssignedTo = @EmpNo
+                                AND a.Active = 1
+                        )
+                    )
+                )"
+            };
+
+            var sql = $@"
                 SELECT
                     cr.CRID,
                     cr.CRNumber,
