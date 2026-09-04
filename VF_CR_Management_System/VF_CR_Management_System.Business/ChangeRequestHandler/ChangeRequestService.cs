@@ -51,10 +51,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             // 1. Insert ChangeRequest, and get back the new identity Id in the same round-trip
             const string crSql = @"
                 INSERT INTO ChangeRequest
-                    (CRNumber, RequesterUserName, Summary, ChangeTypeID, PriorityID, ModuleID, 
+                    (CRNumber, RequesterUserName, Summary, ChangeTypeID, OtherType, PriorityID, ModuleID, 
                      RequestedDate, StatusID, Active)
                 VALUES
-                    (@CRNumber, @RequesterUserName, @Summary, @ChangeTypeID, @PriorityID, @ModuleID,
+                    (@CRNumber, @RequesterUserName, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @ModuleID,
                      @RequestedDate, @StatusID, @Active);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -63,6 +63,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             crParameters.Add("@RequesterUserName", empId);
             crParameters.Add("@Summary", summary);
             crParameters.Add("@ChangeTypeID", changeTypeId);
+            crParameters.Add("@OtherType", otherChangeType);
             crParameters.Add("@PriorityID", priorityId);
             crParameters.Add("@ModuleID", moduleId);
             crParameters.Add("@RequestedDate", DateTime.Now);
