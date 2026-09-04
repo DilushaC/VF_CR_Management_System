@@ -78,8 +78,9 @@
                             {
                                 var isDraft = cr.CRNumber != null &&
                                 cr.CRNumber.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase);
+                                var displayCrNumber = isDraft ? "WAITING" : cr.CRNumber;
                                 <tr>
-                                    <td title="@cr.CRNumber">@(isDraft ? "WAITING" : cr.CRNumber)</td>
+                                    <td title="@cr.CRNumber">@displayCrNumber</td>
                                     <td>@cr.ChangeType</td>
                                     <td>
                                         @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
@@ -97,10 +98,23 @@
                                     <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                     <td>
                                         <div class="d-flex gap-1">
-                                            <a asp-action="Edit" asp-route-id="@cr.CRID"
-                                               class="btn btn-sm btn-info" title="Edit">
+                                            <!-- Eye button now opens the details modal instead of navigating to Edit -->
+                                            <button type="button"
+                                                    class="btn btn-sm btn-info btn-view"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#crDetailsModal"
+                                                    data-bs-crid="@cr.CRID"
+                                                    data-bs-crnumber="@displayCrNumber"
+                                                    data-bs-summary="@cr.Summary"
+                                                    data-bs-changetype="@cr.ChangeType"
+                                                    data-bs-priority="@cr.Priority"
+                                                    data-bs-module="@cr.Module"
+                                                    data-bs-status="@cr.Status"
+                                                    data-bs-requestedby="@cr.RequestedBy"
+                                                    data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                    title="View">
                                                 <i class="ri-eye-line"></i>
-                                            </a>
+                                            </button>
                                             <button type="button"
                                                     class="btn btn-sm btn-success btn-approve"
                                                     data-id="@cr.CRID"
@@ -124,6 +138,58 @@
         </div> <!-- end card -->
     </div><!-- end col-->
 </div> <!-- end row-->
+<!-- CR Details Modal (read-only view, populated via event.relatedTarget) -->
+<div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="crDetailsModalLabel">Change Request Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">CR Number:</label>
+                        <input type="text" class="form-control" id="modal-crnumber" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">Status:</label>
+                        <input type="text" class="form-control" id="modal-status" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">Change Type:</label>
+                        <input type="text" class="form-control" id="modal-changetype" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">Priority:</label>
+                        <input type="text" class="form-control" id="modal-priority" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">Module:</label>
+                        <input type="text" class="form-control" id="modal-module" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">Requested By:</label>
+                        <input type="text" class="form-control" id="modal-requestedby" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">Requested Date:</label>
+                        <input type="text" class="form-control" id="modal-requesteddate" readonly>
+                    </div>
+                    <div class="col-12">
+                        <label class="col-form-label fw-semibold">Summary &amp; Business Justification:</label>
+                        <textarea class="form-control" id="modal-summary" rows="4" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" id="modal-edit-link" class="btn btn-primary">Open Full Edit</a>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
     <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
@@ -180,6 +246,35 @@
                     });
                 }
             });
+        });
+
+        // Populate the CR Details modal from the button that triggered it
+        // (event.relatedTarget), same pattern as the Bootstrap "varied modal" example.
+        var crDetailsModal = document.getElementById('crDetailsModal');
+        crDetailsModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+
+            var crid = button.getAttribute('data-bs-crid');
+            var crnumber = button.getAttribute('data-bs-crnumber');
+            var summary = button.getAttribute('data-bs-summary');
+            var changetype = button.getAttribute('data-bs-changetype');
+            var priority = button.getAttribute('data-bs-priority');
+            var module = button.getAttribute('data-bs-module');
+            var status = button.getAttribute('data-bs-status');
+            var requestedby = button.getAttribute('data-bs-requestedby');
+            var requesteddate = button.getAttribute('data-bs-requesteddate');
+
+            crDetailsModal.querySelector('#modal-crnumber').value = crnumber || '';
+            crDetailsModal.querySelector('#modal-status').value = status || '';
+            crDetailsModal.querySelector('#modal-changetype').value = changetype || '';
+            crDetailsModal.querySelector('#modal-priority').value = priority || '';
+            crDetailsModal.querySelector('#modal-module').value = module || '';
+            crDetailsModal.querySelector('#modal-requestedby').value = requestedby || '';
+            crDetailsModal.querySelector('#modal-requesteddate').value = requesteddate || '';
+            crDetailsModal.querySelector('#modal-summary').value = summary || '';
+
+            var editLink = crDetailsModal.querySelector('#modal-edit-link');
+            editLink.setAttribute('href', '@Url.Action("Edit", "CRManagement")' + '/' + crid);
         });
     </script>
 }
