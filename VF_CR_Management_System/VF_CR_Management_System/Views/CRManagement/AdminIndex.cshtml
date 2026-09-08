@@ -58,10 +58,10 @@
                             }
 
                     /* Fix: when SweetAlert2 is targeted at a Bootstrap modal to avoid its
-                                           focus-trap (Bootstrap otherwise yanks focus back to the modal on
-                                           every keystroke, making the reject textarea untypeable), force the
-                                           swal container back to a normal fixed, full-screen overlay instead
-                                           of being confined/clipped by the modal's box. */
+                                                               focus-trap (Bootstrap otherwise yanks focus back to the modal on
+                                                               every keystroke, making the reject textarea untypeable), force the
+                                                               swal container back to a normal fixed, full-screen overlay instead
+                                                               of being confined/clipped by the modal's box. */
                     #crDetailsModal .swal2-container {
                         position: fixed !important;
                         z-index: 1080 !important; /* above Bootstrap modal (1055) and its backdrop (1050) */
@@ -219,8 +219,6 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" id="modal-approve-btn" class="btn btn-success" data-action="approve">Approve</button>
                 <button type="button" id="modal-reject-btn" class="btn btn-danger" data-action="reject">Reject</button>
-                <!-- Shown only when the CR's Status is "Approved" -->
-                <button type="button" id="modal-proceed-btn" class="btn btn-primary d-none">Proceed to Assessment</button>
             </div>
         </div>
     </div>
@@ -269,36 +267,26 @@
         var crDetailsModal = document.getElementById('crDetailsModal');
         var $approveBtn = $('#modal-approve-btn');
         var $rejectBtn = $('#modal-reject-btn');
-        var $proceedBtn = $('#modal-proceed-btn');
 
         // Toggle the footer buttons between Approve/Reject and Submit/Delete
         // depending on whether the CR Number being shown is "WAITING".
-        // If the CR is already Approved, show only "Proceed to Assessment" (+ Close).
-        // If it's Rejected, hide all action buttons — only Close remains.
+        // If the CR is already Approved or Rejected, hide both action buttons
+        // entirely — only the Close button should remain.
         function updateCrModalButtons(crnumber, status) {
-            var normalizedStatus = (status || '').trim().toUpperCase();
-            var isApproved = normalizedStatus === 'APPROVED';
-            var isRejected = normalizedStatus === 'REJECTED';
+            var isFinal = status && (
+                status.trim().toUpperCase() === 'APPROVED' ||
+                status.trim().toUpperCase() === 'REJECTED'
+            );
 
-            // Reset all three buttons to hidden first, then reveal what's relevant
-            $approveBtn.addClass('d-none');
-            $rejectBtn.addClass('d-none');
-            $proceedBtn.addClass('d-none');
-            $('#modal-approver-wrapper').addClass('d-none');
-            $('#modal-approver-error').addClass('d-none');
-
-            if (isApproved) {
-                // Approved CRs move forward to assessment; no more approve/reject needed.
-                $proceedBtn.removeClass('d-none');
+            if (isFinal) {
+                $approveBtn.addClass('d-none');
+                $rejectBtn.addClass('d-none');
+                $('#modal-approver-wrapper').addClass('d-none');
+                $('#modal-approver-error').addClass('d-none');
                 return;
             }
 
-            if (isRejected) {
-                // Rejected CRs are final — only Close remains.
-                return;
-            }
-
-            // Not a final state — show Approve/Reject (or Submit/Delete for drafts)
+            // Not a final state — show the buttons again and set their mode
             $approveBtn.removeClass('d-none');
             $rejectBtn.removeClass('d-none');
 
@@ -344,15 +332,15 @@
             crDetailsModal.querySelector('#modal-summary').value = summary || '';
 
             // Track which CR this modal instance is currently showing, so the
-            // footer buttons below know which CRID to act on.
+            // footer buttons below know which CRID to submit.
             $(crDetailsModal).data('crid', crid);
 
             // Reset the approver dropdown for each new CR opened
             $('#modal-approver').val('').trigger('change');
             $('#modal-approver-error').addClass('d-none');
 
-            // Swap Approve/Reject <-> Submit/Delete <-> Proceed-to-Assessment
-            // based on the CR Number and current status.
+            // Swap Approve/Reject <-> Submit/Delete based on the CR Number shown,
+            // or hide both if the CR is already Approved/Rejected.
             updateCrModalButtons(crnumber, status);
 
             var editLink = crDetailsModal.querySelector('#modal-edit-link');
@@ -367,13 +355,6 @@
             $('#modal-approver').select2({
                 dropdownParent: $(crDetailsModal)
             });
-        });
-
-        // "Proceed to Assessment" — only visible for Approved CRs.
-        // Adjust the target action/URL to wherever your assessment workflow lives.
-        $proceedBtn.on('click', function () {
-            var crid = $(crDetailsModal).data('crid');
-            window.location.href = '@Url.Action("Assessment", "CRManagement")' + '?id=' + crid;
         });
 
         // Single click handler for the left footer button; branches on data-action
