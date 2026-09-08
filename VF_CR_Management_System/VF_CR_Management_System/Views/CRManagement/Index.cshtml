@@ -68,7 +68,7 @@
                             <th>Status</th>
                             <th>Requested By</th>
                             <th>Requested Date</th>
-                            <th>Action</th>
+                            <th>View</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -93,7 +93,16 @@
                                         }
                                     </td>
                                     <td>@cr.Module</td>
-                                    <td>@cr.Status</td>
+                                    <td>
+                                        @if (string.Equals(cr.Status, "Draft", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span class="badge bg-warning">@cr.Status</span>
+                                        }
+                                        else
+                                        {
+                                            @cr.Status
+                                        }
+                                    </td>
                                     <td>@cr.RequestedBy</td>
                                     <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                     <td>
@@ -114,12 +123,6 @@
                                                     data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
                                                     title="View">
                                                 <i class="ri-eye-line"></i>
-                                            </button>
-                                            <button type="button"
-                                                    class="btn btn-sm btn-danger btn-reject"
-                                                    data-id="@cr.CRID"
-                                                    title="Reject">
-                                                <i class="ri-close-circle-fill"></i>
                                             </button>
                                         </div>
                                     </td>
@@ -178,7 +181,7 @@
                         <label class="col-form-label fw-semibold">Summary &amp; Business Justification:</label>
                         <textarea class="form-control" id="modal-summary" rows="4" readonly></textarea>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6" id="modal-approver-wrapper">
                         <div class="card-body">
                             <label class="form-label" for="modal-approver">Select Implementer</label>
                             <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
@@ -191,7 +194,7 @@
                                     }
                                 }
                             </select>
-                            <span id="modal-approver-error" class="text-danger d-none">Please select an approver.</span>
+                            <span id="modal-approver-error" class="text-danger d-none">Please select an user.</span>
                         </div>
                     </div>
                 </div>
@@ -200,8 +203,8 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" id="modal-approve-btn" class="btn btn-success">Approve</button>
-                <button type="button" id="modal-approve-btn" class="btn btn-danger">Reject</button>
+                <button type="button" id="modal-approve-btn" class="btn btn-success" data-action="approve">Approve</button>
+                <button type="button" id="modal-reject-btn" class="btn btn-danger" data-action="reject">Reject</button>
             </div>
         </div>
     </div>
@@ -248,6 +251,29 @@
         // Populate the CR Details modal from the button that triggered it
         // (event.relatedTarget), same pattern as the Bootstrap "varied modal" example.
         var crDetailsModal = document.getElementById('crDetailsModal');
+        var $approveBtn = $('#modal-approve-btn');
+        var $rejectBtn = $('#modal-reject-btn');
+
+        // Toggle the footer buttons between Approve/Reject and Submit/Delete
+        // depending on whether the CR Number being shown is "WAITING".
+        function updateCrModalButtons(crnumber) {
+            var isWaiting = (crnumber || '').trim().toUpperCase() === 'WAITING';
+
+            if (isWaiting) {
+                $approveBtn.text('Submit').removeClass('btn-success').addClass('btn-primary').data('action', 'submit');
+                $rejectBtn.text('Delete').data('action', 'delete');
+
+                // A CR that hasn't been submitted yet doesn't need an implementer picked.
+                $('#modal-approver-wrapper').addClass('d-none');
+                $('#modal-approver-error').addClass('d-none');
+            } else {
+                $approveBtn.text('Approve').removeClass('btn-primary').addClass('btn-success').data('action', 'approve');
+                $rejectBtn.text('Reject').data('action', 'reject');
+
+                $('#modal-approver-wrapper').removeClass('d-none');
+            }
+        }
+
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
 
@@ -271,15 +297,20 @@
             crDetailsModal.querySelector('#modal-summary').value = summary || '';
 
             // Track which CR this modal instance is currently showing, so the
-            // Approve button below knows which CRID to submit.
+            // footer buttons below know which CRID to submit.
             $(crDetailsModal).data('crid', crid);
 
             // Reset the approver dropdown for each new CR opened
             $('#modal-approver').val('').trigger('change');
             $('#modal-approver-error').addClass('d-none');
 
+            // Swap Approve/Reject <-> Submit/Delete based on the CR Number shown
+            updateCrModalButtons(crnumber);
+
             var editLink = crDetailsModal.querySelector('#modal-edit-link');
-            editLink.setAttribute('href', '@Url.Action("Edit", "CRManagement")' + '/' + crid);
+            if (editLink) {
+                editLink.setAttribute('href', '@Url.Action("Edit", "CRManagement")' + '/' + crid);
+            }
         });
 
         // select2 needs to be (re)initialized after the modal is in the DOM/visible,
@@ -290,8 +321,45 @@
             });
         });
 
-        $('#modal-approve-btn').on('click', function () {
+        // Single click handler for the left footer button; branches on data-action
+        // so it works as either "Approve" or "Submit" depending on the CR state.
+        $approveBtn.on('click', function () {
+            var action = $(this).data('action');
             var crid = $(crDetailsModal).data('crid');
+
+            if (action === 'submit') {
+                Swal.fire({
+                    title: 'Submit this Change Request?',
+                    text: 'This will send the draft CR forward for processing.',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, submit it',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#0d6efd',
+                    cancelButtonColor: '#6c757d'
+                }).then(function (result) {
+                    if (!result.isConfirmed) return;
+
+                    $.ajax({
+                        url: '@Url.Action("Submit", "CRManagement")',
+                        type: 'POST',
+                        data: { id: crid },
+                        headers: {
+                            "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        success: function () {
+                            Swal.fire('Submitted!', 'The Change Request has been submitted.', 'success')
+                                .then(function () { location.reload(); });
+                        },
+                        error: function () {
+                            Swal.fire('Error', 'Failed to submit the CR. Please try again.', 'error');
+                        }
+                    });
+                });
+                return;
+            }
+
+            // Default: Approve flow (requires an implementer to be selected)
             var approverId = $('#modal-approver').val();
 
             if (!approverId) {
@@ -300,23 +368,109 @@
             }
             $('#modal-approver-error').addClass('d-none');
 
-            if (!confirm('Are you sure you want to approve this Change Request?')) {
+            Swal.fire({
+                title: 'Approve this Change Request?',
+                text: 'This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, approve it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#0acf97',
+                cancelButtonColor: '#6c757d'
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: '@Url.Action("Approve", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid, ApproverID: approverId },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire('Approved!', 'The Change Request has been approved.', 'success')
+                            .then(function () { location.reload(); });
+                    },
+                    error: function () {
+                        Swal.fire('Error', 'Failed to approve the CR. Please try again.', 'error');
+                    }
+                });
+            });
+        });
+
+        // Single click handler for the right footer button; branches on data-action
+        // so it works as either "Reject" or "Delete" depending on the CR state.
+        $rejectBtn.on('click', function () {
+            var action = $(this).data('action');
+            var crid = $(crDetailsModal).data('crid');
+
+            if (action === 'delete') {
+                Swal.fire({
+                    title: 'Delete this Change Request?',
+                    text: 'This will permanently remove the draft CR. This action cannot be undone.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, delete it',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#fa5c7c',
+                    cancelButtonColor: '#6c757d'
+                }).then(function (result) {
+                    if (!result.isConfirmed) return;
+
+                    $.ajax({
+                        url: '@Url.Action("Delete", "CRManagement")',
+                        type: 'POST',
+                        data: { id: crid },
+                        headers: {
+                            "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        success: function () {
+                            Swal.fire('Deleted', 'The Change Request has been deleted.', 'success')
+                                .then(function () { location.reload(); });
+                        },
+                        error: function () {
+                            Swal.fire('Error', 'Failed to delete the CR. Please try again.', 'error');
+                        }
+                    });
+                });
                 return;
             }
 
-            $.ajax({
-                url: '@Url.Action("Approve", "CRManagement")',
-                type: 'POST',
-                data: { id: crid, ApproverID: approverId },
-                headers: {
-                    "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                },
-                success: function () {
-                    location.reload();
-                },
-                error: function () {
-                    alert('Failed to approve the CR. Please try again.');
+            // Default: Reject flow (asks for a reason)
+            Swal.fire({
+                title: 'Reject this Change Request?',
+                input: 'textarea',
+                inputPlaceholder: 'Enter reason for rejection...',
+                inputAttributes: { 'aria-label': 'Rejection reason' },
+                showCancelButton: true,
+                confirmButtonText: 'Yes, reject it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#fa5c7c',
+                cancelButtonColor: '#6c757d',
+                inputValidator: function (value) {
+                    if (!value || !value.trim()) {
+                        return 'Please provide a reason for rejection.';
+                    }
                 }
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+                var reason = result.value;
+
+                $.ajax({
+                    url: '@Url.Action("Reject", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid, RejectReason: reason },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire('Rejected', 'The Change Request has been rejected.', 'success')
+                            .then(function () { location.reload(); });
+                    },
+                    error: function () {
+                        Swal.fire('Error', 'Failed to reject the CR. Please try again.', 'error');
+                    }
+                });
             });
         });
     </script>
