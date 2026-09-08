@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using VF_CR_Management_System.Business.ConnectionHandler;
 using VF_CR_Management_System.Data.Models;
@@ -118,6 +119,153 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
 
             return approvalRowsAffected > 0;
+        }
+
+        // GET a single Change Request by its CRID, joined with lookup tables so it comes back
+        // with the same display-friendly shape used by GetAllChangeRequestsAsync (and the
+        // form-friendly *ID columns the Edit form needs to pre-select dropdowns).
+        public async Task<ChangeRequest> GetChangeRequestByIdAsync(int crId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            const string sql = @"
+                SELECT
+                    cr.CRID,
+                    cr.CRNumber,
+                    cr.Summary,
+                    cr.ChangeTypeID,
+                    ct.ChangeTypeName AS ChangeType,
+                    cr.OtherType,
+                    cr.PriorityID,
+                    p.PriorityName    AS Priority,
+                    cr.ModuleID,
+                    m.ModuleName      AS Module,
+                    cr.StatusID,
+                    s.StatusName      AS Status,
+                    cr.RequesterUserName AS RequestedBy,
+                    cr.RequestedDate
+                FROM [CRManagementDB].[dbo].[ChangeRequest] cr
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority]   p  ON p.PriorityID   = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID    = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID    = cr.StatusID
+                WHERE cr.Active = 1
+                  AND cr.CRID = @CRID";
+
+            var result = _connectionService.Query<ChangeRequest>(sql, new { CRID = crId });
+            return result.FirstOrDefault();
+        }
+
+        // Updates an existing draft Change Request in place. Only drafts (CRNumber still
+        // "Waiting-...") can be edited this way — once a CR has been submitted/approved/
+        // rejected it should go through Submit/Approve/Reject instead, not a raw field edit.
+        public async Task<bool> UpdateChangeRequestAsync(int crId, IFormCollection collection, string userName, string empId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            if (!int.TryParse(collection["ChangeTypeID"], out var changeTypeId))
+            {
+                throw new ArgumentException("Please select a change type.");
+            }
+            if (!int.TryParse(collection["PriorityID"], out var priorityId))
+            {
+                throw new ArgumentException("Please select a change priority.");
+            }
+            var summary = collection["Summary"].ToString();
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                throw new ArgumentException("Please provide a change summary and business justification.");
+            }
+            var otherChangeType = collection["OtherChangeType"].ToString();
+            if (changeTypeId == 5 && string.IsNullOrWhiteSpace(otherChangeType))
+            {
+                throw new ArgumentException("Please specify the change type.");
+            }
+            if (!int.TryParse(collection["ModuleID"], out var moduleId))
+            {
+                throw new ArgumentException("Please select a Module.");
+            }
+            if (!int.TryParse(collection["ApproverID"], out var approverId))
+            {
+                throw new ArgumentException("Please select a Approver.");
+            }
+            // StatusID isn't taken from the form here — editing a draft keeps it a draft
+            // (StatusID 1). Use Submit to move it out of draft state.
+            const int draftStatusId = 1;
+
+            const string updateCrSql = @"
+                UPDATE ChangeRequest
+                SET Summary      = @Summary,
+                    ChangeTypeID = @ChangeTypeID,
+                    OtherType    = @OtherType,
+                    PriorityID   = @PriorityID,
+                    ModuleID     = @ModuleID,
+                    StatusID     = @StatusID
+                WHERE CRID = @CRID
+                  AND Active = 1
+                  AND CRNumber LIKE 'Waiting-%'";
+
+            var crParameters = new DynamicParameters();
+            crParameters.Add("@Summary", summary);
+            crParameters.Add("@ChangeTypeID", changeTypeId);
+            crParameters.Add("@OtherType", otherChangeType);
+            crParameters.Add("@PriorityID", priorityId);
+            crParameters.Add("@ModuleID", moduleId);
+            crParameters.Add("@StatusID", draftStatusId);
+            crParameters.Add("@CRID", crId);
+
+            int crRowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
+
+            // 0 rows means the CR wasn't found, wasn't Active, or isn't a draft anymore —
+            // nothing to update, so bail out without touching the Approval table.
+            if (crRowsAffected <= 0)
+                return false;
+
+            // Keep the assigned implementer (StepID 7) in sync with whatever was picked
+            // in the Edit form, updating the existing row if one exists, or inserting a
+            // fresh one if this draft somehow doesn't have one yet.
+            const int assignStepId = 7;
+
+            const string updateApprovalSql = @"
+                UPDATE Approval
+                SET AssignedBy   = @AssignedBy,
+                    AssignedTo   = @AssignedTo,
+                    AssignedDate = @AssignedDate
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1";
+
+            var approvalParameters = new DynamicParameters();
+            approvalParameters.Add("@AssignedBy", empId);
+            approvalParameters.Add("@AssignedTo", approverId);
+            approvalParameters.Add("@AssignedDate", DateTime.Now);
+            approvalParameters.Add("@CRID", crId);
+            approvalParameters.Add("@StepID", assignStepId);
+
+            int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, approvalParameters);
+
+            if (approvalRowsAffected <= 0)
+            {
+                const string insertApprovalSql = @"
+                    INSERT INTO Approval
+                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                    VALUES
+                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+                var insertParameters = new DynamicParameters();
+                insertParameters.Add("@CRID", crId);
+                insertParameters.Add("@StepID", assignStepId);
+                insertParameters.Add("@AssignedBy", empId);
+                insertParameters.Add("@AssignedTo", approverId);
+                insertParameters.Add("@AssignedDate", DateTime.Now);
+                insertParameters.Add("@Active", true);
+
+                _connectionService.ExecuteWithPara(insertApprovalSql, insertParameters);
+            }
+
+            return true;
         }
 
         private static bool IsDuplicateCrNumberError(Exception ex)

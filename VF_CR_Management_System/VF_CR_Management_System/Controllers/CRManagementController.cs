@@ -14,7 +14,7 @@ namespace VF_CR_Management_System.Controllers
         private readonly IUserService _userService;
         private readonly IModuleService _moduleService;
 
-        public CRManagementController(IChangeRequestService changeRequestService,IUserService userService, IModuleService moduleService)
+        public CRManagementController(IChangeRequestService changeRequestService, IUserService userService, IModuleService moduleService)
         {
             _changeRequestService = changeRequestService;
             _userService = userService;
@@ -63,6 +63,83 @@ namespace VF_CR_Management_System.Controllers
             catch (Exception ex)
             {
                 // Return error response
+                return Json(new
+                {
+                    success = false,
+                    message = $"Error: {ex.Message}"
+                });
+            }
+        }
+
+        // GET: /CRManagement/Edit/5
+        // Renders the same form/view as Create, but with the CRID passed through so the
+        // page's own script can fetch the CR's values (see GetChangeRequestData below) and
+        // populate the Change Type dropdown, Priority radios, Module dropdown, and Approver
+        // select2 client-side. No server-side model binding for those fields is needed here.
+        [HttpGet]
+        public async Task<IActionResult> Edit(int id)
+        {
+            var users = await _userService.GetAllUsersAsync();
+            ViewBag.Users = users;
+
+            var modules = await _moduleService.GetAllModulesAsync();
+            ViewBag.Modules = modules;
+
+            ViewBag.CRID = id;
+
+            // Reuses the Create view (no model passed — the view reads ViewBag.CRID and
+            // fetches the rest via AJAX).
+            return View("Create");
+        }
+
+        // GET: /CRManagement/GetChangeRequestData/5
+        // Returns the raw ID fields (ChangeTypeID, PriorityID, ModuleID, plus the assigned
+        // Approver and Summary/OtherType) for a single CR as JSON, so the Edit form's script
+        // can pre-select the dropdowns/radios/select2 without a full server round-trip render.
+        [HttpGet]
+        public async Task<IActionResult> GetChangeRequestData(int id)
+        {
+            var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id);
+            if (changeRequest == null)
+            {
+                return NotFound();
+            }
+
+            return Json(changeRequest);
+        }
+
+        // POST: /CRManagement/Edit/5
+        // Saves changes to an existing draft CR. Mirrors Create's collection-based approach
+        // so it works with the same form fields/partials.
+        [HttpPost]
+        public async Task<IActionResult> Edit(int id, IFormCollection collection)
+        {
+            try
+            {
+                var userName = HttpContext.Session.GetString("UserName");
+                var empNo = HttpContext.Session.GetString("EmpNo");
+
+                bool updated = await _changeRequestService.UpdateChangeRequestAsync(id, collection, userName, empNo);
+                if (updated)
+                {
+                    return Json(new
+                    {
+                        success = true,
+                        message = "Change Request updated successfully",
+                        redirectUrl = Url.Action("Index", "CRManagement")
+                    });
+                }
+                else
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Failed to update Change Request"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
                 return Json(new
                 {
                     success = false,

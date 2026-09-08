@@ -217,6 +217,8 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <!-- Edit link — only shown for draft ("WAITING") CRs; href is set on show.bs.modal -->
+                <a href="#" id="modal-edit-link" class="btn btn-outline-primary d-none">Edit</a>
                 <button type="button" id="modal-approve-btn" class="btn btn-success" data-action="approve">Approve</button>
                 <button type="button" id="modal-reject-btn" class="btn btn-danger" data-action="reject">Reject</button>
                 <!-- Shown only when the CR's Status is "Approved" -->
@@ -270,8 +272,9 @@
         var $approveBtn = $('#modal-approve-btn');
         var $rejectBtn = $('#modal-reject-btn');
         var $proceedBtn = $('#modal-proceed-btn');
+        var $editBtn = $('#modal-edit-link');
 
-        // Toggle the footer buttons between Approve/Reject and Submit/Delete
+        // Toggle the footer buttons between Approve/Reject and Submit/Edit/Delete
         // depending on whether the CR Number being shown is "WAITING".
         // If the CR is already Approved, show only "Proceed to Assessment" (+ Close).
         // If it's Rejected, hide all action buttons — only Close remains.
@@ -280,10 +283,11 @@
             var isApproved = normalizedStatus === 'APPROVED';
             var isRejected = normalizedStatus === 'REJECTED';
 
-            // Reset all three buttons to hidden first, then reveal what's relevant
+            // Reset all buttons to hidden first, then reveal what's relevant
             $approveBtn.addClass('d-none');
             $rejectBtn.addClass('d-none');
             $proceedBtn.addClass('d-none');
+            $editBtn.addClass('d-none');
             $('#modal-approver-wrapper').addClass('d-none');
             $('#modal-approver-error').addClass('d-none');
 
@@ -298,7 +302,7 @@
                 return;
             }
 
-            // Not a final state — show Approve/Reject (or Submit/Delete for drafts)
+            // Not a final state — show Approve/Reject (or Submit/Edit/Delete for drafts)
             $approveBtn.removeClass('d-none');
             $rejectBtn.removeClass('d-none');
 
@@ -307,6 +311,7 @@
             if (isWaiting) {
                 $approveBtn.text('Submit').removeClass('btn-success').addClass('btn-primary').data('action', 'submit');
                 $rejectBtn.text('Delete').data('action', 'delete');
+                $editBtn.removeClass('d-none');
 
                 // A CR that hasn't been submitted yet doesn't need an implementer picked.
                 $('#modal-approver-wrapper').addClass('d-none');
@@ -351,7 +356,7 @@
             $('#modal-approver').val('').trigger('change');
             $('#modal-approver-error').addClass('d-none');
 
-            // Swap Approve/Reject <-> Submit/Delete <-> Proceed-to-Assessment
+            // Swap Approve/Reject <-> Submit/Edit/Delete <-> Proceed-to-Assessment
             // based on the CR Number and current status.
             updateCrModalButtons(crnumber, status);
 

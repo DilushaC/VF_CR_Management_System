@@ -4,6 +4,10 @@
     ViewData["Title"] = "Create CR";
     var users = ViewBag.Users as List<UserModel>;
     var modules = ViewBag.Modules as List<Module>;
+    int crId = ViewBag.CRID != null ? (int)ViewBag.CRID : 0;
+    var formAction = crId > 0
+        ? Url.Action("Edit", "CRManagement", new { id = crId })
+        : Url.Action("Create", "CRManagement");
 }
 @{
     var username = Context.Session.GetString("UserName");
@@ -20,11 +24,14 @@
             </div>
 
             <div class="card-body">
-                <form id="crForm" asp-controller="CRManagement" asp-action="Create" method="post">
+                <form id="crForm" action="@formAction" method="post">
                     @Html.AntiForgeryToken()
 
                     <!-- Holds 1 (Save) or 2 (Submit & Approve), set by JS right before submission -->
                     <input type="hidden" id="StatusID" name="StatusID" value="">
+                    <!-- Present only when editing an existing draft; used client-side to know
+                         whether to fetch/populate the form via AJAX -->
+                    <input type="hidden" id="CRID" name="CRID" value="@crId">
 
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
@@ -195,6 +202,7 @@
             var saveBtn = document.getElementById('btn-save');
             var submitBtn = document.getElementById('btn-submit');
             var statusInput = document.getElementById('StatusID');
+            var crId = parseInt(document.getElementById('CRID').value, 10) || 0;
 
             // SAVE button — StatusID = 1 (draft)
             saveBtn.addEventListener('click', function () {
@@ -241,7 +249,76 @@
                     }
                 });
             });
+
+            // Editing an existing draft — fetch its values and populate the radios/selects.
+            // select2 is initialized elsewhere (theme's global script); we just need to make
+            // sure it's ready before calling .trigger('change') on the selects below, so we
+            // do the fetch on DOMContentLoaded but apply select2 values defensively with a
+            // fallback plain .val()+trigger in case select2 initializes slightly later.
+            if (crId > 0) {
+                fetch('@Url.Action("GetChangeRequestData", "CRManagement")' + '?id=' + crId)
+                    .then(function (response) {
+                        if (!response.ok) { throw new Error('Failed to load Change Request.'); }
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        populateFormFromData(data);
+                    })
+                    .catch(function (err) {
+                        Swal.fire({
+                            title: 'Could not load Change Request',
+                            text: err.message,
+                            icon: 'error',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                    });
+            }
         });
+
+        // Populates the form from the JSON returned by GetChangeRequestData.
+        // Property names come back camelCased by ASP.NET Core's default JSON serializer
+        // (changeTypeID, otherType, priorityID, moduleID, summary) — adjust here if your
+        // controller action's JSON casing differs.
+        function populateFormFromData(data) {
+            // Summary
+            if (data.summary) {
+                document.getElementById('Summary').value = data.summary;
+            }
+
+            // Change Type radio
+            if (data.changeTypeID) {
+                var typeRadio = document.querySelector('input[name="ChangeTypeID"][value="' + data.changeTypeID + '"]');
+                if (typeRadio) {
+                    typeRadio.checked = true;
+                    toggleOtherTextarea();
+                }
+            }
+            if (data.otherType) {
+                document.getElementById('otherTextarea').value = data.otherType;
+            }
+
+            // Priority radio
+            if (data.priorityID) {
+                var priorityRadio = document.querySelector('input[name="PriorityID"][value="' + data.priorityID + '"]');
+                if (priorityRadio) {
+                    priorityRadio.checked = true;
+                }
+            }
+
+            // Module select2
+            if (data.moduleID) {
+                $('#ModuleID').val(String(data.moduleID)).trigger('change');
+            }
+
+            // Approver select2 — ApproverID options are keyed by UserName, not a numeric id,
+            // so this expects the endpoint to return the approver's UserName (e.g. as
+            // data.approverUserName). Adjust the property name to whatever your
+            // GetChangeRequestByIdAsync/GetChangeRequestData actually returns for this.
+            if (data.approverUserName) {
+                $('#ApproverID').val(data.approverUserName).trigger('change');
+            }
+        }
 
         function submitChangeRequest() {
             var form = document.getElementById('crForm');
