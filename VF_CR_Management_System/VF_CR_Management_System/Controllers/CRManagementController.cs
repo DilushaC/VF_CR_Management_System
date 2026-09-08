@@ -118,7 +118,6 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpPost]
-        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id)
         {
             try
