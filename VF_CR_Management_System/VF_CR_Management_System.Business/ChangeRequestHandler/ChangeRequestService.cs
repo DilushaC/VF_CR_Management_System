@@ -300,6 +300,46 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
         }
 
+        public async Task<bool> SubmitChangeRequestAsync(int crId, string submittedByEmpId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            const int submittedStatusId = 2;
+            const int maxAttempts = 5;
+
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                var newCrNumber = GenerateNextCrNumber();
+
+                const string updateSql = @"
+                UPDATE ChangeRequest
+                SET CRNumber = @CRNumber,
+                    StatusID = @StatusID
+                WHERE CRID = @CRID
+                  AND CRNumber LIKE 'Waiting-%'";
+
+                var parameters = new DynamicParameters();
+                parameters.Add("@CRNumber", newCrNumber);
+                parameters.Add("@StatusID", submittedStatusId);
+                parameters.Add("@CRID", crId);
+
+                try
+                {
+                    int rowsAffected = _connectionService.ExecuteWithPara(updateSql, parameters);
+                    // rowsAffected == 0 means the CR wasn't found or wasn't in "Waiting-" state anymore
+                    return rowsAffected > 0;
+                }
+                catch (Exception ex) when (attempt < maxAttempts && IsDuplicateCrNumberError(ex))
+                {
+                    // Collision on the generated number — regenerate and retry.
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
         public async Task<bool> DeleteChangeRequestAsync(int crId, string requestedByEmpId)
         {
             if (crId <= 0)

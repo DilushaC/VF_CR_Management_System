@@ -118,6 +118,25 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpPost]
+        public async Task<IActionResult> Submit(int id)
+        {
+            try
+            {
+                var empId = User?.Identity?.Name ?? string.Empty;
+                var success = await _changeRequestService.SubmitChangeRequestAsync(id, empId);
+
+                if (!success)
+                    return BadRequest(new { message = "Failed to submit the Change Request." });
+
+                return Ok(new { message = "Change Request submitted." });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred while submitting the CR." });
+            }
+        }
+
+        [HttpPost]
         public async Task<IActionResult> Delete(int id)
         {
             try

@@ -112,6 +112,10 @@
                                         {
                                             <span class="badge bg-danger"><i class="ri-close-line"></i> @cr.Status</span>
                                         }
+                                        else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span class="badge bg-success">@cr.Status</span>
+                                        }
                                         else
                                         {
                                             @cr.Status
@@ -266,7 +270,26 @@
 
         // Toggle the footer buttons between Approve/Reject and Submit/Delete
         // depending on whether the CR Number being shown is "WAITING".
-        function updateCrModalButtons(crnumber) {
+        // If the CR is already Approved or Rejected, hide both action buttons
+        // entirely — only the Close button should remain.
+        function updateCrModalButtons(crnumber, status) {
+            var isFinal = status && (
+                status.trim().toUpperCase() === 'APPROVED' ||
+                status.trim().toUpperCase() === 'REJECTED'
+            );
+
+            if (isFinal) {
+                $approveBtn.addClass('d-none');
+                $rejectBtn.addClass('d-none');
+                $('#modal-approver-wrapper').addClass('d-none');
+                $('#modal-approver-error').addClass('d-none');
+                return;
+            }
+
+            // Not a final state — show the buttons again and set their mode
+            $approveBtn.removeClass('d-none');
+            $rejectBtn.removeClass('d-none');
+
             var isWaiting = (crnumber || '').trim().toUpperCase() === 'WAITING';
 
             if (isWaiting) {
@@ -287,8 +310,7 @@
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
 
-            // Read all data attributes FIRST, then use them — reading crnumber
-            // before this line was the bug causing the CR Number to not show.
+            // Read all data attributes FIRST, then use them.
             var crid = button.getAttribute('data-bs-crid');
             var crnumber = button.getAttribute('data-bs-crnumber');
             var summary = button.getAttribute('data-bs-summary');
@@ -299,7 +321,7 @@
             var requestedby = button.getAttribute('data-bs-requestedby');
             var requesteddate = button.getAttribute('data-bs-requesteddate');
 
-            // #modal-crnumber is now a <span>, not an <input>, so use textContent (not .value)
+            // #modal-crnumber is a <span>, not an <input>, so use textContent (not .value)
             crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
             crDetailsModal.querySelector('#modal-status').value = status || '';
             crDetailsModal.querySelector('#modal-changetype').value = changetype || '';
@@ -317,8 +339,9 @@
             $('#modal-approver').val('').trigger('change');
             $('#modal-approver-error').addClass('d-none');
 
-            // Swap Approve/Reject <-> Submit/Delete based on the CR Number shown
-            updateCrModalButtons(crnumber);
+            // Swap Approve/Reject <-> Submit/Delete based on the CR Number shown,
+            // or hide both if the CR is already Approved/Rejected.
+            updateCrModalButtons(crnumber, status);
 
             var editLink = crDetailsModal.querySelector('#modal-edit-link');
             if (editLink) {
