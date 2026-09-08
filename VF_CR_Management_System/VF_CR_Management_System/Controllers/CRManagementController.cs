@@ -105,7 +105,21 @@ namespace VF_CR_Management_System.Controllers
                 return NotFound();
             }
 
-            return Json(changeRequest);
+            var approverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id);
+
+            // Shape matches populateFormFromData() in Create.cshtml exactly — field names
+            // are already camelCase here, so no ASP.NET Core JSON casing surprises.
+            return Json(new
+            {
+                crid = changeRequest.CRID,
+                summary = changeRequest.Summary,
+                changeTypeID = changeRequest.ChangeTypeID,
+                otherType = changeRequest.OtherChangeType,
+                priorityID = changeRequest.PriorityID,
+                moduleID = changeRequest.ModuleID,
+                statusID = changeRequest.StatusID,
+                approverUserName = approverUserName
+            });
         }
 
         // POST: /CRManagement/Edit/5

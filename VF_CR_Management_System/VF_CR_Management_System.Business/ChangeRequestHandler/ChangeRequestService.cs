@@ -157,6 +157,29 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return result.FirstOrDefault();
         }
 
+        // Returns the UserName of whoever is currently assigned as implementer (StepID 7,
+        // the "assign approver/implementer" step set at Create/Update time) for a CR, or
+        // null if none is assigned yet. Kept separate from GetChangeRequestByIdAsync since
+        // this lives in the Approval table, not ChangeRequest itself.
+        public async Task<string> GetAssignedApproverUserNameAsync(int crId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            const int assignStepId = 7;
+
+            const string sql = @"
+                SELECT TOP 1 AssignedTo
+                FROM [CRManagementDB].[dbo].[Approval]
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1
+                ORDER BY AssignedDate DESC";
+
+            var result = _connectionService.ExecuteScalar(sql, new { CRID = crId, StepID = assignStepId });
+            return result != null && result != DBNull.Value ? result.ToString() : null;
+        }
+
         // Updates an existing draft Change Request in place. Only drafts (CRNumber still
         // "Waiting-...") can be edited this way — once a CR has been submitted/approved/
         // rejected it should go through Submit/Approve/Reject instead, not a raw field edit.
