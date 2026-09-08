@@ -71,6 +71,72 @@ namespace VF_CR_Management_System.Controllers
             }
         }
 
+        [HttpPost]
+        public async Task<IActionResult> Approve(int id, int ApproverID)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty; // adjust to however you resolve the logged-in EmpId
+                var success = await _changeRequestService.ApproveChangeRequestAsync(id, ApproverID, empNo);
+
+                if (!success)
+                    return BadRequest(new { message = "Failed to approve the Change Request." });
+
+                return Ok(new { message = "Change Request approved successfully." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred while approving the CR." });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Reject(int id, string RejectReason)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.RejectChangeRequestAsync(id, RejectReason, empNo);
+
+                if (!success)
+                    return BadRequest(new { message = "Failed to reject the Change Request." });
+
+                return Ok(new { message = "Change Request rejected." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred while rejecting the CR." });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.DeleteChangeRequestAsync(id, empNo);
+
+                if (!success)
+                    return BadRequest(new { message = "Failed to delete the Change Request." });
+
+                return Ok(new { message = "Change Request deleted." });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred while deleting the CR." });
+            }
+        }
+
         [HttpGet]
         public IActionResult Assesment()
         {

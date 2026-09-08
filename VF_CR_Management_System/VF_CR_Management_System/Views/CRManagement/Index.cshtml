@@ -56,6 +56,16 @@
                                 background-color: #8f3b4c !important;
                                 color: #ffffff !important;
                             }
+
+                    /* Fix: when SweetAlert2 is targeted at a Bootstrap modal to avoid its
+                                           focus-trap (Bootstrap otherwise yanks focus back to the modal on
+                                           every keystroke, making the reject textarea untypeable), force the
+                                           swal container back to a normal fixed, full-screen overlay instead
+                                           of being confined/clipped by the modal's box. */
+                    #crDetailsModal .swal2-container {
+                        position: fixed !important;
+                        z-index: 1080 !important; /* above Bootstrap modal (1055) and its backdrop (1050) */
+                    }
                 </style>
 
                 <table id="basic-datatable" class="table table-striped dt-responsive nowrap w-100">
@@ -97,6 +107,10 @@
                                         @if (string.Equals(cr.Status, "Draft", StringComparison.OrdinalIgnoreCase))
                                         {
                                             <span class="badge bg-warning">@cr.Status</span>
+                                        }
+                                        else if (string.Equals(cr.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span class="badge bg-danger"><i class="ri-close-line"></i> @cr.Status</span>
                                         }
                                         else
                                         {
@@ -147,6 +161,7 @@
                            class="form-control"
                            id="modal-crnumber"
                            readonly
+                           disabled
                            style="width: 200px;">
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -329,6 +344,7 @@
 
             if (action === 'submit') {
                 Swal.fire({
+                    target: crDetailsModal, // keeps SweetAlert inside the modal's DOM subtree so Bootstrap's focus-trap doesn't fight it
                     title: 'Submit this Change Request?',
                     text: 'This will send the draft CR forward for processing.',
                     icon: 'question',
@@ -348,11 +364,21 @@
                             "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
                         },
                         success: function () {
-                            Swal.fire('Submitted!', 'The Change Request has been submitted.', 'success')
-                                .then(function () { location.reload(); });
+                            Swal.fire({
+                                target: crDetailsModal,
+                                title: 'Submitted!',
+                                text: 'The Change Request has been submitted.',
+                                icon: 'success'
+                            }).then(function () { location.reload(); });
                         },
-                        error: function () {
-                            Swal.fire('Error', 'Failed to submit the CR. Please try again.', 'error');
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
+                            Swal.fire({
+                                target: crDetailsModal,
+                                title: 'Error',
+                                text: msg,
+                                icon: 'error'
+                            });
                         }
                     });
                 });
@@ -369,6 +395,7 @@
             $('#modal-approver-error').addClass('d-none');
 
             Swal.fire({
+                target: crDetailsModal,
                 title: 'Approve this Change Request?',
                 text: 'This action cannot be undone.',
                 icon: 'warning',
@@ -388,11 +415,21 @@
                         "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
                     },
                     success: function () {
-                        Swal.fire('Approved!', 'The Change Request has been approved.', 'success')
-                            .then(function () { location.reload(); });
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Approved!',
+                            text: 'The Change Request has been approved.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
                     },
-                    error: function () {
-                        Swal.fire('Error', 'Failed to approve the CR. Please try again.', 'error');
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to approve the CR. Please try again.';
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
                     }
                 });
             });
@@ -406,6 +443,7 @@
 
             if (action === 'delete') {
                 Swal.fire({
+                    target: crDetailsModal,
                     title: 'Delete this Change Request?',
                     text: 'This will permanently remove the draft CR. This action cannot be undone.',
                     icon: 'warning',
@@ -425,11 +463,21 @@
                             "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
                         },
                         success: function () {
-                            Swal.fire('Deleted', 'The Change Request has been deleted.', 'success')
-                                .then(function () { location.reload(); });
+                            Swal.fire({
+                                target: crDetailsModal,
+                                title: 'Deleted',
+                                text: 'The Change Request has been deleted.',
+                                icon: 'success'
+                            }).then(function () { location.reload(); });
                         },
-                        error: function () {
-                            Swal.fire('Error', 'Failed to delete the CR. Please try again.', 'error');
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete the CR. Please try again.';
+                            Swal.fire({
+                                target: crDetailsModal,
+                                title: 'Error',
+                                text: msg,
+                                icon: 'error'
+                            });
                         }
                     });
                 });
@@ -438,6 +486,7 @@
 
             // Default: Reject flow (asks for a reason)
             Swal.fire({
+                target: crDetailsModal, // <-- this is the actual fix for "can't type in the textarea"
                 title: 'Reject this Change Request?',
                 input: 'textarea',
                 inputPlaceholder: 'Enter reason for rejection...',
@@ -464,11 +513,21 @@
                         "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
                     },
                     success: function () {
-                        Swal.fire('Rejected', 'The Change Request has been rejected.', 'success')
-                            .then(function () { location.reload(); });
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Rejected',
+                            text: 'The Change Request has been rejected.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
                     },
-                    error: function () {
-                        Swal.fire('Error', 'Failed to reject the CR. Please try again.', 'error');
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to reject the CR. Please try again.';
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
                     }
                 });
             });

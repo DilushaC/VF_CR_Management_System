@@ -209,5 +209,119 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var result = _connectionService.Query<ChangeRequest>(sql, new { EmpNo = empNo });
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
         }
+
+        public async Task<bool> ApproveChangeRequestAsync(int crId, int approverId, string approvedByEmpId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+            if (approverId <= 0)
+                throw new ArgumentException("Please select an implementer.");
+
+            const int approveStepId = 8;
+            const int approvedStatusId = 3;
+
+            // 1. Insert the Approval step record
+            const string approvalSql = @"
+            INSERT INTO Approval
+                (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+            VALUES
+                (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+            var approvalParameters = new DynamicParameters();
+            approvalParameters.Add("@CRID", crId);
+            approvalParameters.Add("@StepID", approveStepId);
+            approvalParameters.Add("@AssignedBy", approvedByEmpId);
+            approvalParameters.Add("@AssignedTo", approverId);
+            approvalParameters.Add("@AssignedDate", DateTime.Now);
+            approvalParameters.Add("@Active", true);
+
+            int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
+
+            if (approvalRowsAffected <= 0)
+                return false;
+
+            // 2. Update the ChangeRequest status to Approved
+            const string updateStatusSql = @"
+            UPDATE ChangeRequest
+            SET StatusID = @StatusID
+            WHERE CRID = @CRID";
+
+            var statusParameters = new DynamicParameters();
+            statusParameters.Add("@StatusID", approvedStatusId);
+            statusParameters.Add("@CRID", crId);
+
+            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
+
+            return statusRowsAffected > 0;
+        }
+
+        public async Task<bool> RejectChangeRequestAsync(int crId, string rejectReason, string rejectedByEmpId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+            if (string.IsNullOrWhiteSpace(rejectReason))
+                throw new ArgumentException("Please provide a reason for rejection.");
+
+            const int rejectStepId = 13;
+            const int rejectedStatusId = 7;
+
+            const string approvalSql = @"
+            INSERT INTO Approval
+                (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Comments, Active)
+            VALUES
+                (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Comments, @Active)";
+
+            var approvalParameters = new DynamicParameters();
+            approvalParameters.Add("@CRID", crId);
+            approvalParameters.Add("@StepID", rejectStepId);
+            approvalParameters.Add("@AssignedBy", rejectedByEmpId);
+            approvalParameters.Add("@AssignedTo", rejectedByEmpId); // rejecter acts on it themselves
+            approvalParameters.Add("@AssignedDate", DateTime.Now);
+            approvalParameters.Add("@Comments", rejectReason);
+            approvalParameters.Add("@Active", true);
+
+            int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
+
+            if (approvalRowsAffected <= 0)
+                return false;
+
+            const string updateStatusSql = @"
+            UPDATE ChangeRequest
+            SET StatusID = @StatusID
+            WHERE CRID = @CRID";
+
+            var statusParameters = new DynamicParameters();
+            statusParameters.Add("@StatusID", rejectedStatusId);
+            statusParameters.Add("@CRID", crId);
+
+            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
+
+            return statusRowsAffected > 0;
+
+        }
+
+        public async Task<bool> DeleteChangeRequestAsync(int crId, string requestedByEmpId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            const string deleteApprovalsSql = @"
+            DELETE FROM Approval
+            WHERE CRID = @CRID";
+
+            const string deleteCrSql = @"
+            DELETE FROM ChangeRequest
+            WHERE CRID = @CRID
+              AND CRNumber LIKE 'Waiting-%'";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+
+            _connectionService.ExecuteWithPara(deleteApprovalsSql, parameters);
+            int rowsAffected = _connectionService.ExecuteWithPara(deleteCrSql, parameters);
+
+            return rowsAffected > 0;
+        }
+
     }
 }
