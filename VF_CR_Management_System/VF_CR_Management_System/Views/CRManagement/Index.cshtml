@@ -33,6 +33,58 @@
                 </div>
 
                 <style>
+                    /* Freeze the "View" column (last column) while the table scrolls horizontally */
+                    #basic-datatable {
+                        border-collapse: separate; /* required for position:sticky to behave inside a bordered/striped table */
+                        border-spacing: 0;
+                    }
+
+                        #basic-datatable > thead > tr > th:last-child,
+                        #basic-datatable > tbody > tr > td:last-child {
+                            position: sticky;
+                            right: 0;
+                            z-index: 2;
+                        }
+
+                        /* Header needs to sit above body cells and above the sort icons */
+                        #basic-datatable > thead > tr > th:last-child {
+                            z-index: 3;
+                            background-color: #fff;
+                        }
+
+                        /* Give the sticky body cell an opaque background so scrolled-away
+                       columns don't show through underneath it */
+                        #basic-datatable > tbody > tr > td:last-child {
+                            background-color: #fff;
+                        }
+
+                        /* Match Bootstrap's table-striped tint on odd rows */
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd) > td:last-child {
+                            background-color: #f2f2f2;
+                        }
+
+                        /* Match table-hover tint (with the striped+hover combo too) */
+                        #basic-datatable > tbody > tr:hover > td:last-child {
+                            background-color: #ededed;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd):hover > td:last-child {
+                            background-color: #e0e0e0;
+                        }
+
+                        /* A subtle divider so the frozen column reads as separate from the
+                       scrolling content behind it */
+                        #basic-datatable > thead > tr > th:last-child::before,
+                        #basic-datatable > tbody > tr > td:last-child::before {
+                            content: "";
+                            position: absolute;
+                            top: 0;
+                            bottom: 0;
+                            left: 0;
+                            width: 8px;
+                            box-shadow: inset 6px 0 6px -6px rgba(0, 0, 0, 0.25);
+                            pointer-events: none;
+                        }
                     .cr-filter-tabs {
                         gap: 0.5rem;
                     }

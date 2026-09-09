@@ -351,24 +351,24 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync(string empNo, string filter)
         {
+            const int assignStepId = 7;
+
             string filterCondition = filter switch
             {
                 "createdByMe" => "AND cr.RequesterUserName = @EmpNo",
 
-                // Drafts (CRNumber still 'Waiting...') were never really submitted/assigned,
-                // so exclude them from the assignment-based check.
                 "assignedToMe" => @"AND cr.CRNumber NOT LIKE 'Waiting%'
-                AND EXISTS (
-                    SELECT 1
-                    FROM [CRManagementDB].[dbo].[Approval] a
-                    WHERE a.CRID = cr.CRID
-                        AND a.AssignedTo = @EmpNo
-                        AND a.Active = 1
-                )",
+                    AND EXISTS (
+                        SELECT 1
+                        FROM [CRManagementDB].[dbo].[Approval] a
+                        WHERE a.CRID = cr.CRID
+                            AND a.AssignedTo = @EmpNo
+                            AND a.StepID = @StepID
+                            AND a.Active = 1
+                            AND a.Decision IS NULL
+                    )",
 
-                // "All": creator still sees their own drafts, but the assignment branch
-                // excludes drafts so they don't leak into other people's assigned lists.
-                        _ => @"AND (
+                            _ => @"AND (
                 cr.RequesterUserName = @EmpNo
                 OR (
                     cr.CRNumber NOT LIKE 'Waiting%'
@@ -377,11 +377,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                         FROM [CRManagementDB].[dbo].[Approval] a
                         WHERE a.CRID = cr.CRID
                             AND a.AssignedTo = @EmpNo
+                            AND a.StepID = @StepID
                             AND a.Active = 1
+                            AND a.Decision IS NULL
                     )
                 )
                 )"
-                    };
+                        };
 
             var sql = $@"
                 SELECT
@@ -415,10 +417,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.RequestedDate DESC,
                     cr.CRID DESC;";
 
-            var result = _connectionService.Query<ChangeRequest>(sql, new { EmpNo = empNo });
+            var result = _connectionService.Query<ChangeRequest>(sql, new { EmpNo = empNo, StepID = assignStepId });
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
         }
-
         public async Task<bool> ApproveChangeRequestAsync(int crId, int approverId, string approvedByEmpId)
         {
             if (crId <= 0)
