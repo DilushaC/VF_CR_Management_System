@@ -58,97 +58,115 @@
                             }
 
                     /* Fix: when SweetAlert2 is targeted at a Bootstrap modal to avoid its
-                                           focus-trap (Bootstrap otherwise yanks focus back to the modal on
-                                           every keystroke, making the reject textarea untypeable), force the
-                                           swal container back to a normal fixed, full-screen overlay instead
-                                           of being confined/clipped by the modal's box. */
+                                                                                   focus-trap (Bootstrap otherwise yanks focus back to the modal on
+                                                                                   every keystroke, making the reject textarea untypeable), force the
+                                                                                   swal container back to a normal fixed, full-screen overlay instead
+                                                                                   of being confined/clipped by the modal's box. */
                     #crDetailsModal .swal2-container {
                         position: fixed !important;
                         z-index: 1080 !important; /* above Bootstrap modal (1055) and its backdrop (1050) */
                     }
+
+                    /* Prevent long Title values from stretching the table — truncate with
+                                                               an ellipsis and reveal the full text via native title-attribute tooltip
+                                                               or the existing details modal. */
+                    #basic-datatable td.title-cell {
+                        max-width: 220px;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                    }
                 </style>
 
-                <table id="basic-datatable" class="table table-striped dt-responsive nowrap w-100">
-                    <thead>
-                        <tr>
-                            <th>CR Number</th>
-                            <th>Change Type</th>
-                            <th>Priority</th>
-                            <th>Module</th>
-                            <th>Status</th>
-                            <th>Requested By</th>
-                            <th>Requested Date</th>
-                            <th>View</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (Model != null)
-                        {
-                            @foreach (var cr in Model)
+                <!-- Horizontal scroll wrapper: replaces the Responsive extension's
+                     expand/+ button behavior. If the table is wider than the card,
+                     a scrollbar appears directly underneath instead of collapsing columns. -->
+                <div class="table-responsive">
+                    <table id="basic-datatable" class="table table-striped nowrap w-100">
+                        <thead>
+                            <tr>
+                                <th>CR Number</th>
+                                <th>Title</th>
+                                <th>Change Type</th>
+                                <th>Module</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Requested By</th>
+                                <th>Requested Date</th>
+                                <th>View</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model != null)
                             {
-                                var isDraft = cr.CRNumber != null &&
-                                cr.CRNumber.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase);
-                                var displayCrNumber = isDraft ? "WAITING" : cr.CRNumber;
-                                <tr>
-                                    <td title="@cr.CRNumber">@displayCrNumber</td>
-                                    <td>@cr.ChangeType</td>
-                                    <td>
-                                        @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            <span class="badge bg-danger">@cr.Priority</span>
-                                        }
-                                        else
-                                        {
-                                            @cr.Priority
-                                        }
-                                    </td>
-                                    <td>@cr.Module</td>
-                                    <td>
-                                        @if (string.Equals(cr.Status, "Draft", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            <span class="badge bg-warning">@cr.Status</span>
-                                        }
-                                        else if (string.Equals(cr.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            <span class="badge bg-danger"><i class="ri-close-line"></i> @cr.Status</span>
-                                        }
-                                        else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            <span class="badge bg-success">@cr.Status</span>
-                                        }
-                                        else
-                                        {
-                                            @cr.Status
-                                        }
-                                    </td>
-                                    <td>@cr.RequestedBy</td>
-                                    <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
-                                    <td>
-                                        <div class="d-flex gap-1">
-                                            <!-- Eye button now opens the details modal instead of navigating to Edit -->
-                                            <button type="button"
-                                                    class="btn btn-sm btn-info btn-view"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#crDetailsModal"
-                                                    data-bs-crid="@cr.CRID"
-                                                    data-bs-crnumber="@displayCrNumber"
-                                                    data-bs-summary="@cr.Summary"
-                                                    data-bs-changetype="@cr.ChangeType"
-                                                    data-bs-priority="@cr.Priority"
-                                                    data-bs-module="@cr.Module"
-                                                    data-bs-status="@cr.Status"
-                                                    data-bs-requestedby="@cr.RequestedBy"
-                                                    data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
-                                                    title="View">
-                                                <i class="ri-eye-line"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
+                                @foreach (var cr in Model)
+                                {
+                                    var isDraft = cr.CRNumber != null &&
+                                    cr.CRNumber.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase);
+                                    var displayCrNumber = isDraft ? "WAITING" : cr.CRNumber;
+                                    <tr>
+                                        <td title="@cr.CRNumber">@displayCrNumber</td>
+                                        <td class="title-cell" title="@cr.ChangeTitle">@cr.ChangeTitle</td>
+                                        <td>@cr.ChangeType</td>
+                                        <td>@cr.Module</td>
+                                        <td>
+                                            @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger">@cr.Priority</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Priority
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (string.Equals(cr.Status, "Draft", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-warning">@cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger"><i class="ri-close-line"></i> @cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-success">@cr.Status</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Status
+                                            }
+                                        </td>
+                                        <td>@cr.RequestedBy</td>
+                                        <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
+                                        <td>
+                                            <div class="d-flex gap-1">
+                                                <!-- View icon only, no expand button -->
+                                                <button type="button"
+                                                        class="btn btn-sm btn-info btn-view"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#crDetailsModal"
+                                                        data-bs-crid="@cr.CRID"
+                                                        data-bs-crnumber="@displayCrNumber"
+                                                        data-bs-title="@cr.ChangeTitle"
+                                                        data-bs-summary="@cr.Summary"
+                                                        data-bs-changetype="@cr.ChangeType"
+                                                        data-bs-priority="@cr.Priority"
+                                                        data-bs-module="@cr.Module"
+                                                        data-bs-status="@cr.Status"
+                                                        data-bs-requestedby="@cr.RequestedBy"
+                                                        data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                        title="View">
+                                                    <i class="ri-eye-line"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
                             }
-                        }
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
             </div> <!-- end card body-->
         </div> <!-- end card -->
     </div><!-- end col-->
@@ -167,6 +185,10 @@
             </div>
             <div class="modal-body">
                 <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">Title:</label>
+                        <input type="text" class="form-control" id="modal-title" readonly>
+                    </div>
                     <div class="col-md-6">
                         <label class="col-form-label fw-semibold">Status:</label>
                         <input type="text" class="form-control" id="modal-status" readonly>
@@ -231,12 +253,18 @@
 @section Scripts {
     <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
     <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
-    <script src="~/assets/vendor/datatables.net-responsive/js/dataTables.responsive.min.js"></script>
-    <script src="~/assets/vendor/datatables.net-responsive-bs5/js/responsive.bootstrap5.min.js"></script>
     <script>
         $(document).ready(function () {
             $('#basic-datatable').DataTable({
-                responsive: true
+                responsive: false,
+                paging: true,
+                pageLength: 10,
+                lengthChange: true,
+                order: [[7, 'desc']],              // Requested Date (index 7)
+                columnDefs: [
+                    { orderable: false, targets: 8 },  // View column (index 8) — buttons only
+                    { orderable: false, targets: 1 }   // Title column (index 1) — long free text, not meaningful to sort
+                ]
             });
 
             $('#crFilterTabs').on('click', 'a.nav-link', function (e) {
@@ -274,16 +302,11 @@
         var $proceedBtn = $('#modal-proceed-btn');
         var $editBtn = $('#modal-edit-link');
 
-        // Toggle the footer buttons between Approve/Reject and Submit/Edit/Delete
-        // depending on whether the CR Number being shown is "WAITING".
-        // If the CR is already Approved, show only "Proceed to Assessment" (+ Close).
-        // If it's Rejected, hide all action buttons — only Close remains.
         function updateCrModalButtons(crnumber, status) {
             var normalizedStatus = (status || '').trim().toUpperCase();
             var isApproved = normalizedStatus === 'APPROVED';
             var isRejected = normalizedStatus === 'REJECTED';
 
-            // Reset all buttons to hidden first, then reveal what's relevant
             $approveBtn.addClass('d-none');
             $rejectBtn.addClass('d-none');
             $proceedBtn.addClass('d-none');
@@ -292,17 +315,14 @@
             $('#modal-approver-error').addClass('d-none');
 
             if (isApproved) {
-                // Approved CRs move forward to assessment; no more approve/reject needed.
                 $proceedBtn.removeClass('d-none');
                 return;
             }
 
             if (isRejected) {
-                // Rejected CRs are final — only Close remains.
                 return;
             }
 
-            // Not a final state — show Approve/Reject (or Submit/Edit/Delete for drafts)
             $approveBtn.removeClass('d-none');
             $rejectBtn.removeClass('d-none');
 
@@ -313,7 +333,6 @@
                 $rejectBtn.text('Delete').data('action', 'delete');
                 $editBtn.removeClass('d-none');
 
-                // A CR that hasn't been submitted yet doesn't need an implementer picked.
                 $('#modal-approver-wrapper').addClass('d-none');
                 $('#modal-approver-error').addClass('d-none');
             } else {
@@ -327,9 +346,9 @@
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
 
-            // Read all data attributes FIRST, then use them.
             var crid = button.getAttribute('data-bs-crid');
             var crnumber = button.getAttribute('data-bs-crnumber');
+            var title = button.getAttribute('data-bs-title');
             var summary = button.getAttribute('data-bs-summary');
             var changetype = button.getAttribute('data-bs-changetype');
             var priority = button.getAttribute('data-bs-priority');
@@ -338,8 +357,8 @@
             var requestedby = button.getAttribute('data-bs-requestedby');
             var requesteddate = button.getAttribute('data-bs-requesteddate');
 
-            // #modal-crnumber is a <span>, not an <input>, so use textContent (not .value)
             crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
+            crDetailsModal.querySelector('#modal-title').value = title || '';
             crDetailsModal.querySelector('#modal-status').value = status || '';
             crDetailsModal.querySelector('#modal-changetype').value = changetype || '';
             crDetailsModal.querySelector('#modal-priority').value = priority || '';
@@ -348,16 +367,11 @@
             crDetailsModal.querySelector('#modal-requesteddate').value = requesteddate || '';
             crDetailsModal.querySelector('#modal-summary').value = summary || '';
 
-            // Track which CR this modal instance is currently showing, so the
-            // footer buttons below know which CRID to act on.
             $(crDetailsModal).data('crid', crid);
 
-            // Reset the approver dropdown for each new CR opened
             $('#modal-approver').val('').trigger('change');
             $('#modal-approver-error').addClass('d-none');
 
-            // Swap Approve/Reject <-> Submit/Edit/Delete <-> Proceed-to-Assessment
-            // based on the CR Number and current status.
             updateCrModalButtons(crnumber, status);
 
             var editLink = crDetailsModal.querySelector('#modal-edit-link');
@@ -366,30 +380,24 @@
             }
         });
 
-        // select2 needs to be (re)initialized after the modal is in the DOM/visible,
-        // otherwise the dropdown widget can render with zero width inside a modal.
         $(crDetailsModal).on('shown.bs.modal', function () {
             $('#modal-approver').select2({
                 dropdownParent: $(crDetailsModal)
             });
         });
 
-        // "Proceed to Assessment" — only visible for Approved CRs.
-        // Adjust the target action/URL to wherever your assessment workflow lives.
         $proceedBtn.on('click', function () {
             var crid = $(crDetailsModal).data('crid');
             window.location.href = '@Url.Action("Assessment", "CRManagement")' + '?id=' + crid;
         });
 
-        // Single click handler for the left footer button; branches on data-action
-        // so it works as either "Approve" or "Submit" depending on the CR state.
         $approveBtn.on('click', function () {
             var action = $(this).data('action');
             var crid = $(crDetailsModal).data('crid');
 
             if (action === 'submit') {
                 Swal.fire({
-                    target: crDetailsModal, // keeps SweetAlert inside the modal's DOM subtree so Bootstrap's focus-trap doesn't fight it
+                    target: crDetailsModal,
                     title: 'Submit this Change Request?',
                     text: 'This will send the draft CR forward for processing.',
                     icon: 'question',
@@ -430,7 +438,6 @@
                 return;
             }
 
-            // Default: Approve flow (requires an implementer to be selected)
             var approverId = $('#modal-approver').val();
 
             if (!approverId) {
@@ -480,8 +487,6 @@
             });
         });
 
-        // Single click handler for the right footer button; branches on data-action
-        // so it works as either "Reject" or "Delete" depending on the CR state.
         $rejectBtn.on('click', function () {
             var action = $(this).data('action');
             var crid = $(crDetailsModal).data('crid');
@@ -529,9 +534,8 @@
                 return;
             }
 
-            // Default: Reject flow (asks for a reason)
             Swal.fire({
-                target: crDetailsModal, // <-- this is the actual fix for "can't type in the textarea"
+                target: crDetailsModal,
                 title: 'Reject this Change Request?',
                 input: 'textarea',
                 inputPlaceholder: 'Enter reason for rejection...',

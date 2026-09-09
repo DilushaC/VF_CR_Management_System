@@ -28,10 +28,20 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please select a change priority.");
             }
+            var changeTitle = collection["ChangeTitle"].ToString();
+            if (string.IsNullOrWhiteSpace(changeTitle))
+            {
+                throw new ArgumentException("Please provide a Change Title");
+            }
             var summary = collection["Summary"].ToString();
             if (string.IsNullOrWhiteSpace(summary))
             {
                 throw new ArgumentException("Please provide a change summary and business justification.");
+            }
+            var title = collection["Title"].ToString();
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                throw new ArgumentException("Please provide Title for the Change Request");
             }
             var otherChangeType = collection["OtherChangeType"].ToString();
             if (changeTypeId == 5 && string.IsNullOrWhiteSpace(otherChangeType))
@@ -53,10 +63,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             const string crSql = @"
                 INSERT INTO ChangeRequest
-                    (CRNumber, RequesterUserName, Summary, ChangeTypeID, OtherType, PriorityID, ModuleID, 
+                    (CRNumber, RequesterUserName, ChangeTitle, Summary, ChangeTypeID, OtherType, PriorityID, ModuleID, 
                      RequestedDate, StatusID, Active)
                 VALUES
-                    (@CRNumber, @RequesterUserName, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @ModuleID,
+                    (@CRNumber, @RequesterUserName, @ChangeTitle, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @ModuleID,
                      @RequestedDate, @StatusID, @Active);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -76,6 +86,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var crParameters = new DynamicParameters();
                 crParameters.Add("@CRNumber", crNumber);
                 crParameters.Add("@RequesterUserName", empId);
+                crParameters.Add("@ChangeTitle", changeTitle);
                 crParameters.Add("@Summary", summary);
                 crParameters.Add("@ChangeTypeID", changeTypeId);
                 crParameters.Add("@OtherType", otherChangeType);
@@ -332,28 +343,28 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 // Drafts (CRNumber still 'Waiting...') were never really submitted/assigned,
                 // so exclude them from the assignment-based check.
                 "assignedToMe" => @"AND cr.CRNumber NOT LIKE 'Waiting%'
-                                AND EXISTS (
-                                    SELECT 1
-                                    FROM [CRManagementDB].[dbo].[Approval] a
-                                    WHERE a.CRID = cr.CRID
-                                        AND a.AssignedTo = @EmpNo
-                                        AND a.Active = 1
-                                )",
-
-                // "All": creator still sees their own drafts, but the assignment branch
-                // excludes drafts so they don't leak into other people's assigned lists.
-                _ => @"AND (
-                    cr.RequesterUserName = @EmpNo
-                    OR (
-                        cr.CRNumber NOT LIKE 'Waiting%'
                         AND EXISTS (
                             SELECT 1
                             FROM [CRManagementDB].[dbo].[Approval] a
                             WHERE a.CRID = cr.CRID
                                 AND a.AssignedTo = @EmpNo
                                 AND a.Active = 1
-                        )
+                        )",
+
+                        // "All": creator still sees their own drafts, but the assignment branch
+                        // excludes drafts so they don't leak into other people's assigned lists.
+                        _ => @"AND (
+                cr.RequesterUserName = @EmpNo
+                OR (
+                    cr.CRNumber NOT LIKE 'Waiting%'
+                    AND EXISTS (
+                        SELECT 1
+                        FROM [CRManagementDB].[dbo].[Approval] a
+                        WHERE a.CRID = cr.CRID
+                            AND a.AssignedTo = @EmpNo
+                            AND a.Active = 1
                     )
+                )
                 )"
             };
 
@@ -361,6 +372,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 SELECT
                     cr.CRID,
                     cr.CRNumber,
+                    cr.ChangeTitle,
                     cr.Summary,
                     ct.ChangeTypeName AS ChangeType,
                     p.PriorityName    AS Priority,
@@ -375,7 +387,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID    = cr.StatusID
                 WHERE cr.Active = 1
                   {filterCondition}
-                ORDER BY cr.RequestedDate DESC";
+                ORDER BY cr.RequestedDate DESC, cr.CRID DESC";
 
             var result = _connectionService.Query<ChangeRequest>(sql, new { EmpNo = empNo });
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
