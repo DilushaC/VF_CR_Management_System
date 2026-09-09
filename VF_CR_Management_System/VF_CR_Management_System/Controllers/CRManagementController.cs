@@ -83,6 +83,9 @@ namespace VF_CR_Management_System.Controllers
             var users = await _userService.GetAllUsersAsync();
             ViewBag.Users = users;
 
+            var divisions = await _divisionService.GetAllDivisionsAsync();
+            ViewBag.Divisions = divisions;
+
             var modules = await _moduleService.GetAllModulesAsync();
             ViewBag.Modules = modules;
 
