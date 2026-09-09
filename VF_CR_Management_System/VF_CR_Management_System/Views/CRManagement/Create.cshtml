@@ -296,6 +296,10 @@
                 document.getElementById('Summary').value = data.summary;
             }
 
+            if (data.summary) {
+                document.getElementById('ChangeTitle').value = data.changeTitle;
+            }
+
             // Change Type radio
             if (data.changeTypeID) {
                 var typeRadio = document.querySelector('input[name="ChangeTypeID"][value="' + data.changeTypeID + '"]');

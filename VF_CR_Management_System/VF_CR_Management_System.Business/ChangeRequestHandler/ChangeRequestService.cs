@@ -145,6 +145,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.CRID,
                     cr.CRNumber,
                     cr.Summary,
+                    cr.ChangeTitle,
                     cr.ChangeTypeID,
                     ct.ChangeTypeName AS ChangeType,
                     cr.OtherType,
@@ -207,6 +208,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please select a change priority.");
             }
+            var changeTitle = collection["ChangeTitle"].ToString();
+            if (string.IsNullOrWhiteSpace(changeTitle))
+            {
+                throw new ArgumentException("Please provide a Change Request Title");
+            }
             var summary = collection["Summary"].ToString();
             if (string.IsNullOrWhiteSpace(summary))
             {
@@ -232,6 +238,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string updateCrSql = @"
                 UPDATE ChangeRequest
                 SET Summary      = @Summary,
+                    ChangeTitle  = @ChangeTitle,
                     ChangeTypeID = @ChangeTypeID,
                     OtherType    = @OtherType,
                     PriorityID   = @PriorityID,
@@ -243,6 +250,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var crParameters = new DynamicParameters();
             crParameters.Add("@Summary", summary);
+            crParameters.Add("@ChangeTitle", changeTitle);
             crParameters.Add("@ChangeTypeID", changeTypeId);
             crParameters.Add("@OtherType", otherChangeType);
             crParameters.Add("@PriorityID", priorityId);

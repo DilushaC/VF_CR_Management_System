@@ -113,6 +113,7 @@ namespace VF_CR_Management_System.Controllers
             {
                 crid = changeRequest.CRID,
                 summary = changeRequest.Summary,
+                changeTitle = changeRequest.ChangeTitle,
                 changeTypeID = changeRequest.ChangeTypeID,
                 otherType = changeRequest.OtherChangeType,
                 priorityID = changeRequest.PriorityID,
