@@ -189,40 +189,40 @@
             <div class="modal-body">
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Title:</label>
-                        <input type="text" class="form-control" id="modal-title" readonly>
+                        <label class="fw-bold text-dark d-block mb-1">Title:</label>
+                        <span id="modal-title"></span>
                     </div>
                     <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Status:</label>
-                        <input type="text" class="form-control" id="modal-status" readonly>
+                        <label class="fw-bold text-dark d-block mb-1">Status:</label>
+                        <span id="modal-status"></span>
                     </div>
                     <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Change Type:</label>
-                        <input type="text" class="form-control" id="modal-changetype" readonly>
+                        <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
+                        <span id="modal-changetype"></span>
                     </div>
                     <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Priority:</label>
-                        <input type="text" class="form-control" id="modal-priority" readonly>
+                        <label class="fw-bold text-dark d-block mb-1">Priority:</label>
+                        <span id="modal-priority"></span>
                     </div>
                     <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Division:</label>
-                        <input type="text" class="form-control" id="modal-division" readonly>
+                        <label class="fw-bold text-dark d-block mb-1">Division:</label>
+                        <span id="modal-division"></span>
                     </div>
                     <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Module:</label>
-                        <input type="text" class="form-control" id="modal-module" readonly>
+                        <label class="fw-bold text-dark d-block mb-1">Module:</label>
+                        <span id="modal-module"></span>
                     </div>
                     <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Requested By:</label>
-                        <input type="text" class="form-control" id="modal-requestedby" readonly>
+                        <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
+                        <span id="modal-requestedby"></span>
                     </div>
                     <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Requested Date:</label>
-                        <input type="text" class="form-control" id="modal-requesteddate" readonly>
+                        <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
+                        <span id="modal-requesteddate"></span>
                     </div>
-                    <div class="col-md-6">
-                        <label class="col-form-label fw-semibold">Summary &amp; Business Justification:</label>
-                        <textarea class="form-control" id="modal-summary" rows="4" readonly></textarea>
+                    <div class="col-md-12">
+                        <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
+                        <span id="modal-summary"></span>
                     </div>
                     <div class="col-md-6" id="modal-approver-wrapper">
                         <div class="card-body">
@@ -241,8 +241,6 @@
                         </div>
                     </div>
                 </div>
-
-
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -366,15 +364,15 @@
             var requesteddate = button.getAttribute('data-bs-requesteddate');
 
             crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
-            crDetailsModal.querySelector('#modal-title').value = title || '';
-            crDetailsModal.querySelector('#modal-status').value = status || '';
-            crDetailsModal.querySelector('#modal-changetype').value = changetype || '';
-            crDetailsModal.querySelector('#modal-priority').value = priority || '';
-            crDetailsModal.querySelector('#modal-division').value = division || '';
-            crDetailsModal.querySelector('#modal-module').value = module || '';
-            crDetailsModal.querySelector('#modal-requestedby').value = requestedby || '';
-            crDetailsModal.querySelector('#modal-requesteddate').value = requesteddate || '';
-            crDetailsModal.querySelector('#modal-summary').value = summary || '';
+            crDetailsModal.querySelector('#modal-title').textContent = title || '';
+            crDetailsModal.querySelector('#modal-status').textContent = status || '';
+            crDetailsModal.querySelector('#modal-changetype').textContent = changetype || '';
+            crDetailsModal.querySelector('#modal-priority').textContent = priority || '';
+            crDetailsModal.querySelector('#modal-division').textContent = division || '';
+            crDetailsModal.querySelector('#modal-module').textContent = module || '';
+            crDetailsModal.querySelector('#modal-requestedby').textContent = requestedby || '';
+            crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
+            crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
 
             $(crDetailsModal).data('crid', crid);
 
