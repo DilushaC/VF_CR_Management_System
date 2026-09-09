@@ -88,6 +88,7 @@
                                 <th>CR Number</th>
                                 <th>Title</th>
                                 <th>Change Type</th>
+                                <th>Division</th>
                                 <th>Module</th>
                                 <th>Priority</th>
                                 <th>Status</th>
@@ -108,6 +109,7 @@
                                         <td title="@cr.CRNumber">@displayCrNumber</td>
                                         <td class="title-cell" title="@cr.ChangeTitle">@cr.ChangeTitle</td>
                                         <td>@cr.ChangeType</td>
+                                        <td>@(string.IsNullOrEmpty(cr.Division) ? "—" : cr.Division)</td>
                                         <td>@cr.Module</td>
                                         <td>
                                             @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
@@ -151,8 +153,9 @@
                                                         data-bs-title="@cr.ChangeTitle"
                                                         data-bs-summary="@cr.Summary"
                                                         data-bs-changetype="@cr.ChangeType"
-                                                        data-bs-priority="@cr.Priority"
+                                                        data-bs-division="@cr.Division"
                                                         data-bs-module="@cr.Module"
+                                                        data-bs-priority="@cr.Priority"
                                                         data-bs-status="@cr.Status"
                                                         data-bs-requestedby="@cr.RequestedBy"
                                                         data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
@@ -200,6 +203,10 @@
                     <div class="col-md-6">
                         <label class="col-form-label fw-semibold">Priority:</label>
                         <input type="text" class="form-control" id="modal-priority" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="col-form-label fw-semibold">Division:</label>
+                        <input type="text" class="form-control" id="modal-division" readonly>
                     </div>
                     <div class="col-md-6">
                         <label class="col-form-label fw-semibold">Module:</label>
@@ -260,9 +267,9 @@
                 paging: true,
                 pageLength: 10,
                 lengthChange: true,
-                order: [[7, 'desc']],              // Requested Date (index 7)
+                order: [[8, 'desc']],              // Requested Date (index 7)
                 columnDefs: [
-                    { orderable: false, targets: 8 },  // View column (index 8) — buttons only
+                    { orderable: false, targets: 9 },  // View column (index 8) — buttons only
                     { orderable: false, targets: 1 }   // Title column (index 1) — long free text, not meaningful to sort
                 ]
             });
@@ -352,6 +359,7 @@
             var summary = button.getAttribute('data-bs-summary');
             var changetype = button.getAttribute('data-bs-changetype');
             var priority = button.getAttribute('data-bs-priority');
+            var division = button.getAttribute('data-bs-division');
             var module = button.getAttribute('data-bs-module');
             var status = button.getAttribute('data-bs-status');
             var requestedby = button.getAttribute('data-bs-requestedby');
@@ -362,6 +370,7 @@
             crDetailsModal.querySelector('#modal-status').value = status || '';
             crDetailsModal.querySelector('#modal-changetype').value = changetype || '';
             crDetailsModal.querySelector('#modal-priority').value = priority || '';
+            crDetailsModal.querySelector('#modal-division').value = division || '';
             crDetailsModal.querySelector('#modal-module').value = module || '';
             crDetailsModal.querySelector('#modal-requestedby').value = requestedby || '';
             crDetailsModal.querySelector('#modal-requesteddate').value = requesteddate || '';

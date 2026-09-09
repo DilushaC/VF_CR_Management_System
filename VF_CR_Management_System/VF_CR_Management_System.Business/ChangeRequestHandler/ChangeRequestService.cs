@@ -224,6 +224,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please specify the change type.");
             }
+            if (!int.TryParse(collection["DivisionID"], out var divisionId))
+            {
+                throw new ArgumentException("Please select a DIvision.");
+            }
             if (!int.TryParse(collection["ModuleID"], out var moduleId))
             {
                 throw new ArgumentException("Please select a Module.");
@@ -244,6 +248,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     OtherType    = @OtherType,
                     PriorityID   = @PriorityID,
                     ModuleID     = @ModuleID,
+                    DivisionID     = @DivisionID,
                     StatusID     = @StatusID
                 WHERE CRID = @CRID
                   AND Active = 1
@@ -255,6 +260,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             crParameters.Add("@ChangeTypeID", changeTypeId);
             crParameters.Add("@OtherType", otherChangeType);
             crParameters.Add("@PriorityID", priorityId);
+            crParameters.Add("@DivisionID", divisionId);
             crParameters.Add("@ModuleID", moduleId);
             crParameters.Add("@StatusID", draftStatusId);
             crParameters.Add("@CRID", crId);
@@ -352,16 +358,16 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 // Drafts (CRNumber still 'Waiting...') were never really submitted/assigned,
                 // so exclude them from the assignment-based check.
                 "assignedToMe" => @"AND cr.CRNumber NOT LIKE 'Waiting%'
-                        AND EXISTS (
-                            SELECT 1
-                            FROM [CRManagementDB].[dbo].[Approval] a
-                            WHERE a.CRID = cr.CRID
-                                AND a.AssignedTo = @EmpNo
-                                AND a.Active = 1
-                        )",
+                AND EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Approval] a
+                    WHERE a.CRID = cr.CRID
+                        AND a.AssignedTo = @EmpNo
+                        AND a.Active = 1
+                )",
 
-                        // "All": creator still sees their own drafts, but the assignment branch
-                        // excludes drafts so they don't leak into other people's assigned lists.
+                // "All": creator still sees their own drafts, but the assignment branch
+                // excludes drafts so they don't leak into other people's assigned lists.
                         _ => @"AND (
                 cr.RequesterUserName = @EmpNo
                 OR (
@@ -375,7 +381,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     )
                 )
                 )"
-            };
+                    };
 
             var sql = $@"
                 SELECT
@@ -384,19 +390,30 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.ChangeTitle,
                     cr.Summary,
                     ct.ChangeTypeName AS ChangeType,
-                    p.PriorityName    AS Priority,
-                    m.ModuleName      AS Module,
-                    s.StatusName      AS Status,
+                    p.PriorityName AS Priority,
+                    cr.DivisionID,
+                    d.DivisionName AS Division,
+                    cr.ModuleID,
+                    m.ModuleName AS Module,
+                    s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,
                     cr.RequestedDate
-                FROM [CRManagementDB].[dbo].[ChangeRequest] cr
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] ct ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority]   p  ON p.PriorityID   = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID    = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID    = cr.StatusID
+                FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
+                    ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
+                    ON p.PriorityID = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
+                    ON d.DivisionID = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
+                    ON m.ModuleID = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
+                    ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
-                  {filterCondition}
-                ORDER BY cr.RequestedDate DESC, cr.CRID DESC";
+                    {filterCondition}
+                ORDER BY
+                    cr.RequestedDate DESC,
+                    cr.CRID DESC;";
 
             var result = _connectionService.Query<ChangeRequest>(sql, new { EmpNo = empNo });
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);

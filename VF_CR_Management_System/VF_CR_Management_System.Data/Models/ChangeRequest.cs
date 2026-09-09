@@ -38,6 +38,7 @@ namespace VF_CR_Management_System.Data.Models
         public string ChangeType { get; set; }
         public string Priority { get; set; }
         public string Module { get; set; }
+        public string Division { get; set; }
         public string Status { get; set; }
         public string RequestedBy { get; set; }
     }
