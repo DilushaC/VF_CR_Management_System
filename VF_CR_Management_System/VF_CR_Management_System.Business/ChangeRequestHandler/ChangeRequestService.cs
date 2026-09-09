@@ -48,6 +48,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please specify the change type.");
             }
+            if (!int.TryParse(collection["DivisionID"], out var divisionId))
+            {
+                throw new ArgumentException("Please select a Division.");
+            }
             if (!int.TryParse(collection["ModuleID"], out var moduleId))
             {
                 throw new ArgumentException("Please select a Module.");
@@ -63,10 +67,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             const string crSql = @"
                 INSERT INTO ChangeRequest
-                    (CRNumber, RequesterUserName, ChangeTitle, Summary, ChangeTypeID, OtherType, PriorityID, ModuleID, 
+                    (CRNumber, RequesterUserName, ChangeTitle, Summary, ChangeTypeID, OtherType, PriorityID, DivisionID, ModuleID, 
                      RequestedDate, StatusID, Active)
                 VALUES
-                    (@CRNumber, @RequesterUserName, @ChangeTitle, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @ModuleID,
+                    (@CRNumber, @RequesterUserName, @ChangeTitle, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @DivisionID, @ModuleID,
                      @RequestedDate, @StatusID, @Active);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -92,6 +96,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 crParameters.Add("@OtherType", otherChangeType);
                 crParameters.Add("@PriorityID", priorityId);
                 crParameters.Add("@ModuleID", moduleId);
+                crParameters.Add("@DivisionID", divisionId);
                 crParameters.Add("@RequestedDate", DateTime.Now);
                 crParameters.Add("@StatusID", statusId);
                 crParameters.Add("@Active", true);
@@ -132,9 +137,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return approvalRowsAffected > 0;
         }
 
-        // GET a single Change Request by its CRID, joined with lookup tables so it comes back
-        // with the same display-friendly shape used by GetAllChangeRequestsAsync (and the
-        // form-friendly *ID columns the Edit form needs to pre-select dropdowns).
         public async Task<ChangeRequest> GetChangeRequestByIdAsync(int crId)
         {
             if (crId <= 0)
@@ -151,6 +153,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.OtherType,
                     cr.PriorityID,
                     p.PriorityName    AS Priority,
+                    cr.DivisionID,
+                    dv.DivisionName   AS Division,
                     cr.ModuleID,
                     m.ModuleName      AS Module,
                     cr.StatusID,
@@ -160,6 +164,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 FROM [CRManagementDB].[dbo].[ChangeRequest] cr
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] ct ON ct.ChangeTypeID = cr.ChangeTypeID
                 LEFT JOIN [CRManagementDB].[dbo].[Priority]   p  ON p.PriorityID   = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division]   dv ON dv.DivisionID  = cr.DivisionID
                 LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID    = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID    = cr.StatusID
                 WHERE cr.Active = 1
@@ -169,10 +174,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return result.FirstOrDefault();
         }
 
-        // Returns the UserName of whoever is currently assigned as implementer (StepID 7,
-        // the "assign approver/implementer" step set at Create/Update time) for a CR, or
-        // null if none is assigned yet. Kept separate from GetChangeRequestByIdAsync since
-        // this lives in the Approval table, not ChangeRequest itself.
         public async Task<string> GetAssignedApproverUserNameAsync(int crId)
         {
             if (crId <= 0)

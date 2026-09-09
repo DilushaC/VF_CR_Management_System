@@ -114,6 +114,7 @@ namespace VF_CR_Management_System.Controllers
                 changeTypeID = changeRequest.ChangeTypeID,
                 otherType = changeRequest.OtherChangeType,
                 priorityID = changeRequest.PriorityID,
+                divisionID = changeRequest.DivisionID,
                 moduleID = changeRequest.ModuleID,
                 statusID = changeRequest.StatusID,
                 approverUserName = approverUserName
