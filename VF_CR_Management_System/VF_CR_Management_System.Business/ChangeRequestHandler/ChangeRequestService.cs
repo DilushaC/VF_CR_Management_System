@@ -313,14 +313,14 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var prefix = $"CR/{year}/{month:D2}/";
 
             const string maxSql = @"
-                SELECT MAX(CAST(RIGHT(CRNumber, 5) AS INT))
+                SELECT MAX(CAST(RIGHT(CRNumber, 3) AS INT))
                 FROM ChangeRequest
                 WHERE CRNumber LIKE @Prefix + '%'";
 
             var result = _connectionService.ExecuteScalar(maxSql, new { Prefix = prefix });
             var lastNumber = (result != null && result != DBNull.Value) ? Convert.ToInt32(result) : 0;
 
-            return $"{prefix}{(lastNumber + 1):D5}";
+            return $"{prefix}{(lastNumber + 1):D3}";   // <-- D3, not D5
         }
 
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync(string empNo, string filter)
