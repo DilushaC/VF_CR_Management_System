@@ -10,6 +10,7 @@ namespace VF_CR_Management_System.Data.Models
         [Required(ErrorMessage = "Please provide a change summary and business justification.")]
         public string Summary { get; set; }
         public string ChangeTitle { get; set; }
+        public int DivisionID { get; set; }
         public int ModuleID { get; set; }
         [Required(ErrorMessage = "Please select a change type.")]
         public int ChangeTypeID { get; set; }

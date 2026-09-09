@@ -45,5 +45,34 @@ namespace VF_CR_Management_System.Business.ModuleHandler
 
             return modules;
         }
+
+        public async Task<List<Module>> GetModulesByDivisionAsync(int divisionId)
+        {
+            const string moduleQuery = @"
+                SELECT ModuleID, DivisionID, ModuleName, Active
+                FROM Module
+                WHERE Active = 1 AND DivisionID = @DivisionID
+                ORDER BY ModuleName";
+
+            var moduleParams = new DynamicParameters();
+            moduleParams.Add("@DivisionID", divisionId);
+
+            var moduleData = _connectionService.ReturnWithPara(moduleQuery, moduleParams);
+
+            if (moduleData == null || moduleData.Rows.Count == 0)
+                return new List<Module>();
+
+            var modules = moduleData.AsEnumerable()
+                .Select(r => new Module
+                {
+                    Id = r.Field<int>("ModuleID"),
+                    DivisionID = r.Field<int>("DivisionID"),
+                    ModuleName = r.Field<string>("ModuleName"),
+                    IsActive = r.Field<bool>("Active")
+                })
+                .ToList();
+
+            return modules;
+        }
     }
 }

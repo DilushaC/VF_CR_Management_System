@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VF_CR_Management_System.Business.ChangeRequestHandler;
+using VF_CR_Management_System.Business.DivisionHandler;
 using VF_CR_Management_System.Business.ModuleHandler;
 using VF_CR_Management_System.Business.UserHandler;
 
@@ -13,12 +14,14 @@ namespace VF_CR_Management_System.Controllers
         private readonly IChangeRequestService _changeRequestService;
         private readonly IUserService _userService;
         private readonly IModuleService _moduleService;
+        private readonly IDivisionService _divisionService;
 
-        public CRManagementController(IChangeRequestService changeRequestService, IUserService userService, IModuleService moduleService)
+        public CRManagementController(IChangeRequestService changeRequestService, IUserService userService, IModuleService moduleService, IDivisionService divisionService)
         {
             _changeRequestService = changeRequestService;
             _userService = userService;
             _moduleService = moduleService;
+            _divisionService = divisionService;
         }
 
         [HttpGet]
@@ -29,6 +32,9 @@ namespace VF_CR_Management_System.Controllers
 
             var modules = await _moduleService.GetAllModulesAsync();
             ViewBag.Modules = modules;
+
+            var divisions = await _divisionService.GetAllDivisionsAsync();
+            ViewBag.Divisions = divisions;
 
             return View();
         }
@@ -71,11 +77,6 @@ namespace VF_CR_Management_System.Controllers
             }
         }
 
-        // GET: /CRManagement/Edit/5
-        // Renders the same form/view as Create, but with the CRID passed through so the
-        // page's own script can fetch the CR's values (see GetChangeRequestData below) and
-        // populate the Change Type dropdown, Priority radios, Module dropdown, and Approver
-        // select2 client-side. No server-side model binding for those fields is needed here.
         [HttpGet]
         public async Task<IActionResult> Edit(int id)
         {
@@ -92,10 +93,6 @@ namespace VF_CR_Management_System.Controllers
             return View("Create");
         }
 
-        // GET: /CRManagement/GetChangeRequestData/5
-        // Returns the raw ID fields (ChangeTypeID, PriorityID, ModuleID, plus the assigned
-        // Approver and Summary/OtherType) for a single CR as JSON, so the Edit form's script
-        // can pre-select the dropdowns/radios/select2 without a full server round-trip render.
         [HttpGet]
         public async Task<IActionResult> GetChangeRequestData(int id)
         {
@@ -123,9 +120,6 @@ namespace VF_CR_Management_System.Controllers
             });
         }
 
-        // POST: /CRManagement/Edit/5
-        // Saves changes to an existing draft CR. Mirrors Create's collection-based approach
-        // so it works with the same form fields/partials.
         [HttpPost]
         public async Task<IActionResult> Edit(int id, IFormCollection collection)
         {
@@ -245,6 +239,24 @@ namespace VF_CR_Management_System.Controllers
             {
                 return StatusCode(500, new { message = "An unexpected error occurred while deleting the CR." });
             }
+        }
+
+
+        [HttpGet]
+        public async Task<IActionResult> GetModulesByDivision(int divisionId)
+        {
+            if (divisionId <= 0)
+            {
+                return Json(new List<object>());
+            }
+
+            var modules = await _moduleService.GetModulesByDivisionAsync(divisionId);
+
+            return Json(modules.Select(m => new
+            {
+                id = m.Id,
+                name = m.ModuleName
+            }));
         }
 
         [HttpGet]

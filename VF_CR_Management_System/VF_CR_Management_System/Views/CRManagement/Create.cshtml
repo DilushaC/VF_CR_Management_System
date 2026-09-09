@@ -3,7 +3,7 @@
 @{
     ViewData["Title"] = "Create CR";
     var users = ViewBag.Users as List<UserModel>;
-    var modules = ViewBag.Modules as List<Module>;
+    var divisions = ViewBag.Divisions as List<Division>;
     int crId = ViewBag.CRID != null ? (int)ViewBag.CRID : 0;
     var formAction = crId > 0
         ? Url.Action("Edit", "CRManagement", new { id = crId })
@@ -83,7 +83,7 @@
 
                             <div class="mb-3">
                                 <label class="form-label" for="Summary">Change Summary &amp; Business Justification</label>
-                                <textarea id="Summary" name="Summary" class="form-control" rows="6"
+                                <textarea id="Summary" name="Summary" class="form-control" rows="20"
                                           placeholder="Write the explanation here...">@Model?.Summary</textarea>
                                 <span asp-validation-for="Summary" class="text-danger"></span>
                             </div>
@@ -149,7 +149,30 @@
                                     <span asp-validation-for="PriorityID" class="text-danger d-block mt-1"></span>
                                 </div>
                             </div>
+
                             <div class="card border mb-3">
+                                <div class="card-header bg-light-subtle">
+                                    <h6 class="fs-15 mb-0">Division</h6>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label" for="DivisionID">Select Division</label>
+                                    <select id="DivisionID" name="DivisionID" class="form-control select2" data-toggle="select2">
+                                        <option value="" selected disabled hidden>Select Division</option>
+                                        @if (ViewBag.Divisions != null)
+                                        {
+                                            @foreach (var division in ViewBag.Divisions)
+                                            {
+                                                <option value="@division.Id">@division.DivisionName</option>
+                                            }
+                                        }
+                                    </select>
+                                    <span asp-validation-for="DivisionID" class="text-danger"></span>
+                                </div>
+                            </div>
+
+                            <!-- Module card is hidden until a Division is selected. Its options are
+                                 loaded via AJAX from GetModulesByDivision, filtered server-side. -->
+                            <div class="card border mb-3" id="moduleCard" style="display: none;">
                                 <div class="card-header bg-light-subtle">
                                     <h6 class="fs-15 mb-0">Module</h6>
                                 </div>
@@ -157,13 +180,6 @@
                                     <label class="form-label" for="ModuleID">Select Module</label>
                                     <select id="ModuleID" name="ModuleID" class="form-control select2" data-toggle="select2">
                                         <option value="" selected disabled hidden>Select Module</option>
-                                        @if (ViewBag.Modules != null)
-                                        {
-                                            @foreach (var module in ViewBag.Modules)
-                                            {
-                                                <option value="@module.Id">@module.ModuleName</option>
-                                            }
-                                        }
                                     </select>
                                     <span asp-validation-for="ModuleID" class="text-danger"></span>
                                 </div>
@@ -214,6 +230,57 @@
             var statusInput = document.getElementById('StatusID');
             var crId = parseInt(document.getElementById('CRID').value, 10) || 0;
 
+            var $division = $('#DivisionID');
+            var $moduleCard = $('#moduleCard');
+            var $module = $('#ModuleID');
+
+            // Loads modules for the given division via AJAX, replaces the Module
+            // select's options, and shows/hides the Module card accordingly.
+            // preselectId: optional module id to select once options are loaded (edit mode).
+            function loadModulesForDivision(divisionId, preselectId) {
+                if (!divisionId) {
+                    $module.empty().append('<option value="" selected disabled hidden>Select Module</option>').trigger('change');
+                    $moduleCard.hide();
+                    return;
+                }
+
+                fetch('@Url.Action("GetModulesByDivision", "CRManagement")' + '?divisionId=' + divisionId)
+                    .then(function (response) {
+                        if (!response.ok) { throw new Error('Failed to load modules.'); }
+                        return response.json();
+                    })
+                    .then(function (modules) {
+                        $module.empty();
+                        $module.append('<option value="" selected disabled hidden>Select Module</option>');
+                        modules.forEach(function (m) {
+                            $module.append('<option value="' + m.id + '">' + m.name + '</option>');
+                        });
+
+                        $moduleCard.show();
+
+                        if (preselectId) {
+                            $module.val(String(preselectId)).trigger('change');
+                        } else {
+                            $module.trigger('change');
+                        }
+                    })
+                    .catch(function (err) {
+                        Swal.fire({
+                            title: 'Could not load Modules',
+                            text: err.message,
+                            icon: 'error',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                    });
+            }
+
+            // User changes Division manually -> reload Module options for that division
+            $division.on('change', function () {
+                var divisionId = $(this).val();
+                loadModulesForDivision(divisionId, null);
+            });
+
             // SAVE button — StatusID = 1 (draft)
             saveBtn.addEventListener('click', function () {
                 Swal.fire({
@@ -239,6 +306,17 @@
             // SUBMIT button — StatusID = 2 (submitted/approved)
             form.addEventListener('submit', function (event) {
                 event.preventDefault(); // stop the form from submitting immediately
+
+                if (!$division.val()) {
+                    Swal.fire({
+                        title: 'Select a Division',
+                        text: 'Please select a Division before submitting.',
+                        icon: 'warning',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                    return;
+                }
 
                 Swal.fire({
                     title: 'Submit this Change Request?',
@@ -284,55 +362,57 @@
                         });
                     });
             }
+
+            // Populates the form from the JSON returned by GetChangeRequestData.
+            // Property names come back camelCased by ASP.NET Core's default JSON serializer
+            // (changeTypeID, otherType, priorityID, divisionID, moduleID, summary) — adjust
+            // here if your controller action's JSON casing differs.
+            function populateFormFromData(data) {
+                // Summary
+                if (data.summary) {
+                    document.getElementById('Summary').value = data.summary;
+                }
+
+                if (data.changeTitle) {
+                    document.getElementById('ChangeTitle').value = data.changeTitle;
+                }
+
+                // Change Type radio
+                if (data.changeTypeID) {
+                    var typeRadio = document.querySelector('input[name="ChangeTypeID"][value="' + data.changeTypeID + '"]');
+                    if (typeRadio) {
+                        typeRadio.checked = true;
+                        toggleOtherTextarea();
+                    }
+                }
+                if (data.otherType) {
+                    document.getElementById('otherTextarea').value = data.otherType;
+                }
+
+                // Priority radio
+                if (data.priorityID) {
+                    var priorityRadio = document.querySelector('input[name="PriorityID"][value="' + data.priorityID + '"]');
+                    if (priorityRadio) {
+                        priorityRadio.checked = true;
+                    }
+                }
+
+                // Division select2 — set first, then load & preselect the matching Module
+                // once its options come back from the server.
+                if (data.divisionID) {
+                    $division.val(String(data.divisionID)).trigger('change.select2');
+                    loadModulesForDivision(data.divisionID, data.moduleID);
+                }
+
+                // Approver select2 — ApproverID options are keyed by UserName, not a numeric id,
+                // so this expects the endpoint to return the approver's UserName (e.g. as
+                // data.approverUserName). Adjust the property name to whatever your
+                // GetChangeRequestByIdAsync/GetChangeRequestData actually returns for this.
+                if (data.approverUserName) {
+                    $('#ApproverID').val(data.approverUserName).trigger('change');
+                }
+            }
         });
-
-        // Populates the form from the JSON returned by GetChangeRequestData.
-        // Property names come back camelCased by ASP.NET Core's default JSON serializer
-        // (changeTypeID, otherType, priorityID, moduleID, summary) — adjust here if your
-        // controller action's JSON casing differs.
-        function populateFormFromData(data) {
-            // Summary
-            if (data.summary) {
-                document.getElementById('Summary').value = data.summary;
-            }
-
-            if (data.summary) {
-                document.getElementById('ChangeTitle').value = data.changeTitle;
-            }
-
-            // Change Type radio
-            if (data.changeTypeID) {
-                var typeRadio = document.querySelector('input[name="ChangeTypeID"][value="' + data.changeTypeID + '"]');
-                if (typeRadio) {
-                    typeRadio.checked = true;
-                    toggleOtherTextarea();
-                }
-            }
-            if (data.otherType) {
-                document.getElementById('otherTextarea').value = data.otherType;
-            }
-
-            // Priority radio
-            if (data.priorityID) {
-                var priorityRadio = document.querySelector('input[name="PriorityID"][value="' + data.priorityID + '"]');
-                if (priorityRadio) {
-                    priorityRadio.checked = true;
-                }
-            }
-
-            // Module select2
-            if (data.moduleID) {
-                $('#ModuleID').val(String(data.moduleID)).trigger('change');
-            }
-
-            // Approver select2 — ApproverID options are keyed by UserName, not a numeric id,
-            // so this expects the endpoint to return the approver's UserName (e.g. as
-            // data.approverUserName). Adjust the property name to whatever your
-            // GetChangeRequestByIdAsync/GetChangeRequestData actually returns for this.
-            if (data.approverUserName) {
-                $('#ApproverID').val(data.approverUserName).trigger('change');
-            }
-        }
 
         function submitChangeRequest() {
             var form = document.getElementById('crForm');

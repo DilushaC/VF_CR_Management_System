@@ -10,5 +10,6 @@ namespace VF_CR_Management_System.Business.ModuleHandler
     public interface IModuleService
     {
         Task<List<Module>> GetAllModulesAsync();
+        Task<List<Module>> GetModulesByDivisionAsync(int divisionId);
     }
 }
