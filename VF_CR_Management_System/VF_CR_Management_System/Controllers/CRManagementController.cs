@@ -54,7 +54,7 @@ namespace VF_CR_Management_System.Controllers
                     {
                         success = true,
                         message = "Change Request created successfully",
-                        redirectUrl = Url.Action("Index", "CRManagement")
+                        redirectUrl = Url.Action("DraftTable", "CRManagement")
                     });
                 }
                 else
@@ -139,7 +139,7 @@ namespace VF_CR_Management_System.Controllers
                     {
                         success = true,
                         message = "Change Request updated successfully",
-                        redirectUrl = Url.Action("Index", "CRManagement")
+                        redirectUrl = Url.Action("DraftTable", "CRManagement")
                     });
                 }
                 else
@@ -293,15 +293,29 @@ namespace VF_CR_Management_System.Controllers
             return View();
         }
 
-        [HttpGet]
-        public async Task<IActionResult> Index(string filter = "all")
+        //[HttpGet]
+        //public async Task<IActionResult> Index(string filter = "all")
+        //{
+        //    var users = await _userService.GetAllUsersAsync();
+        //    ViewBag.Users = users;
+        //    var empNo = HttpContext.Session.GetString("EmpNo");
+        //    var changeRequests = await _changeRequestService.GetAllChangeRequestsAsync(empNo, filter);
+        //    ViewBag.CurrentFilter = filter;
+        //    return View(changeRequests);
+        //}
+
+        public async Task<IActionResult> DraftTable()
         {
-            var users = await _userService.GetAllUsersAsync();
-            ViewBag.Users = users;
             var empNo = HttpContext.Session.GetString("EmpNo");
-            var changeRequests = await _changeRequestService.GetAllChangeRequestsAsync(empNo, filter);
-            ViewBag.CurrentFilter = filter;
-            return View(changeRequests);
+            var crs = await _changeRequestService.GetAllChangeRequestsDraftsAsync(empNo);
+            return View(crs);
+        }
+
+        public async Task<IActionResult> SubmissionTable()
+        {
+            var empNo = HttpContext.Session.GetString("EmpNo");
+            var crs = await _changeRequestService.GetAllChangeRequestsSubmissionsAsync(empNo);
+            return View(crs);
         }
     }
 }

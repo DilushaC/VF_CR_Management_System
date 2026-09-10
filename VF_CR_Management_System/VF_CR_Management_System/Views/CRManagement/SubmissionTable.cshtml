@@ -1,0 +1,399 @@
+﻿@model IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>
+@{
+    ViewData["Title"] = "CR Management";
+}
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <h4 class="header-title mb-0">Change Requests</h4>
+                </div>
+
+                <style>
+                    #basic-datatable {
+                        border-collapse: separate;
+                        border-spacing: 0;
+                    }
+
+                        #basic-datatable > thead > tr > th:last-child,
+                        #basic-datatable > tbody > tr > td:last-child {
+                            position: sticky;
+                            right: 0;
+                            z-index: 2;
+                        }
+
+                        #basic-datatable > thead > tr > th:last-child {
+                            z-index: 3;
+                            background-color: #fff;
+                        }
+
+                        #basic-datatable > tbody > tr > td:last-child {
+                            background-color: #fff;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd) > td:last-child {
+                            background-color: #f2f2f2;
+                        }
+
+                        #basic-datatable > tbody > tr:hover > td:last-child {
+                            background-color: #ededed;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd):hover > td:last-child {
+                            background-color: #e0e0e0;
+                        }
+
+                        #basic-datatable > thead > tr > th:last-child::before,
+                        #basic-datatable > tbody > tr > td:last-child::before {
+                            content: "";
+                            position: absolute;
+                            top: 0;
+                            bottom: 0;
+                            left: 0;
+                            width: 8px;
+                            box-shadow: inset 6px 0 6px -6px rgba(0, 0, 0, 0.25);
+                            pointer-events: none;
+                        }
+
+                    #crDetailsModal .swal2-container {
+                        position: fixed !important;
+                        z-index: 1080 !important;
+                    }
+
+                    #basic-datatable td.title-cell {
+                        max-width: 220px;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                    }
+                </style>
+
+                <div class="table-responsive">
+                    <table id="basic-datatable" class="table table-striped nowrap w-100">
+                        <thead>
+                            <tr>
+                                <th>CR Number</th>
+                                <th>Title</th>
+                                <th>Change Type</th>
+                                <th>Division</th>
+                                <th>Module</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Requested By</th>
+                                <th>Requested Date</th>
+                                <th>View</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model != null)
+                            {
+                                @foreach (var cr in Model)
+                                {
+                                    <tr>
+                                        <td title="@cr.CRNumber">@cr.CRNumber</td>
+                                        <td class="title-cell" title="@cr.ChangeTitle">@cr.ChangeTitle</td>
+                                        <td>@cr.ChangeType</td>
+                                        <td>@(string.IsNullOrEmpty(cr.Division) ? "—" : cr.Division)</td>
+                                        <td>@cr.Module</td>
+                                        <td>
+                                            @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger">@cr.Priority</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Priority
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (string.Equals(cr.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger"><i class="ri-close-line"></i> @cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-success">@cr.Status</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Status
+                                            }
+                                        </td>
+                                        <td>@cr.RequestedBy</td>
+                                        <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
+                                        <td>
+                                            <div class="d-flex gap-1">
+                                                <button type="button"
+                                                        class="btn btn-sm btn-info btn-view"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#crDetailsModal"
+                                                        data-bs-crid="@cr.CRID"
+                                                        data-bs-crnumber="@cr.CRNumber"
+                                                        data-bs-title="@cr.ChangeTitle"
+                                                        data-bs-summary="@cr.Summary"
+                                                        data-bs-changetype="@cr.ChangeType"
+                                                        data-bs-division="@cr.Division"
+                                                        data-bs-module="@cr.Module"
+                                                        data-bs-priority="@cr.Priority"
+                                                        data-bs-status="@cr.Status"
+                                                        data-bs-requestedby="@cr.RequestedBy"
+                                                        data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                        title="View">
+                                                    <i class="ri-eye-line"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CR Details Modal (read-only view, populated via event.relatedTarget) -->
+<div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="crDetailsModalLabel">Change Request Details</h5>
+                <div class="ms-auto d-flex align-items-center">
+                    <label class="col-form-label fw-semibold me-2">CR Number:</label>
+                    <span id="modal-crnumber" class="fw-bold"></span>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Title:</label>
+                        <span id="modal-title"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Status:</label>
+                        <span id="modal-status"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
+                        <span id="modal-changetype"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Priority:</label>
+                        <span id="modal-priority"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Division:</label>
+                        <span id="modal-division"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Module:</label>
+                        <span id="modal-module"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
+                        <span id="modal-requestedby"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
+                        <span id="modal-requesteddate"></span>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
+                        <span id="modal-summary"></span>
+                    </div>
+                    <div class="col-md-6" id="modal-approver-wrapper">
+                        <div class="card-body">
+                            <label class="form-label" for="modal-approver">Select Implementer</label>
+                            <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
+                                <option value="" selected disabled hidden>Select User</option>
+                                @if (ViewBag.Users != null)
+                                {
+                                    @foreach (var user in ViewBag.Users)
+                                    {
+                                        <option value="@user.UserName">@user.FirstName @user.LastName</option>
+                                    }
+                                }
+                            </select>
+                            <span id="modal-approver-error" class="text-danger d-none">Please select an user.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" id="modal-approve-btn" class="btn btn-success">Approve</button>
+                <button type="button" id="modal-reject-btn" class="btn btn-danger">Reject</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#basic-datatable').DataTable({
+                responsive: false,
+                paging: true,
+                pageLength: 10,
+                lengthChange: true,
+                order: [[8, 'desc']],
+                columnDefs: [
+                    { orderable: false, targets: 9 },
+                    { orderable: false, targets: 1 }
+                ]
+            });
+        });
+
+        // Populate the CR Details modal from the button that triggered it
+        var crDetailsModal = document.getElementById('crDetailsModal');
+        var $approveBtn = $('#modal-approve-btn');
+        var $rejectBtn = $('#modal-reject-btn');
+
+        crDetailsModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+
+            var crid = button.getAttribute('data-bs-crid');
+            var crnumber = button.getAttribute('data-bs-crnumber');
+            var title = button.getAttribute('data-bs-title');
+            var summary = button.getAttribute('data-bs-summary');
+            var changetype = button.getAttribute('data-bs-changetype');
+            var priority = button.getAttribute('data-bs-priority');
+            var division = button.getAttribute('data-bs-division');
+            var module = button.getAttribute('data-bs-module');
+            var status = button.getAttribute('data-bs-status');
+            var requestedby = button.getAttribute('data-bs-requestedby');
+            var requesteddate = button.getAttribute('data-bs-requesteddate');
+
+            crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
+            crDetailsModal.querySelector('#modal-title').textContent = title || '';
+            crDetailsModal.querySelector('#modal-status').textContent = status || '';
+            crDetailsModal.querySelector('#modal-changetype').textContent = changetype || '';
+            crDetailsModal.querySelector('#modal-priority').textContent = priority || '';
+            crDetailsModal.querySelector('#modal-division').textContent = division || '';
+            crDetailsModal.querySelector('#modal-module').textContent = module || '';
+            crDetailsModal.querySelector('#modal-requestedby').textContent = requestedby || '';
+            crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
+            crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
+
+            $(crDetailsModal).data('crid', crid);
+
+            $('#modal-approver').val('').trigger('change');
+            $('#modal-approver-error').addClass('d-none');
+        });
+
+        $(crDetailsModal).on('shown.bs.modal', function () {
+            $('#modal-approver').select2({
+                dropdownParent: $(crDetailsModal)
+            });
+        });
+
+        $approveBtn.on('click', function () {
+            var crid = $(crDetailsModal).data('crid');
+            var approverId = $('#modal-approver').val();
+
+            if (!approverId) {
+                $('#modal-approver-error').removeClass('d-none');
+                return;
+            }
+            $('#modal-approver-error').addClass('d-none');
+
+            Swal.fire({
+                target: crDetailsModal,
+                title: 'Approve this Change Request?',
+                text: 'This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, approve it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#0acf97',
+                cancelButtonColor: '#6c757d'
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: '@Url.Action("Approve", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid, ApproverID: approverId },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Approved!',
+                            text: 'The Change Request has been approved.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to approve the CR. Please try again.';
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+        });
+
+        $rejectBtn.on('click', function () {
+            var crid = $(crDetailsModal).data('crid');
+
+            Swal.fire({
+                target: crDetailsModal,
+                title: 'Reject this Change Request?',
+                input: 'textarea',
+                inputPlaceholder: 'Enter reason for rejection...',
+                inputAttributes: { 'aria-label': 'Rejection reason' },
+                showCancelButton: true,
+                confirmButtonText: 'Yes, reject it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#fa5c7c',
+                cancelButtonColor: '#6c757d',
+                inputValidator: function (value) {
+                    if (!value || !value.trim()) {
+                        return 'Please provide a reason for rejection.';
+                    }
+                }
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+                var reason = result.value;
+
+                $.ajax({
+                    url: '@Url.Action("Reject", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid, RejectReason: reason },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Rejected',
+                            text: 'The Change Request has been rejected.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to reject the CR. Please try again.';
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+}

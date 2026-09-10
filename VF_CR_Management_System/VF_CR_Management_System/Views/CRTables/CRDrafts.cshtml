@@ -3,39 +3,19 @@
     ViewData["Title"] = "CR Management";
     var currentFilter = ViewBag.CurrentFilter as string ?? "all";
 }
+
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <h4 class="header-title mb-0">Change Requests</h4>
-
-                    <ul class="nav nav-pills mb-0 cr-filter-tabs" id="crFilterTabs">
-                        <li class="nav-item">
-                            <a href="#" data-filter="all" aria-expanded="@(currentFilter == "all" ? "true" : "false")"
-                               class="nav-link rounded-0 @(currentFilter == "all" ? "active" : "")">
-                                All
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" data-filter="createdByMe" aria-expanded="@(currentFilter == "createdByMe" ? "true" : "false")"
-                               class="nav-link rounded-0 @(currentFilter == "createdByMe" ? "active" : "")">
-                                Created by Me
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" data-filter="assignedToMe" aria-expanded="@(currentFilter == "assignedToMe" ? "true" : "false")"
-                               class="nav-link rounded-0 @(currentFilter == "assignedToMe" ? "active" : "")">
-                                Assigned to Me
-                            </a>
-                        </li>
-                    </ul>
+                    <h4 class="header-title mb-0">Draft Change Requests</h4>
                 </div>
 
                 <style>
                     /* Freeze the "View" column (last column) while the table scrolls horizontally */
                     #basic-datatable {
-                        border-collapse: separate; /* required for position:sticky to behave inside a bordered/striped table */
+                        border-collapse: separate;
                         border-spacing: 0;
                     }
 
@@ -46,24 +26,19 @@
                             z-index: 2;
                         }
 
-                        /* Header needs to sit above body cells and above the sort icons */
                         #basic-datatable > thead > tr > th:last-child {
                             z-index: 3;
                             background-color: #fff;
                         }
 
-                        /* Give the sticky body cell an opaque background so scrolled-away
-                       columns don't show through underneath it */
                         #basic-datatable > tbody > tr > td:last-child {
                             background-color: #fff;
                         }
 
-                        /* Match Bootstrap's table-striped tint on odd rows */
                         #basic-datatable.table-striped > tbody > tr:nth-of-type(odd) > td:last-child {
                             background-color: #f2f2f2;
                         }
 
-                        /* Match table-hover tint (with the striped+hover combo too) */
                         #basic-datatable > tbody > tr:hover > td:last-child {
                             background-color: #ededed;
                         }
@@ -72,8 +47,6 @@
                             background-color: #e0e0e0;
                         }
 
-                        /* A subtle divider so the frozen column reads as separate from the
-                       scrolling content behind it */
                         #basic-datatable > thead > tr > th:last-child::before,
                         #basic-datatable > tbody > tr > td:last-child::before {
                             content: "";
@@ -85,43 +58,12 @@
                             box-shadow: inset 6px 0 6px -6px rgba(0, 0, 0, 0.25);
                             pointer-events: none;
                         }
-                    .cr-filter-tabs {
-                        gap: 0.5rem;
-                    }
 
-                        .cr-filter-tabs .nav-item .nav-link {
-                            font-size: 0.8125rem !important;
-                            padding: 0.3rem 0.75rem !important;
-                            color: #7a3b47 !important;
-                            background-color: #f7eef0 !important;
-                            font-weight: 500;
-                            border: none;
-                            border-radius: 0.25rem;
-                        }
-
-                            .cr-filter-tabs .nav-item .nav-link:hover {
-                                background-color: #e3c3ca !important;
-                                color: #7a3b47 !important;
-                            }
-
-                            .cr-filter-tabs .nav-item .nav-link.active {
-                                background-color: #8f3b4c !important;
-                                color: #ffffff !important;
-                            }
-
-                    /* Fix: when SweetAlert2 is targeted at a Bootstrap modal to avoid its
-                                                                                   focus-trap (Bootstrap otherwise yanks focus back to the modal on
-                                                                                   every keystroke, making the reject textarea untypeable), force the
-                                                                                   swal container back to a normal fixed, full-screen overlay instead
-                                                                                   of being confined/clipped by the modal's box. */
                     #crDetailsModal .swal2-container {
                         position: fixed !important;
-                        z-index: 1080 !important; /* above Bootstrap modal (1055) and its backdrop (1050) */
+                        z-index: 1080 !important;
                     }
 
-                    /* Prevent long Title values from stretching the table — truncate with
-                                                               an ellipsis and reveal the full text via native title-attribute tooltip
-                                                               or the existing details modal. */
                     #basic-datatable td.title-cell {
                         max-width: 220px;
                         white-space: nowrap;
@@ -130,9 +72,6 @@
                     }
                 </style>
 
-                <!-- Horizontal scroll wrapper: replaces the Responsive extension's
-                     expand/+ button behavior. If the table is wider than the card,
-                     a scrollbar appears directly underneath instead of collapsing columns. -->
                 <div class="table-responsive">
                     <table id="basic-datatable" class="table table-striped nowrap w-100">
                         <thead>
@@ -195,7 +134,6 @@
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
                                             <div class="d-flex gap-1">
-                                                <!-- View icon only, no expand button -->
                                                 <button type="button"
                                                         class="btn btn-sm btn-info btn-view"
                                                         data-bs-toggle="modal"
@@ -222,10 +160,11 @@
                         </tbody>
                     </table>
                 </div>
-            </div> <!-- end card body-->
-        </div> <!-- end card -->
-    </div><!-- end col-->
-</div> <!-- end row-->
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- CR Details Modal (read-only view, populated via event.relatedTarget) -->
 <div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -322,12 +261,6 @@
                     { orderable: false, targets: 9 },  // View column (index 8) — buttons only
                     { orderable: false, targets: 1 }   // Title column (index 1) — long free text, not meaningful to sort
                 ]
-            });
-
-            $('#crFilterTabs').on('click', 'a.nav-link', function (e) {
-                e.preventDefault();
-                var selected = $(this).data('filter');
-                window.location.href = '@Url.Action("Index", "CRManagement")' + '?filter=' + selected;
             });
 
             $('#basic-datatable').on('click', '.btn-reject', function () {

@@ -349,77 +349,55 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return $"{prefix}{(lastNumber + 1):D3}";   // <-- D3, not D5
         }
 
-        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync(string empNo, string filter)
-        {
-            const int assignStepId = 7;
+        //public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync(string empNo, string filter)
+        //{
+        //    const int draftStatusId = 1;
 
-            string filterCondition = filter switch
-            {
-                "createdByMe" => "AND cr.RequesterUserName = @EmpNo",
+        //    string filterCondition = filter switch
+        //    {
+        //        "draft" => "AND cr.RequesterUserName = @EmpNo AND cr.StatusID = @DraftStatusId",
 
-                "assignedToMe" => @"AND cr.CRNumber NOT LIKE 'Waiting%'
-                    AND EXISTS (
-                        SELECT 1
-                        FROM [CRManagementDB].[dbo].[Approval] a
-                        WHERE a.CRID = cr.CRID
-                            AND a.AssignedTo = @EmpNo
-                            AND a.StepID = @StepID
-                            AND a.Active = 1
-                            AND a.Decision IS NULL
-                    )",
+        //        _ => "AND cr.RequesterUserName = @EmpNo"
+        //    };
 
-                            _ => @"AND (
-                cr.RequesterUserName = @EmpNo
-                OR (
-                    cr.CRNumber NOT LIKE 'Waiting%'
-                    AND EXISTS (
-                        SELECT 1
-                        FROM [CRManagementDB].[dbo].[Approval] a
-                        WHERE a.CRID = cr.CRID
-                            AND a.AssignedTo = @EmpNo
-                            AND a.StepID = @StepID
-                            AND a.Active = 1
-                            AND a.Decision IS NULL
-                    )
-                )
-                )"
-                        };
+        //    var sql = $@"
+        //        SELECT
+        //            cr.CRID,
+        //            cr.CRNumber,
+        //            cr.ChangeTitle,
+        //            cr.Summary,
+        //            ct.ChangeTypeName AS ChangeType,
+        //            p.PriorityName AS Priority,
+        //            cr.DivisionID,
+        //            d.DivisionName AS Division,
+        //            cr.ModuleID,
+        //            m.ModuleName AS Module,
+        //            s.StatusName AS Status,
+        //            cr.RequesterUserName AS RequestedBy,
+        //            cr.RequestedDate
+        //        FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
+        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
+        //            ON ct.ChangeTypeID = cr.ChangeTypeID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
+        //            ON p.PriorityID = cr.PriorityID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
+        //            ON d.DivisionID = cr.DivisionID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
+        //            ON m.ModuleID = cr.ModuleID
+        //        LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
+        //            ON s.StatusID = cr.StatusID
+        //        WHERE cr.Active = 1
+        //            {filterCondition}
+        //        ORDER BY
+        //            cr.RequestedDate DESC,
+        //            cr.CRID DESC;";
 
-            var sql = $@"
-                SELECT
-                    cr.CRID,
-                    cr.CRNumber,
-                    cr.ChangeTitle,
-                    cr.Summary,
-                    ct.ChangeTypeName AS ChangeType,
-                    p.PriorityName AS Priority,
-                    cr.DivisionID,
-                    d.DivisionName AS Division,
-                    cr.ModuleID,
-                    m.ModuleName AS Module,
-                    s.StatusName AS Status,
-                    cr.RequesterUserName AS RequestedBy,
-                    cr.RequestedDate
-                FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
-                    ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
-                    ON p.PriorityID = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
-                    ON d.DivisionID = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
-                    ON m.ModuleID = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
-                    ON s.StatusID = cr.StatusID
-                WHERE cr.Active = 1
-                    {filterCondition}
-                ORDER BY
-                    cr.RequestedDate DESC,
-                    cr.CRID DESC;";
+        //    var result = _connectionService.Query<ChangeRequest>(
+        //        sql,
+        //        new { EmpNo = empNo, DraftStatusId = draftStatusId });
 
-            var result = _connectionService.Query<ChangeRequest>(sql, new { EmpNo = empNo, StepID = assignStepId });
-            return Task.FromResult<IEnumerable<ChangeRequest>>(result);
-        }
+        //    return Task.FromResult<IEnumerable<ChangeRequest>>(result);
+        //}
         public async Task<bool> ApproveChangeRequestAsync(int crId, int approverId, string approvedByEmpId)
         {
             if (crId <= 0)
@@ -463,6 +441,84 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
 
             return statusRowsAffected > 0;
+        }
+
+        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsDraftsAsync(string empNo)
+        {
+            const int draftStatusId = 1;
+
+            var sql = $@"
+                SELECT
+                    cr.CRID,
+                    cr.CRNumber,
+                    cr.ChangeTitle,
+                    cr.Summary,
+                    ct.ChangeTypeName AS ChangeType,
+                    p.PriorityName AS Priority,
+                    cr.DivisionID,
+                    d.DivisionName AS Division,
+                    cr.ModuleID,
+                    m.ModuleName AS Module,
+                    s.StatusName AS Status,
+                    cr.RequesterUserName AS RequestedBy,
+                    cr.RequestedDate
+                FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+                WHERE cr.Active = 1
+                    AND cr.RequesterUserName = @EmpNo
+                    AND cr.StatusID = @DraftStatusId
+                ORDER BY
+                    cr.RequestedDate DESC,
+                    cr.CRID DESC;";
+
+            var result = _connectionService.Query<ChangeRequest>(
+                sql,
+                new { EmpNo = empNo, DraftStatusId = draftStatusId });
+
+            return Task.FromResult<IEnumerable<ChangeRequest>>(result);
+        }
+
+        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
+        {
+            const int draftStatusId = 2;
+
+            var sql = $@"
+                SELECT
+                    cr.CRID,
+                    cr.CRNumber,
+                    cr.ChangeTitle,
+                    cr.Summary,
+                    ct.ChangeTypeName AS ChangeType,
+                    p.PriorityName AS Priority,
+                    cr.DivisionID,
+                    d.DivisionName AS Division,
+                    cr.ModuleID,
+                    m.ModuleName AS Module,
+                    s.StatusName AS Status,
+                    cr.RequesterUserName AS RequestedBy,
+                    cr.RequestedDate
+                FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+                WHERE cr.Active = 1
+                    AND cr.RequesterUserName = @EmpNo
+                    AND cr.StatusID = @DraftStatusId
+                ORDER BY
+                    cr.RequestedDate DESC,
+                    cr.CRID DESC;";
+
+            var result = _connectionService.Query<ChangeRequest>(
+                sql,
+                new { EmpNo = empNo, DraftStatusId = draftStatusId });
+
+            return Task.FromResult<IEnumerable<ChangeRequest>>(result);
         }
 
         public async Task<bool> RejectChangeRequestAsync(int crId, string rejectReason, string rejectedByEmpId)
