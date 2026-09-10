@@ -481,7 +481,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
             const int draftStatusId = 2;
-            const int approvalStepId = 8;
 
             var sql = $@"
                 SELECT
@@ -497,19 +496,19 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     m.ModuleName AS Module,
                     s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,
-                    cr.RequestedDate,
-                    a.AssignedTo AS CurrentApproverEmpNo
+                    cr.ApproverUserName AS ApproverUserName,
+                    cr.RequestedDate
                 FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
-                LEFT JOIN [CRManagementDB].[dbo].[Approval] AS a
-                    ON a.CRID = cr.CRID
-                        AND a.StepID = @ApprovalStepId
-                        AND a.Active = 1
-                        AND a.Decision IS NULL
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
+                    ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
+                    ON p.PriorityID = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
+                    ON d.DivisionID = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
+                    ON m.ModuleID = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
+                    ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND cr.RequesterUserName = @EmpNo
                     AND cr.StatusID = @DraftStatusId
@@ -519,7 +518,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var result = _connectionService.Query<ChangeRequest>(
                 sql,
-                new { EmpNo = empNo, DraftStatusId = draftStatusId, ApprovalStepId = approvalStepId });
+                new
+                {
+                    EmpNo = empNo,
+                    DraftStatusId = draftStatusId
+                });
 
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
         }

@@ -141,7 +141,7 @@
                                                         data-bs-status="@cr.Status"
                                                         data-bs-requestedby="@cr.RequestedBy"
                                                         data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
-                                                        data-bs-currentapprover="@cr.CurrentApproverEmpNo"
+                                                        data-bs-currentapprover="@cr.ApproverUserName"
                                                         title="View">
                                                     <i class="ri-eye-line"></i>
                                                 </button>
@@ -199,6 +199,10 @@
                     <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
                         <span id="modal-requestedby"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Approver:</label>
+                        <span id="modal-currentapprover"></span>
                     </div>
                     <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
