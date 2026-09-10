@@ -111,19 +111,33 @@
                                         <td>@cr.RequestedBy</td>
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
-                                            <div class="d-flex gap-1">
-                                                <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
-                                                   class="btn btn-sm btn-outline-primary"
-                                                   title="Edit">
-                                                    <i class="ri-edit-line"></i>
-                                                </a>
-                                                <button type="button"
-                                                        class="btn btn-sm btn-danger btn-delete-cr"
-                                                        data-id="@cr.CRID"
-                                                        title="Delete">
-                                                    <i class="ri-delete-bin-line"></i>
-                                                </button>
-                                            </div>
+                                            @if(cr.Status == "Draft")
+                                            {
+                                                <div class="d-flex gap-1">
+                                                    <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
+                                                       class="btn btn-sm btn-outline-primary"
+                                                       title="Edit">
+                                                        <i class="ri-edit-line"></i>
+                                                    </a>
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-danger btn-delete-cr"
+                                                            data-id="@cr.CRID"
+                                                            title="Delete">
+                                                        <i class="ri-delete-bin-line"></i>
+                                                    </button>
+                                                </div>
+                                            }
+                                            @if (cr.Status == "Submitted")
+                                            {
+                                                <div class="d-flex gap-1">
+                                                    <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
+                                                       class="btn btn-sm btn-outline-primary"
+                                                       title="Edit">
+                                                        <i class="ri-eye-line"></i>
+                                                    </a>
+                                                </div>
+                                            }
+
                                         </td>
                                     </tr>
                                 }

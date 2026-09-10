@@ -296,12 +296,21 @@
             crDetailsModal.querySelector('#modal-requestedby').textContent = requestedby || '';
             crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
             crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
+            crDetailsModal.querySelector('#modal-currentapprover').textContent = currentApprover || '';
 
             $(crDetailsModal).data('crid', crid);
 
-            // Only show Approve/Reject when the logged-in user is the AssignedTo
-            // on the CR's current (StepID = 8) pending approval row.
-            var canAct = normalize(currentApprover) !== '' && normalize(currentApprover) === normalize(currentEmpNo);
+            var normalizedStatus = normalize(status);
+
+            // A CR that's already been decided (Approved or Rejected) is no longer
+            // actionable — Approve/Reject only make sense while it's still pending.
+            var isDecided = normalizedStatus === 'approved' || normalizedStatus === 'rejected';
+
+            // Only show Approve/Reject when the CR isn't already decided AND the
+            // logged-in user is the assigned approver on it.
+            var canAct = !isDecided &&
+                normalize(currentApprover) !== '' &&
+                normalize(currentApprover) === normalize(currentEmpNo);
 
             if (canAct) {
                 $approveBtn.removeClass('d-none');

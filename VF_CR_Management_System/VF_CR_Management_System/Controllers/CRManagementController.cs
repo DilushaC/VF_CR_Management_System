@@ -301,8 +301,9 @@ namespace VF_CR_Management_System.Controllers
         public async Task<IActionResult> SubmissionTable()
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
-
             ViewBag.CurrentEmpNo = empNo;
+            var users = await _userService.GetAllUsersAsync();
+            ViewBag.Users = users;
             var crs = await _changeRequestService.GetAllChangeRequestsSubmissionsAsync(empNo);
             return View(crs);
         }
@@ -310,7 +311,6 @@ namespace VF_CR_Management_System.Controllers
         public async Task<IActionResult> RejectionsTable()
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
-
             ViewBag.CurrentEmpNo = empNo;
             var crs = await _changeRequestService.GetAllChangeRequestsRejectionsAsync(empNo);
             return View(crs);

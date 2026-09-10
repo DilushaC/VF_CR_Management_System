@@ -466,10 +466,12 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND cr.RequesterUserName = @EmpNo
-                    AND cr.StatusID = @DraftStatusId
+                    AND cr.StatusID in (1,2)
                 ORDER BY
                     cr.RequestedDate DESC,
                     cr.CRID DESC;";
+            //AND cr.StatusID = @DraftStatusId
+
 
             var result = _connectionService.Query<ChangeRequest>(
                 sql,
@@ -481,6 +483,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
             const int draftStatusId = 2;
+
 
             var sql = $@"
                 SELECT
@@ -496,9 +499,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     m.ModuleName AS Module,
                     s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,
-                    cr.ApproverUserName AS ApproverUserName,
+                    App.AssignedTo AS ApproverUserName,
                     cr.RequestedDate
-                FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
+                FROM [dbo].[Approval] AS App
+                INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
                     ON ct.ChangeTypeID = cr.ChangeTypeID
                 LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
@@ -510,11 +514,47 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
-                    AND cr.StatusID = @DraftStatusId
-                    AND (cr.RequesterUserName = @EmpNo OR cr.ApproverUserName = @EmpNo)
+                    AND App.StepID = 7
+	
+                    AND App.AssignedTo = @EmpNo
                 ORDER BY
                     cr.RequestedDate DESC,
-                    cr.CRID DESC;";
+                    cr.CRID DESC;
+                ";
+
+            //var sql = $@"
+            //    SELECT
+            //        cr.CRID,
+            //        cr.CRNumber,
+            //        cr.ChangeTitle,
+            //        cr.Summary,
+            //        ct.ChangeTypeName AS ChangeType,
+            //        p.PriorityName AS Priority,
+            //        cr.DivisionID,
+            //        d.DivisionName AS Division,
+            //        cr.ModuleID,
+            //        m.ModuleName AS Module,
+            //        s.StatusName AS Status,
+            //        cr.RequesterUserName AS RequestedBy,
+            //        cr.ApproverUserName AS ApproverUserName,
+            //        cr.RequestedDate
+            //    FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
+            //    LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
+            //        ON ct.ChangeTypeID = cr.ChangeTypeID
+            //    LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
+            //        ON p.PriorityID = cr.PriorityID
+            //    LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
+            //        ON d.DivisionID = cr.DivisionID
+            //    LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
+            //        ON m.ModuleID = cr.ModuleID
+            //    LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
+            //        ON s.StatusID = cr.StatusID
+            //    WHERE cr.Active = 1
+            //        AND cr.StatusID = @DraftStatusId
+            //        AND cr.ApproverUserName = @EmpNo
+            //    ORDER BY
+            //        cr.RequestedDate DESC,
+            //        cr.CRID DESC;";
 
             var result = _connectionService.Query<ChangeRequest>(
                 sql,
@@ -545,9 +585,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     m.ModuleName AS Module,
                     s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,
-                    cr.ApproverUserName AS ApproverUserName,
+                    App.AssignedTo AS ApproverUserName,
                     cr.RequestedDate
-                FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
+                FROM [dbo].[Approval] AS App
+                INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
                     ON ct.ChangeTypeID = cr.ChangeTypeID
                 LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
@@ -559,11 +600,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
-                    AND cr.StatusID = @DraftStatusId
-                    AND (cr.RequesterUserName = @EmpNo OR cr.ApproverUserName = @EmpNo)
+                    AND App.StepID = 13
+	
+                    AND App.AssignedTo = @EmpNo
                 ORDER BY
                     cr.RequestedDate DESC,
-                    cr.CRID DESC;";
+                    cr.CRID DESC;
+                ";
 
             var result = _connectionService.Query<ChangeRequest>(
                 sql,
