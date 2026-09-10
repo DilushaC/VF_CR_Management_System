@@ -306,5 +306,14 @@ namespace VF_CR_Management_System.Controllers
             var crs = await _changeRequestService.GetAllChangeRequestsSubmissionsAsync(empNo);
             return View(crs);
         }
+
+        public async Task<IActionResult> RejectionsTable()
+        {
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
+            ViewBag.CurrentEmpNo = empNo;
+            var crs = await _changeRequestService.GetAllChangeRequestsRejectionsAsync(empNo);
+            return View(crs);
+        }
     }
 }

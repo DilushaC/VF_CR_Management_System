@@ -1,0 +1,233 @@
+﻿@model IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>
+@{
+    ViewData["Title"] = "CR Management";
+}
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <h4 class="header-title mb-0">Draft Change Requests</h4>
+                </div>
+
+                <style>
+                    #basic-datatable {
+                        border-collapse: separate;
+                        border-spacing: 0;
+                    }
+
+                        #basic-datatable > thead > tr > th:last-child,
+                        #basic-datatable > tbody > tr > td:last-child {
+                            position: sticky;
+                            right: 0;
+                            z-index: 2;
+                        }
+
+                        #basic-datatable > thead > tr > th:last-child {
+                            z-index: 3;
+                            background-color: #fff;
+                        }
+
+                        #basic-datatable > tbody > tr > td:last-child {
+                            background-color: #fff;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd) > td:last-child {
+                            background-color: #f2f2f2;
+                        }
+
+                        #basic-datatable > tbody > tr:hover > td:last-child {
+                            background-color: #ededed;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd):hover > td:last-child {
+                            background-color: #e0e0e0;
+                        }
+
+                        #basic-datatable > thead > tr > th:last-child::before,
+                        #basic-datatable > tbody > tr > td:last-child::before {
+                            content: "";
+                            position: absolute;
+                            top: 0;
+                            bottom: 0;
+                            left: 0;
+                            width: 8px;
+                            box-shadow: inset 6px 0 6px -6px rgba(0, 0, 0, 0.25);
+                            pointer-events: none;
+                        }
+
+                        #basic-datatable td.title-cell {
+                            max-width: 220px;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+                </style>
+
+                <div class="table-responsive">
+                    <table id="basic-datatable" class="table table-striped nowrap w-100">
+                        <thead>
+                            <tr>
+                                <th>CR Number</th>
+                                <th>Title</th>
+                                <th>Change Type</th>
+                                <th>Division</th>
+                                <th>Module</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Requested By</th>
+                                <th>Requested Date</th>
+                                <th>View</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model != null)
+                            {
+                                @foreach (var cr in Model)
+                                {
+                                    var isDraft = cr.CRNumber != null &&
+                                    cr.CRNumber.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase);
+                                    var displayCrNumber = isDraft ? "WAITING" : cr.CRNumber;
+                                    <tr>
+                                        <td title="@cr.CRNumber">@displayCrNumber</td>
+                                        <td class="title-cell" title="@cr.ChangeTitle">@cr.ChangeTitle</td>
+                                        <td>@cr.ChangeType</td>
+                                        <td>@(string.IsNullOrEmpty(cr.Division) ? "—" : cr.Division)</td>
+                                        <td>@cr.Module</td>
+                                        <td>
+                                            @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger">@cr.Priority</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Priority
+                                            }
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-danger">@cr.Status</span>
+                                        </td>
+                                        <td>@cr.RequestedBy</td>
+                                        <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
+                                        <td>
+                                            <div class="d-flex gap-1">
+                                                <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
+                                                   class="btn btn-sm btn-outline-primary"
+                                                   title="Edit">
+                                                    <i class="ri-eye-line"></i>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#basic-datatable').DataTable({
+                responsive: false,
+                paging: true,
+                pageLength: 10,
+                lengthChange: true,
+                order: [[8, 'desc']],
+                columnDefs: [
+                    { orderable: false, targets: 9 },
+                    { orderable: false, targets: 1 }
+                ]
+            });
+        });
+
+        $('#basic-datatable').on('click', '.btn-submit-cr', function () {
+            var crid = $(this).data('id');
+
+            Swal.fire({
+                title: 'Submit this Change Request?',
+                text: 'This will send the draft CR forward for processing.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, submit it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#0d6efd',
+                cancelButtonColor: '#6c757d'
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: '@Url.Action("Submit", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            title: 'Submitted!',
+                            text: 'The Change Request has been submitted.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+        });
+
+        $('#basic-datatable').on('click', '.btn-delete-cr', function () {
+            var crid = $(this).data('id');
+
+            Swal.fire({
+                title: 'Delete this Change Request?',
+                text: 'This will permanently remove the draft CR. This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, delete it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#fa5c7c',
+                cancelButtonColor: '#6c757d'
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: '@Url.Action("Delete", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            title: 'Deleted',
+                            text: 'The Change Request has been deleted.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete the CR. Please try again.';
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+}
