@@ -44,36 +44,23 @@ namespace VF_CR_Management_System.Controllers
         {
             try
             {
-                var userName = HttpContext.Session.GetString("UserName");
                 var empNo = HttpContext.Session.GetString("EmpNo");
+                var newCrId = await _changeRequestService.CreateChangeRequestAsync(collection, empNo);
 
-                bool created = await _changeRequestService.CreateChangeRequestAsync(collection, userName, empNo);
-                if (created)
-                {
-                    return Json(new
-                    {
-                        success = true,
-                        message = "Change Request created successfully",
-                        redirectUrl = Url.Action("DraftTable", "CRManagement")
-                    });
-                }
-                else
-                {
-                    return Json(new
-                    {
-                        success = false,
-                        message = "Failed to create Change Request"
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                // Return error response
+                if (newCrId <= 0)
+                    return Json(new { success = false, message = "Failed to save the Change Request." });
+
                 return Json(new
                 {
-                    success = false,
-                    message = $"Error: {ex.Message}"
+                    success = true,
+                    message = "Saved successfully.",
+                    crid = newCrId,
+                    redirectUrl = Url.Action("DraftTable")
                 });
+            }
+            catch (ArgumentException ex)
+            {
+                return Json(new { success = false, message = ex.Message });
             }
         }
 

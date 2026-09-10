@@ -210,10 +210,10 @@
 
                     <!-- Actions -->
                     <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <button type="button" class="btn btn-outline-danger" onclick="window.location.href='@Url.Action("Index")'">Cancel</button>
+                        <button type="button" class="btn btn-outline-danger" onclick="window.location.href='@Url.Action("DraftTable")'">Cancel</button>
                         <div class="d-flex gap-2">
                             <button type="button" id="btn-save" class="btn btn-danger" data-status="1">Save</button>
-                            <button type="submit" id="btn-submit" class="btn btn-primary" data-status="2">Submit</button>
+                            <button type="button" id="btn-submit" class="btn btn-primary" data-status="2">Submit</button>
                         </div>
                     </div>
                 </form>
@@ -228,7 +228,14 @@
             var saveBtn = document.getElementById('btn-save');
             var submitBtn = document.getElementById('btn-submit');
             var statusInput = document.getElementById('StatusID');
-            var crId = parseInt(document.getElementById('CRID').value, 10) || 0;
+
+            // Captured ONCE at page load, before any create/update happens, so we know
+            // whether this page started out as a brand-new CR or an existing draft.
+            // Create (StatusID=2) already fully submits a brand-new CR in one step, so
+            // for a new CR we must NOT chain a second call to the Submit endpoint —
+            // its WHERE CRNumber LIKE 'Waiting-%' would match 0 rows (the CR already
+            // has a real CRNumber by then) and report a false "Failed to submit" error.
+            var isNewCr = (parseInt(document.getElementById('CRID').value, 10) || 0) <= 0;
 
             var $division = $('#DivisionID');
             var $moduleCard = $('#moduleCard');
@@ -281,7 +288,7 @@
                 loadModulesForDivision(divisionId, null);
             });
 
-            // SAVE button — StatusID = 1 (draft)
+            // SAVE button — StatusID = 1 (draft). Just saves/updates the CR, no workflow submit.
             saveBtn.addEventListener('click', function () {
                 Swal.fire({
                     title: 'Save this Change Request?',
@@ -298,15 +305,16 @@
                 }).then(function (result) {
                     if (result.isConfirmed) {
                         statusInput.value = saveBtn.dataset.status; // "1"
-                        submitChangeRequest();
+                        saveChangeRequest(/* thenSubmitWorkflow */ false);
                     }
                 });
             });
 
-            // SUBMIT button — StatusID = 2 (submitted/approved)
-            form.addEventListener('submit', function (event) {
-                event.preventDefault(); // stop the form from submitting immediately
-
+            // SUBMIT button — StatusID = 2.
+            // - New CR: Create already inserts it fully submitted, so no chained call needed.
+            // - Existing draft: Edit keeps it a draft (StatusID=1), so a chained Submit call
+            //   is required to actually promote it (real CRNumber + StatusID=2).
+            submitBtn.addEventListener('click', function () {
                 if (!$division.val()) {
                     Swal.fire({
                         title: 'Select a Division',
@@ -320,29 +328,126 @@
 
                 Swal.fire({
                     title: 'Submit this Change Request?',
-                    text: "Once submitted, you won't be able to edit this CR.",
+                    text: 'This will send the CR forward for processing.',
                     icon: 'question',
                     showCancelButton: true,
                     confirmButtonText: 'Yes, submit it',
                     cancelButtonText: 'Cancel',
-                    customClass: {
-                        confirmButton: 'btn btn-primary me-2',
-                        cancelButton: 'btn btn-light'
-                    },
-                    buttonsStyling: false
+                    confirmButtonColor: '#0d6efd',
+                    cancelButtonColor: '#6c757d'
                 }).then(function (result) {
                     if (result.isConfirmed) {
                         statusInput.value = submitBtn.dataset.status; // "2"
-                        submitChangeRequest();
+                        saveChangeRequest(/* thenSubmitWorkflow */ !isNewCr);
                     }
                 });
             });
 
+            // Saves/creates the CR via the form's own action (Create or Edit).
+            // If thenSubmitWorkflow is true, once the save succeeds it calls the
+            // Submit endpoint (same one used on the list page's Submit button) with
+            // the resulting CRID to push the CR into the approval workflow.
+            function saveChangeRequest(thenSubmitWorkflow) {
+                var formData = new FormData(form);
+
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            return response.text().then(function (text) {
+                                throw new Error('Server returned ' + response.status + ': ' + text);
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        if (!data.success) {
+                            Swal.fire({
+                                title: 'Could not save',
+                                text: data.message,
+                                icon: 'error',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            });
+                            return;
+                        }
+
+                        if (!thenSubmitWorkflow) {
+                            Swal.fire({
+                                title: statusInput.value === '2' ? 'Submitted!' : 'Saved!',
+                                text: data.message,
+                                icon: 'success',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            }).then(function () {
+                                if (data.redirectUrl) {
+                                    window.location.href = data.redirectUrl;
+                                }
+                            });
+                            return;
+                        }
+
+                        // Resolve the CRID to submit — the CRID already on the page
+                        // (this branch only runs for an existing Edit, since new CRs
+                        // skip the chained call entirely — see isNewCr above).
+                        var crid = data.crid || parseInt(document.getElementById('CRID').value, 10) || 0;
+
+                        if (!crid) {
+                            Swal.fire({
+                                title: 'Could not submit',
+                                text: 'The Change Request was saved, but its ID could not be determined for submission.',
+                                icon: 'error',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            });
+                            return;
+                        }
+
+                        $.ajax({
+                            url: '@Url.Action("Submit", "CRManagement")',
+                            type: 'POST',
+                            data: { id: crid },
+                            headers: {
+                                "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                            },
+                            success: function () {
+                                Swal.fire({
+                                    title: 'Submitted!',
+                                    text: 'The Change Request has been submitted.',
+                                    icon: 'success',
+                                    customClass: { confirmButton: 'btn btn-primary' },
+                                    buttonsStyling: false
+                                }).then(function () {
+                                    window.location.href = data.redirectUrl || '@Url.Action("DraftTable")';
+                                });
+                            },
+                            error: function (xhr) {
+                                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
+                                Swal.fire({
+                                    title: 'Error',
+                                    text: msg,
+                                    icon: 'error',
+                                    customClass: { confirmButton: 'btn btn-primary' },
+                                    buttonsStyling: false
+                                });
+                            }
+                        });
+                    })
+                    .catch(function (err) {
+                        Swal.fire({
+                            title: 'Something went wrong',
+                            text: err.message,
+                            icon: 'error',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                    });
+            }
+
             // Editing an existing draft — fetch its values and populate the radios/selects.
-            // select2 is initialized elsewhere (theme's global script); we just need to make
-            // sure it's ready before calling .trigger('change') on the selects below, so we
-            // do the fetch on DOMContentLoaded but apply select2 values defensively with a
-            // fallback plain .val()+trigger in case select2 initializes slightly later.
+            var crId = parseInt(document.getElementById('CRID').value, 10) || 0;
             if (crId > 0) {
                 fetch('@Url.Action("GetChangeRequestData", "CRManagement")' + '?id=' + crId)
                     .then(function (response) {
@@ -368,7 +473,6 @@
             // (changeTypeID, otherType, priorityID, divisionID, moduleID, summary) — adjust
             // here if your controller action's JSON casing differs.
             function populateFormFromData(data) {
-                // Summary
                 if (data.summary) {
                     document.getElementById('Summary').value = data.summary;
                 }
@@ -377,7 +481,6 @@
                     document.getElementById('ChangeTitle').value = data.changeTitle;
                 }
 
-                // Change Type radio
                 if (data.changeTypeID) {
                     var typeRadio = document.querySelector('input[name="ChangeTypeID"][value="' + data.changeTypeID + '"]');
                     if (typeRadio) {
@@ -389,7 +492,6 @@
                     document.getElementById('otherTextarea').value = data.otherType;
                 }
 
-                // Priority radio
                 if (data.priorityID) {
                     var priorityRadio = document.querySelector('input[name="PriorityID"][value="' + data.priorityID + '"]');
                     if (priorityRadio) {
@@ -397,65 +499,20 @@
                     }
                 }
 
-                // Division select2 — set first, then load & preselect the matching Module
-                // once its options come back from the server.
                 if (data.divisionID) {
                     $division.val(String(data.divisionID)).trigger('change.select2');
                     loadModulesForDivision(data.divisionID, data.moduleID);
                 }
 
-                // Approver select2 — ApproverID options are keyed by UserName, not a numeric id,
-                // so this expects the endpoint to return the approver's UserName (e.g. as
+                // ApproverID options are keyed by UserName, not a numeric id, so this
+                // expects the endpoint to return the approver's UserName (e.g. as
                 // data.approverUserName). Adjust the property name to whatever your
-                // GetChangeRequestByIdAsync/GetChangeRequestData actually returns for this.
+                // GetChangeRequestData actually returns for this.
                 if (data.approverUserName) {
                     $('#ApproverID').val(data.approverUserName).trigger('change');
                 }
             }
         });
-
-        function submitChangeRequest() {
-            var form = document.getElementById('crForm');
-            var formData = new FormData(form);
-
-            fetch(form.action, {
-                method: 'POST',
-                body: formData
-            })
-                .then(function (response) { return response.json(); })
-                .then(function (data) {
-                    if (data.success) {
-                        Swal.fire({
-                            title: 'Submitted!',
-                            text: data.message,
-                            icon: 'success',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        }).then(function () {
-                            if (data.redirectUrl) {
-                                window.location.href = data.redirectUrl;
-                            }
-                        });
-                    } else {
-                        Swal.fire({
-                            title: 'Could not submit',
-                            text: data.message,
-                            icon: 'error',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        });
-                    }
-                })
-                .catch(function (err) {
-                    Swal.fire({
-                        title: 'Something went wrong',
-                        text: err.message,
-                        icon: 'error',
-                        customClass: { confirmButton: 'btn btn-primary' },
-                        buttonsStyling: false
-                    });
-                });
-        }
 
         function toggleOtherTextarea() {
             const otherRadio = document.getElementById('customRadio7');

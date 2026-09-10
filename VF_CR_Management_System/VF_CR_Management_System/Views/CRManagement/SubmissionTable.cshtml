@@ -1,6 +1,7 @@
 ﻿@model IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>
 @{
     ViewData["Title"] = "CR Management";
+    var currentEmpNo = ViewBag.CurrentEmpNo as string ?? string.Empty;
 }
 
 <div class="row">
@@ -140,6 +141,7 @@
                                                         data-bs-status="@cr.Status"
                                                         data-bs-requestedby="@cr.RequestedBy"
                                                         data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                        data-bs-currentapprover="@cr.CurrentApproverEmpNo"
                                                         title="View">
                                                     <i class="ri-eye-line"></i>
                                                 </button>
@@ -237,6 +239,9 @@
     <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
     <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
     <script>
+        // Logged-in user's EmpNo, rendered server-side so it can be compared client-side.
+        var currentEmpNo = '@currentEmpNo';
+
         $(document).ready(function () {
             $('#basic-datatable').DataTable({
                 responsive: false,
@@ -255,6 +260,11 @@
         var crDetailsModal = document.getElementById('crDetailsModal');
         var $approveBtn = $('#modal-approve-btn');
         var $rejectBtn = $('#modal-reject-btn');
+        var $approverWrapper = $('#modal-approver-wrapper');
+
+        function normalize(value) {
+            return (value || '').trim().toLowerCase();
+        }
 
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
@@ -270,6 +280,7 @@
             var status = button.getAttribute('data-bs-status');
             var requestedby = button.getAttribute('data-bs-requestedby');
             var requesteddate = button.getAttribute('data-bs-requesteddate');
+            var currentApprover = button.getAttribute('data-bs-currentapprover');
 
             crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
             crDetailsModal.querySelector('#modal-title').textContent = title || '';
@@ -283,6 +294,20 @@
             crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
 
             $(crDetailsModal).data('crid', crid);
+
+            // Only show Approve/Reject when the logged-in user is the AssignedTo
+            // on the CR's current (StepID = 8) pending approval row.
+            var canAct = normalize(currentApprover) !== '' && normalize(currentApprover) === normalize(currentEmpNo);
+
+            if (canAct) {
+                $approveBtn.removeClass('d-none');
+                $rejectBtn.removeClass('d-none');
+                $approverWrapper.removeClass('d-none');
+            } else {
+                $approveBtn.addClass('d-none');
+                $rejectBtn.addClass('d-none');
+                $approverWrapper.addClass('d-none');
+            }
 
             $('#modal-approver').val('').trigger('change');
             $('#modal-approver-error').addClass('d-none');

@@ -41,5 +41,10 @@ namespace VF_CR_Management_System.Data.Models
         public string Division { get; set; }
         public string Status { get; set; }
         public string RequestedBy { get; set; }
+
+        // Display-only: the EmpNo currently assigned at the pending StepID = 8 approval,
+        // populated via the LEFT JOIN in GetAllChangeRequestsSubmissionsAsync.
+        // Null when there's no pending step-8 approval for this CR.
+        public string CurrentApproverEmpNo { get; set; }
     }
 }

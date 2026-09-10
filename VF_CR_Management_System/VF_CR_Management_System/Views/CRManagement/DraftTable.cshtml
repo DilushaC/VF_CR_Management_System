@@ -57,17 +57,12 @@
                             pointer-events: none;
                         }
 
-                    #crDetailsModal .swal2-container {
-                        position: fixed !important;
-                        z-index: 1080 !important;
-                    }
-
-                    #basic-datatable td.title-cell {
-                        max-width: 220px;
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                    }
+                        #basic-datatable td.title-cell {
+                            max-width: 220px;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
                 </style>
 
                 <div class="table-responsive">
@@ -83,7 +78,7 @@
                                 <th>Status</th>
                                 <th>Requested By</th>
                                 <th>Requested Date</th>
-                                <th>View</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -117,23 +112,16 @@
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
                                             <div class="d-flex gap-1">
+                                                <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
+                                                   class="btn btn-sm btn-outline-primary"
+                                                   title="Edit">
+                                                    <i class="ri-edit-line"></i>
+                                                </a>
                                                 <button type="button"
-                                                        class="btn btn-sm btn-info btn-view"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#crDetailsModal"
-                                                        data-bs-crid="@cr.CRID"
-                                                        data-bs-crnumber="@displayCrNumber"
-                                                        data-bs-title="@cr.ChangeTitle"
-                                                        data-bs-summary="@cr.Summary"
-                                                        data-bs-changetype="@cr.ChangeType"
-                                                        data-bs-division="@cr.Division"
-                                                        data-bs-module="@cr.Module"
-                                                        data-bs-priority="@cr.Priority"
-                                                        data-bs-status="@cr.Status"
-                                                        data-bs-requestedby="@cr.RequestedBy"
-                                                        data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
-                                                        title="View">
-                                                    <i class="ri-eye-line"></i>
+                                                        class="btn btn-sm btn-danger btn-delete-cr"
+                                                        data-id="@cr.CRID"
+                                                        title="Delete">
+                                                    <i class="ri-delete-bin-line"></i>
                                                 </button>
                                             </div>
                                         </td>
@@ -143,68 +131,6 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- CR Details Modal (read-only view, populated via event.relatedTarget) -->
-<div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="crDetailsModalLabel">Change Request Details</h5>
-                <div class="ms-auto d-flex align-items-center">
-                    <label class="col-form-label fw-semibold me-2">CR Number:</label>
-                    <span id="modal-crnumber" class="fw-bold"></span>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Title:</label>
-                        <span id="modal-title"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Status:</label>
-                        <span id="modal-status"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
-                        <span id="modal-changetype"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Priority:</label>
-                        <span id="modal-priority"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Division:</label>
-                        <span id="modal-division"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Module:</label>
-                        <span id="modal-module"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
-                        <span id="modal-requestedby"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
-                        <span id="modal-requesteddate"></span>
-                    </div>
-                    <div class="col-md-12">
-                        <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
-                        <span id="modal-summary"></span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <a href="#" id="modal-edit-link" class="btn btn-outline-primary">Edit</a>
-                <button type="button" id="modal-approve-btn" class="btn btn-primary" data-action="submit">Submit</button>
-                <button type="button" id="modal-reject-btn" class="btn btn-danger" data-action="delete">Delete</button>
             </div>
         </div>
     </div>
@@ -228,48 +154,10 @@
             });
         });
 
-        // Populate the CR Details modal from the button that triggered it
-        var crDetailsModal = document.getElementById('crDetailsModal');
-        var $approveBtn = $('#modal-approve-btn');   // acts as "Submit" here
-        var $rejectBtn = $('#modal-reject-btn');     // acts as "Delete" here
-        var $editBtn = $('#modal-edit-link');
-
-        crDetailsModal.addEventListener('show.bs.modal', function (event) {
-            var button = event.relatedTarget;
-
-            var crid = button.getAttribute('data-bs-crid');
-            var crnumber = button.getAttribute('data-bs-crnumber');
-            var title = button.getAttribute('data-bs-title');
-            var summary = button.getAttribute('data-bs-summary');
-            var changetype = button.getAttribute('data-bs-changetype');
-            var priority = button.getAttribute('data-bs-priority');
-            var division = button.getAttribute('data-bs-division');
-            var module = button.getAttribute('data-bs-module');
-            var status = button.getAttribute('data-bs-status');
-            var requestedby = button.getAttribute('data-bs-requestedby');
-            var requesteddate = button.getAttribute('data-bs-requesteddate');
-
-            crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
-            crDetailsModal.querySelector('#modal-title').textContent = title || '';
-            crDetailsModal.querySelector('#modal-status').textContent = status || '';
-            crDetailsModal.querySelector('#modal-changetype').textContent = changetype || '';
-            crDetailsModal.querySelector('#modal-priority').textContent = priority || '';
-            crDetailsModal.querySelector('#modal-division').textContent = division || '';
-            crDetailsModal.querySelector('#modal-module').textContent = module || '';
-            crDetailsModal.querySelector('#modal-requestedby').textContent = requestedby || '';
-            crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
-            crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
-
-            $(crDetailsModal).data('crid', crid);
-
-            $editBtn.attr('href', '@Url.Action("Edit", "CRManagement")' + '/' + crid);
-        });
-
-        $approveBtn.on('click', function () {
-            var crid = $(crDetailsModal).data('crid');
+        $('#basic-datatable').on('click', '.btn-submit-cr', function () {
+            var crid = $(this).data('id');
 
             Swal.fire({
-                target: crDetailsModal,
                 title: 'Submit this Change Request?',
                 text: 'This will send the draft CR forward for processing.',
                 icon: 'question',
@@ -290,7 +178,6 @@
                     },
                     success: function () {
                         Swal.fire({
-                            target: crDetailsModal,
                             title: 'Submitted!',
                             text: 'The Change Request has been submitted.',
                             icon: 'success'
@@ -299,7 +186,6 @@
                     error: function (xhr) {
                         var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
                         Swal.fire({
-                            target: crDetailsModal,
                             title: 'Error',
                             text: msg,
                             icon: 'error'
@@ -309,11 +195,10 @@
             });
         });
 
-        $rejectBtn.on('click', function () {
-            var crid = $(crDetailsModal).data('crid');
+        $('#basic-datatable').on('click', '.btn-delete-cr', function () {
+            var crid = $(this).data('id');
 
             Swal.fire({
-                target: crDetailsModal,
                 title: 'Delete this Change Request?',
                 text: 'This will permanently remove the draft CR. This action cannot be undone.',
                 icon: 'warning',
@@ -334,7 +219,6 @@
                     },
                     success: function () {
                         Swal.fire({
-                            target: crDetailsModal,
                             title: 'Deleted',
                             text: 'The Change Request has been deleted.',
                             icon: 'success'
@@ -343,7 +227,6 @@
                     error: function (xhr) {
                         var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete the CR. Please try again.';
                         Swal.fire({
-                            target: crDetailsModal,
                             title: 'Error',
                             text: msg,
                             icon: 'error'

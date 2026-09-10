@@ -17,7 +17,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         {
             _connectionService = connectionService;
         }
-        public async Task<bool> CreateChangeRequestAsync(IFormCollection collection, string userName, string empId)
+        public async Task<int> CreateChangeRequestAsync(IFormCollection collection,string empId)
         {
             // Required fields
             if (!int.TryParse(collection["ChangeTypeID"], out var changeTypeId))
@@ -67,10 +67,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             const string crSql = @"
                 INSERT INTO ChangeRequest
-                    (CRNumber, RequesterUserName, ChangeTitle, Summary, ChangeTypeID, OtherType, PriorityID, DivisionID, ModuleID, 
+                    (CRNumber, RequesterUserName, ApproverUserName, ChangeTitle, Summary, ChangeTypeID, OtherType, PriorityID, DivisionID, ModuleID, 
                      RequestedDate, StatusID, Active)
                 VALUES
-                    (@CRNumber, @RequesterUserName, @ChangeTitle, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @DivisionID, @ModuleID,
+                    (@CRNumber, @RequesterUserName,@ApproverUserName, @ChangeTitle, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @DivisionID, @ModuleID,
                      @RequestedDate, @StatusID, @Active);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -79,10 +79,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                // CRNumber logic:
-                // - StatusID == 2 (Submit & Approve) -> generate the next real sequential number.
-                // - StatusID == 1 (Save/draft)        -> "Waiting-{unique suffix}" so multiple
-                //                                        drafts don't collide on the unique constraint.
                 var crNumber = statusId == 2
                     ? GenerateNextCrNumber()
                     : $"Waiting-{Guid.NewGuid():N}".Substring(0, 16);
@@ -90,6 +86,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var crParameters = new DynamicParameters();
                 crParameters.Add("@CRNumber", crNumber);
                 crParameters.Add("@RequesterUserName", empId);
+                crParameters.Add("@ApproverUserName", approverId);
                 crParameters.Add("@ChangeTitle", changeTitle);
                 crParameters.Add("@Summary", summary);
                 crParameters.Add("@ChangeTypeID", changeTypeId);
@@ -109,15 +106,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 }
                 catch (Exception ex) when (attempt < maxAttempts && IsDuplicateCrNumberError(ex))
                 {
-                    // Collision on the generated/placeholder number — regenerate and retry.
                     continue;
                 }
             }
 
             if (newCrId <= 0)
-                return false;
+                return 0;
 
-            // 2. Insert Approval step using the real ChangeRequest.Id (int), not CRNumber
             const string approvalSql = @"
                 INSERT INTO Approval
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
@@ -134,7 +129,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
 
-            return approvalRowsAffected > 0;
+            // Return the CRID only if both inserts succeeded; 0 signals failure to the caller.
+            return approvalRowsAffected > 0 ? newCrId : 0;
         }
 
         public async Task<ChangeRequest> GetChangeRequestByIdAsync(int crId)
@@ -485,6 +481,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
             const int draftStatusId = 2;
+            const int approvalStepId = 8;
 
             var sql = $@"
                 SELECT
@@ -500,13 +497,19 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     m.ModuleName AS Module,
                     s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,
-                    cr.RequestedDate
+                    cr.RequestedDate,
+                    a.AssignedTo AS CurrentApproverEmpNo
                 FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
                 LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
                 LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
                 LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+                LEFT JOIN [CRManagementDB].[dbo].[Approval] AS a
+                    ON a.CRID = cr.CRID
+                        AND a.StepID = @ApprovalStepId
+                        AND a.Active = 1
+                        AND a.Decision IS NULL
                 WHERE cr.Active = 1
                     AND cr.RequesterUserName = @EmpNo
                     AND cr.StatusID = @DraftStatusId
@@ -516,11 +519,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var result = _connectionService.Query<ChangeRequest>(
                 sql,
-                new { EmpNo = empNo, DraftStatusId = draftStatusId });
+                new { EmpNo = empNo, DraftStatusId = draftStatusId, ApprovalStepId = approvalStepId });
 
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
         }
-
         public async Task<bool> RejectChangeRequestAsync(int crId, string rejectReason, string rejectedByEmpId)
         {
             if (crId <= 0)
