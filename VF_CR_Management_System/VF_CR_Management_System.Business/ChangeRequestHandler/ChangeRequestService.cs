@@ -515,7 +515,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND App.StepID = 7
-	
+	                AND cr.StatusID != 7
                     AND App.AssignedTo = @EmpNo
                 ORDER BY
                     cr.RequestedDate DESC,
@@ -602,7 +602,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 WHERE cr.Active = 1
                     AND App.StepID = 13
 	
-                    AND App.AssignedTo = @EmpNo
+                    AND (App.AssignedTo = @EmpNo OR RequesterUserName = @EmpNo)
                 ORDER BY
                     cr.RequestedDate DESC,
                     cr.CRID DESC;
