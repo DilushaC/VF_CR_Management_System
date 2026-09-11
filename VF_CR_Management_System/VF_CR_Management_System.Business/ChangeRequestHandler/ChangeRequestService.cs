@@ -580,6 +580,57 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
         }
 
+        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo)
+        {
+            const int draftStatusId = 7;
+
+            var sql = $@"
+                SELECT
+                    cr.CRID,
+                    cr.CRNumber,
+                    cr.ChangeTitle,
+                    cr.Summary,
+                    ct.ChangeTypeName AS ChangeType,
+                    p.PriorityName AS Priority,
+                    cr.DivisionID,
+                    d.DivisionName AS Division,
+                    cr.ModuleID,
+                    m.ModuleName AS Module,
+                    s.StatusName AS Status,
+                    cr.RequesterUserName AS RequestedBy,
+                    App.AssignedTo AS ApproverUserName,
+                    cr.RequestedDate
+                FROM [dbo].[Approval] AS App
+                INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
+                    ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
+                    ON p.PriorityID = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
+                    ON d.DivisionID = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
+                    ON m.ModuleID = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
+                    ON s.StatusID = cr.StatusID
+                WHERE cr.Active = 1
+                    AND App.StepID = 8
+	
+                    AND App.AssignedTo = @EmpNo
+                ORDER BY
+                    cr.CRID DESC;
+                ";
+
+            var result = _connectionService.Query<ChangeRequest>(
+                sql,
+                new
+                {
+                    EmpNo = empNo,
+                    DraftStatusId = draftStatusId
+                });
+
+            return Task.FromResult<IEnumerable<ChangeRequest>>(result);
+        }
+
 
         public async Task<bool> RejectChangeRequestAsync(
             int crId,
