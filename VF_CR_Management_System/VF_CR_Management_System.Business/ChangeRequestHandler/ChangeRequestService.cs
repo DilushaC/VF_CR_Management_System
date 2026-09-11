@@ -67,10 +67,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             const string crSql = @"
                 INSERT INTO ChangeRequest
-                    (CRNumber, RequesterUserName, ApproverUserName, ChangeTitle, Summary, ChangeTypeID, OtherType, PriorityID, DivisionID, ModuleID, 
+                    (CRNumber, RequesterUserName, ChangeTitle, Summary, ChangeTypeID, OtherType, PriorityID, DivisionID, ModuleID, 
                      RequestedDate, StatusID, Active)
                 VALUES
-                    (@CRNumber, @RequesterUserName,@ApproverUserName, @ChangeTitle, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @DivisionID, @ModuleID,
+                    (@CRNumber, @RequesterUserName, @ChangeTitle, @Summary, @ChangeTypeID, @OtherType, @PriorityID, @DivisionID, @ModuleID,
                      @RequestedDate, @StatusID, @Active);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
 
@@ -86,7 +86,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var crParameters = new DynamicParameters();
                 crParameters.Add("@CRNumber", crNumber);
                 crParameters.Add("@RequesterUserName", empId);
-                crParameters.Add("@ApproverUserName", approverId);
                 crParameters.Add("@ChangeTitle", changeTitle);
                 crParameters.Add("@Summary", summary);
                 crParameters.Add("@ChangeTypeID", changeTypeId);
@@ -189,9 +188,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return result != null && result != DBNull.Value ? result.ToString() : null;
         }
 
-        // Updates an existing draft Change Request in place. Only drafts (CRNumber still
-        // "Waiting-...") can be edited this way — once a CR has been submitted/approved/
-        // rejected it should go through Submit/Approve/Reject instead, not a raw field edit.
         public async Task<bool> UpdateChangeRequestAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
@@ -232,8 +228,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please select a Approver.");
             }
-            // StatusID isn't taken from the form here — editing a draft keeps it a draft
-            // (StatusID 1). Use Submit to move it out of draft state.
+
             const int draftStatusId = 1;
 
             const string updateCrSql = @"
@@ -263,14 +258,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int crRowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
 
-            // 0 rows means the CR wasn't found, wasn't Active, or isn't a draft anymore —
-            // nothing to update, so bail out without touching the Approval table.
             if (crRowsAffected <= 0)
                 return false;
 
-            // Keep the assigned implementer (StepID 7) in sync with whatever was picked
-            // in the Edit form, updating the existing row if one exists, or inserting a
-            // fresh one if this draft somehow doesn't have one yet.
             const int assignStepId = 7;
 
             const string updateApprovalSql = @"
@@ -424,7 +414,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (approvalRowsAffected <= 0)
                 return false;
 
-            // 2. Update the ChangeRequest status to Approved
             const string updateStatusSql = @"
             UPDATE ChangeRequest
             SET StatusID = @StatusID
@@ -443,7 +432,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         {
             const int draftStatusId = 1;
 
-            var sql = $@"
+            var sql = @"
                 SELECT
                     cr.CRID,
                     cr.CRNumber,
@@ -457,20 +446,28 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     m.ModuleName AS Module,
                     s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,
+                    App.AssignedTo AS ApproverUserName,
                     cr.RequestedDate
                 FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+                LEFT JOIN [CRManagementDB].[dbo].[Approval] AS App
+                    ON App.CRID = cr.CRID
+                    AND App.StepID = 7
+                    AND App.Active = 1
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
+                    ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
+                    ON p.PriorityID = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
+                    ON d.DivisionID = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
+                    ON m.ModuleID = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
+                    ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND cr.RequesterUserName = @EmpNo
-                    AND cr.StatusID in (1,2)
+                    AND cr.StatusID IN (1, 2)
                 ORDER BY
-                    cr.RequestedDate DESC,
                     cr.CRID DESC;";
-            //AND cr.StatusID = @DraftStatusId
 
 
             var result = _connectionService.Query<ChangeRequest>(
@@ -518,43 +515,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 	                AND cr.StatusID != 7
                     AND App.AssignedTo = @EmpNo
                 ORDER BY
-                    cr.RequestedDate DESC,
                     cr.CRID DESC;
                 ";
-
-            //var sql = $@"
-            //    SELECT
-            //        cr.CRID,
-            //        cr.CRNumber,
-            //        cr.ChangeTitle,
-            //        cr.Summary,
-            //        ct.ChangeTypeName AS ChangeType,
-            //        p.PriorityName AS Priority,
-            //        cr.DivisionID,
-            //        d.DivisionName AS Division,
-            //        cr.ModuleID,
-            //        m.ModuleName AS Module,
-            //        s.StatusName AS Status,
-            //        cr.RequesterUserName AS RequestedBy,
-            //        cr.ApproverUserName AS ApproverUserName,
-            //        cr.RequestedDate
-            //    FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
-            //    LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
-            //        ON ct.ChangeTypeID = cr.ChangeTypeID
-            //    LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
-            //        ON p.PriorityID = cr.PriorityID
-            //    LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
-            //        ON d.DivisionID = cr.DivisionID
-            //    LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
-            //        ON m.ModuleID = cr.ModuleID
-            //    LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
-            //        ON s.StatusID = cr.StatusID
-            //    WHERE cr.Active = 1
-            //        AND cr.StatusID = @DraftStatusId
-            //        AND cr.ApproverUserName = @EmpNo
-            //    ORDER BY
-            //        cr.RequestedDate DESC,
-            //        cr.CRID DESC;";
 
             var result = _connectionService.Query<ChangeRequest>(
                 sql,
@@ -604,7 +566,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 	
                     AND (App.AssignedTo = @EmpNo OR RequesterUserName = @EmpNo)
                 ORDER BY
-                    cr.RequestedDate DESC,
                     cr.CRID DESC;
                 ";
 
@@ -620,49 +581,65 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         }
 
 
-        public async Task<bool> RejectChangeRequestAsync(int crId, string rejectReason, string rejectedByEmpId)
+        public async Task<bool> RejectChangeRequestAsync(
+            int crId,
+            string rejectReason,
+            string rejectedByEmpId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
+
             if (string.IsNullOrWhiteSpace(rejectReason))
                 throw new ArgumentException("Please provide a reason for rejection.");
 
-            const int rejectStepId = 13;
-            const int rejectedStatusId = 7;
-
-            const string approvalSql = @"
-            INSERT INTO Approval
-                (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Comments, Active)
-            VALUES
-                (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Comments, @Active)";
+            const string updateApprovalSql = @"
+                UPDATE a
+                SET
+                    a.ApprovalDate = @ApprovalDate,
+                    a.IsApproved = @IsApproved,
+                    a.Comments = @Comments
+                FROM Approval AS a
+                INNER JOIN WorkflowStep AS ws
+                    ON ws.StepID = a.StepID
+                WHERE a.CRID = @CRID
+                  AND ws.StepName = @StepName
+                  AND ws.Active = 1
+                  AND a.Active = 1";
 
             var approvalParameters = new DynamicParameters();
-            approvalParameters.Add("@CRID", crId);
-            approvalParameters.Add("@StepID", rejectStepId);
-            approvalParameters.Add("@AssignedBy", rejectedByEmpId);
-            approvalParameters.Add("@AssignedTo", rejectedByEmpId); // rejecter acts on it themselves
-            approvalParameters.Add("@AssignedDate", DateTime.Now);
+            approvalParameters.Add("@ApprovalDate", DateTime.Now);
+            approvalParameters.Add("@IsApproved", false);
             approvalParameters.Add("@Comments", rejectReason);
-            approvalParameters.Add("@Active", true);
+            approvalParameters.Add("@CRID", crId);
+            approvalParameters.Add("@StepName", "CR Submission");
 
-            int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
+            int approvalRowsAffected =
+                _connectionService.ExecuteWithPara(
+                    updateApprovalSql,
+                    approvalParameters);
 
             if (approvalRowsAffected <= 0)
                 return false;
 
             const string updateStatusSql = @"
-            UPDATE ChangeRequest
-            SET StatusID = @StatusID
-            WHERE CRID = @CRID";
+                UPDATE cr
+                SET cr.StatusID = s.StatusID
+                FROM ChangeRequest AS cr
+                INNER JOIN CRStatus AS s
+                    ON s.StatusName = @StatusName
+                    AND s.Active = 1
+                WHERE cr.CRID = @CRID";
 
             var statusParameters = new DynamicParameters();
-            statusParameters.Add("@StatusID", rejectedStatusId);
+            statusParameters.Add("@StatusName", "Rejected");
             statusParameters.Add("@CRID", crId);
 
-            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
+            int statusRowsAffected =
+                _connectionService.ExecuteWithPara(
+                    updateStatusSql,
+                    statusParameters);
 
             return statusRowsAffected > 0;
-
         }
 
         public async Task<bool> SubmitChangeRequestAsync(int crId, string submittedByEmpId)
@@ -692,12 +669,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 try
                 {
                     int rowsAffected = _connectionService.ExecuteWithPara(updateSql, parameters);
-                    // rowsAffected == 0 means the CR wasn't found or wasn't in "Waiting-" state anymore
                     return rowsAffected > 0;
                 }
                 catch (Exception ex) when (attempt < maxAttempts && IsDuplicateCrNumberError(ex))
                 {
-                    // Collision on the generated number — regenerate and retry.
                     continue;
                 }
             }
