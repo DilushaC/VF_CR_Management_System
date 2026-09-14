@@ -251,7 +251,7 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpGet]
-        public IActionResult Assesment()
+        public IActionResult Assessment()
         {
             return View();
         }

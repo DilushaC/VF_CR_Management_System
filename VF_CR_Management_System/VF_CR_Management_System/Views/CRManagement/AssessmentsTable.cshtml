@@ -232,8 +232,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" id="modal-approve-btn" class="btn btn-success">Approve</button>
-                <button type="button" id="modal-reject-btn" class="btn btn-danger">Reject</button>
+                <a id="modal-assessment-btn" href="#" class="btn btn-warning d-none">Go to Assessment</a>
             </div>
         </div>
     </div>
@@ -270,6 +269,9 @@
             return (value || '').trim().toLowerCase();
         }
 
+        var $assessmentBtn = $('#modal-assessment-btn');
+        var assessmentUrlBase = '@Url.Action("Assessment", "CRManagement")';
+
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
 
@@ -301,13 +303,8 @@
             $(crDetailsModal).data('crid', crid);
 
             var normalizedStatus = normalize(status);
-
-            // A CR that's already been decided (Approved or Rejected) is no longer
-            // actionable — Approve/Reject only make sense while it's still pending.
             var isDecided = normalizedStatus === 'approved' || normalizedStatus === 'rejected';
 
-            // Only show Approve/Reject when the CR isn't already decided AND the
-            // logged-in user is the assigned approver on it.
             var canAct = !isDecided &&
                 normalize(currentApprover) !== '' &&
                 normalize(currentApprover) === normalize(currentEmpNo);
@@ -320,6 +317,13 @@
                 $approveBtn.addClass('d-none');
                 $rejectBtn.addClass('d-none');
                 $approverWrapper.addClass('d-none');
+            }
+
+            // Show "Go to Assessment" only when the CR has been approved
+            if (normalizedStatus === 'approved') {
+                $assessmentBtn.attr('href', assessmentUrlBase + '?id=' + crid).removeClass('d-none');
+            } else {
+                $assessmentBtn.addClass('d-none');
             }
 
             $('#modal-approver').val('').trigger('change');
