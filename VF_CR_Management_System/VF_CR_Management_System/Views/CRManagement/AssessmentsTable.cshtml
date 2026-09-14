@@ -117,6 +117,10 @@
                                             {
                                                 <span class="badge bg-success">@cr.Status</span>
                                             }
+                                            else if (string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-warning">Draft</span>
+                                            }
                                             else
                                             {
                                                 @cr.Status
@@ -126,25 +130,38 @@
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
                                             <div class="d-flex gap-1">
-                                                <button type="button"
-                                                        class="btn btn-sm btn-info btn-view"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#crDetailsModal"
-                                                        data-bs-crid="@cr.CRID"
-                                                        data-bs-crnumber="@cr.CRNumber"
-                                                        data-bs-title="@cr.ChangeTitle"
-                                                        data-bs-summary="@cr.Summary"
-                                                        data-bs-changetype="@cr.ChangeType"
-                                                        data-bs-division="@cr.Division"
-                                                        data-bs-module="@cr.Module"
-                                                        data-bs-priority="@cr.Priority"
-                                                        data-bs-status="@cr.Status"
-                                                        data-bs-requestedby="@cr.RequestedBy"
-                                                        data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
-                                                        data-bs-currentapprover="@cr.ApproverUserName"
-                                                        title="View">
-                                                    <i class="ri-eye-line"></i>
-                                                </button>
+                                                @if (cr.Status == "Approved")
+                                                {
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-info btn-view"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#crDetailsModal"
+                                                            data-bs-crid="@cr.CRID"
+                                                            data-bs-crnumber="@cr.CRNumber"
+                                                            data-bs-title="@cr.ChangeTitle"
+                                                            data-bs-summary="@cr.Summary"
+                                                            data-bs-changetype="@cr.ChangeType"
+                                                            data-bs-division="@cr.Division"
+                                                            data-bs-module="@cr.Module"
+                                                            data-bs-priority="@cr.Priority"
+                                                            data-bs-status="@cr.Status"
+                                                            data-bs-requestedby="@cr.RequestedBy"
+                                                            data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                            data-bs-currentapprover="@cr.ApproverUserName"
+                                                            title="View">
+                                                        <i class="ri-eye-line"></i>
+                                                    </button>
+                                                }
+                                                @if (cr.Status == "AssessmentDraft")
+                                                {
+                                                    <div class="d-flex gap-1">
+                                                        <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
+                                                           class="btn btn-sm btn-outline-primary"
+                                                           title="Edit">
+                                                            <i class="ri-edit-line"></i>
+                                                        </a>
+                                                    </div>
+                                                }
                                             </div>
                                         </td>
                                     </tr>
@@ -211,22 +228,6 @@
                     <div class="col-md-12">
                         <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
                         <span id="modal-summary"></span>
-                    </div>
-                    <div class="col-md-6" id="modal-approver-wrapper">
-                        <div class="card-body">
-                            <label class="form-label" for="modal-approver">Select Implementer</label>
-                            <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
-                                <option value="" selected disabled hidden>Select User</option>
-                                @if (ViewBag.Users != null)
-                                {
-                                    @foreach (var user in ViewBag.Users)
-                                    {
-                                        <option value="@user.UserName">@user.FirstName @user.LastName</option>
-                                    }
-                                }
-                            </select>
-                            <span id="modal-approver-error" class="text-danger d-none">Please select an user.</span>
-                        </div>
                     </div>
                 </div>
             </div>

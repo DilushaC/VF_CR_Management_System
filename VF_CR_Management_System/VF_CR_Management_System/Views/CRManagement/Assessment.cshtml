@@ -209,9 +209,9 @@
 </div><!-- end row -->
 
 <script>
-   
+
     document.addEventListener("DOMContentLoaded", function () {
-        // ---- Vendor support toggle (existing behavior) ----
+        // ---- Vendor support toggle ----
         var saveBtn = document.getElementById('btn-save');
         var submitBtn = document.getElementById('submitBtn');
         var vendorYes = document.getElementById('vendorSupportYes');
@@ -235,9 +235,7 @@
         vendorYes.addEventListener('change', toggleVendorDetails);
         vendorNo.addEventListener('change', toggleVendorDetails);
 
-        // ---- Read ALL details passed from the CR Details modal via the query string ----
-        // e.g. /CRManagement/Assessment?id=12&crnumber=CR1000002&title=...&summary=...&changetype=...
-        //      &division=...&module=...&priority=...&status=...&requestedby=...&requesteddate=...&currentapprover=...
+        // ---- Read query string parameters ----
         var params = new URLSearchParams(window.location.search);
 
         var crId = params.get('id');
@@ -270,86 +268,96 @@
         document.getElementById('requestedDate').textContent = requestedDate || '—';
         document.getElementById('currentApprover').textContent = currentApprover || '—';
 
-        // ---- Submit handler: POST the form to the backend ----
-        var assessmentForm = document.getElementById('assessmentForm');
-        var submitBtn = document.getElementById('submitBtn');
-
-        submitBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        alert();
-        if (!crId) {
-            Swal.fire({
-                title: 'Could not submit',
-                text: 'Missing Change Request ID. Cannot submit the assessment.',
-                icon: 'error',
-                customClass: { confirmButton: 'btn btn-primary' },
-                buttonsStyling: false
-            });
-            return;
-        }
-
-        var formData = new FormData(assessmentForm);
-
-        submitBtn.disabled = true;
-        var originalText = submitBtn.textContent;
-        submitBtn.textContent = 'Submitting...';
-
-        $.ajax({
-            url: '@Url.Action("EditAssessment", "CRManagement")',
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            headers: {
-                "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-            },
-            success: function (data) {
-
-                if (!data.success) {
-                    Swal.fire({
-                        title: 'Could not save',
-                        text: data.message || 'Failed to update Change Request assessment.',
-                        icon: 'error',
-                        customClass: { confirmButton: 'btn btn-primary' },
-                        buttonsStyling: false
-                    });
-                    return;
-                }
-
+        // ---- Function to handle both Save and Submit actions ----
+        function handleFormSubmission(btnElement) {
+            if (!crId) {
                 Swal.fire({
-                    title: 'Saved!',
-                    text: data.message || 'Assessment updated successfully.',
-                    icon: 'success',
-                    customClass: { confirmButton: 'btn btn-primary' },
-                    buttonsStyling: false
-                }).then(function () {
-
-                    if (data.redirectUrl) {
-                        window.location.href = data.redirectUrl;
-                    }
-                });
-            },
-
-            error: function (xhr) {
-
-                var msg =
-                    (xhr.responseJSON && xhr.responseJSON.message) ||
-                    'Failed to update the assessment. Please try again.';
-
-                Swal.fire({
-                    title: 'Error',
-                    text: msg,
+                    title: 'Could not submit',
+                    text: 'Missing Change Request ID. Cannot submit the assessment.',
                     icon: 'error',
                     customClass: { confirmButton: 'btn btn-primary' },
                     buttonsStyling: false
                 });
-            },
-
-            complete: function () {
-                submitBtn.disabled = false;
-                submitBtn.textContent = originalText;
+                return;
             }
+
+            var assessmentForm = document.getElementById('assessmentForm');
+            var formData = new FormData(assessmentForm);
+
+            // 1. Pass the crId explicitly to the form payload
+            formData.append('Id', crId);
+
+            // 2. Pass the status code (1 for Save, 2 for Submit) based on the button clicked
+            var statusValue = btnElement.getAttribute('data-status');
+            if (statusValue) {
+                formData.append('Status', statusValue);
+            }
+
+            btnElement.disabled = true;
+            var originalText = btnElement.textContent;
+            btnElement.textContent = 'Processing...';
+
+            $.ajax({
+                url: '@Url.Action("CreateAssessment", "CRManagement")',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                headers: {
+                    "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                },
+                success: function (data) {
+                    if (!data.success) {
+                        Swal.fire({
+                            title: 'Could not save',
+                            text: data.message || 'Failed to update Change Request assessment.',
+                            icon: 'error',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                        return;
+                    }
+
+                    Swal.fire({
+                        title: 'Saved!',
+                        text: data.message || 'Assessment updated successfully.',
+                        icon: 'success',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    }).then(function () {
+                        if (data.redirectUrl) {
+                            window.location.href = data.redirectUrl;
+                        }
+                    });
+                },
+                error: function (xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
+                              'Failed to update the assessment. Please try again.';
+
+                    Swal.fire({
+                        title: 'Error',
+                        text: msg,
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                },
+                complete: function () {
+                    btnElement.disabled = false;
+                    btnElement.textContent = originalText;
+                }
+            });
+        }
+
+        // Attach click handlers for both Save and Submit buttons
+        submitBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            handleFormSubmission(submitBtn);
         });
-    });    
-});
+
+        saveBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            handleFormSubmission(saveBtn);
+        });
+    });
 </script>

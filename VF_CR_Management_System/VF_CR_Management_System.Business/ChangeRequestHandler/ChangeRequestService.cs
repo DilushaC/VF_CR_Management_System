@@ -2,7 +2,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Threading.Tasks;
 using VF_CR_Management_System.Business.ConnectionHandler;
 using VF_CR_Management_System.Data.Models;
@@ -397,16 +399,17 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             // 1. Insert the Approval step record
             const string approvalSql = @"
             INSERT INTO Approval
-                (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                (CRID, StepID, AssignedBy, AssignedTo, ApprovalDate, IsApproved, Active)
             VALUES
-                (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                (@CRID, @StepID, @AssignedBy, @AssignedTo, @ApprovalDate, @IsApproved, @Active)";
 
             var approvalParameters = new DynamicParameters();
             approvalParameters.Add("@CRID", crId);
             approvalParameters.Add("@StepID", approveStepId);
             approvalParameters.Add("@AssignedBy", approvedByEmpId);
             approvalParameters.Add("@AssignedTo", approverId);
-            approvalParameters.Add("@AssignedDate", DateTime.Now);
+            approvalParameters.Add("@ApprovalDate", DateTime.Now);
+            approvalParameters.Add("@IsApproved", true);
             approvalParameters.Add("@Active", true);
 
             int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
@@ -754,7 +757,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return rowsAffected > 0;
         }
 
-        public async Task<bool> UpdateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
+        public async Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
@@ -771,67 +774,29 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 throw new ArgumentException("Please fill out Fixed Asset Info.");
             }
 
-            if (!int.TryParse(collection["ApproverID"], out var approverId))
-            {
-                throw new ArgumentException("Please select an Approver.");
-            }
+            var estimationDaysStr = collection["EffortEstimateDays"].ToString();
+
+            double.TryParse(estimationDaysStr, out double estimationDays);
+            DateTime targetDate = DateTime.Now.AddDays(estimationDays);
+
 
             const string updateCrSql = @"
                 UPDATE ChangeRequest
                 SET 
                     ActivitiesTasks = @ActivitiesTasks,
-                    FixedAssetInfo  = @FixedAssetInfo
+                    FixedAssets  = @FixedAssets,
+                    DueDate = @DueDate,
+                    StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = 'AssessmentDraft')
                 WHERE CRID = @CRID
                   AND Active = 1";
 
             var crParameters = new DynamicParameters();
             crParameters.Add("@ActivitiesTasks", activitiesTasks);
-            crParameters.Add("@FixedAssetInfo", fixedAssetInfo);
+            crParameters.Add("@FixedAssets", fixedAssetInfo);
+            crParameters.Add("@DueDate", targetDate);
             crParameters.Add("@CRID", crId);
 
-            int crRowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
-
-            if (crRowsAffected <= 0)
-                return false;
-
-            const int assignStepId = 7;
-
-            const string updateApprovalSql = @"
-                UPDATE Approval
-                SET AssignedBy   = @AssignedBy,
-                    AssignedTo   = @AssignedTo,
-                    AssignedDate = @AssignedDate
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1";
-
-            var approvalParameters = new DynamicParameters();
-            approvalParameters.Add("@AssignedBy", empId);
-            approvalParameters.Add("@AssignedTo", approverId);
-            approvalParameters.Add("@AssignedDate", DateTime.Now);
-            approvalParameters.Add("@CRID", crId);
-            approvalParameters.Add("@StepID", assignStepId);
-
-            int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, approvalParameters);
-
-            if (approvalRowsAffected <= 0)
-            {
-                const string insertApprovalSql = @"
-                    INSERT INTO Approval
-                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                    VALUES
-                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
-
-                var insertParameters = new DynamicParameters();
-                insertParameters.Add("@CRID", crId);
-                insertParameters.Add("@StepID", assignStepId);
-                insertParameters.Add("@AssignedBy", empId);
-                insertParameters.Add("@AssignedTo", approverId);
-                insertParameters.Add("@AssignedDate", DateTime.Now);
-                insertParameters.Add("@Active", true);
-
-                _connectionService.ExecuteWithPara(insertApprovalSql, insertParameters);
-            }
+            _connectionService.ExecuteWithPara(updateCrSql, crParameters);
 
             return true;
         }

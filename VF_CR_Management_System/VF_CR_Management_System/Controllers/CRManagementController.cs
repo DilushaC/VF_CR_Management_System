@@ -263,14 +263,24 @@ namespace VF_CR_Management_System.Controllers
 
 
         [HttpPost]
-        public async Task<IActionResult> EditAssessment(int id, IFormCollection collection)
+        public async Task<IActionResult> CreateAssessment(IFormCollection collection)
         {
             try
             {
+                // Extract and parse ID from form collection
+                if (!int.TryParse(collection["id"], out int id))
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Invalid or missing ID in form payload."
+                    });
+                }
+
                 var userName = HttpContext.Session.GetString("UserName");
                 var empNo = HttpContext.Session.GetString("EmpNo");
 
-                bool updated = await _changeRequestService.UpdateAssessmentAsync(id, collection, userName, empNo);
+                bool updated = await _changeRequestService.CreateAssessmentAsync(id, collection, userName, empNo);
                 if (updated)
                 {
                     return Json(new
