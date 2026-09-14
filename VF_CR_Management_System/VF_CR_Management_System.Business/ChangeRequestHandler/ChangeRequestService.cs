@@ -754,5 +754,89 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return rowsAffected > 0;
         }
 
+        public async Task<bool> UpdateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            var activitiesTasks = collection["ActivitiesTasks"].ToString();
+            if (string.IsNullOrWhiteSpace(activitiesTasks))
+            {
+                throw new ArgumentException("Please fill out Activities & Tasks.");
+            }
+
+            var fixedAssetInfo = collection["FixedAssetInfo"].ToString();
+            if (string.IsNullOrWhiteSpace(fixedAssetInfo))
+            {
+                throw new ArgumentException("Please fill out Fixed Asset Info.");
+            }
+
+            if (!int.TryParse(collection["ApproverID"], out var approverId))
+            {
+                throw new ArgumentException("Please select an Approver.");
+            }
+
+            const string updateCrSql = @"
+                UPDATE ChangeRequest
+                SET 
+                    ActivitiesTasks = @ActivitiesTasks,
+                    FixedAssetInfo  = @FixedAssetInfo
+                WHERE CRID = @CRID
+                  AND Active = 1";
+
+            var crParameters = new DynamicParameters();
+            crParameters.Add("@ActivitiesTasks", activitiesTasks);
+            crParameters.Add("@FixedAssetInfo", fixedAssetInfo);
+            crParameters.Add("@CRID", crId);
+
+            int crRowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
+
+            if (crRowsAffected <= 0)
+                return false;
+
+            const int assignStepId = 7;
+
+            const string updateApprovalSql = @"
+                UPDATE Approval
+                SET AssignedBy   = @AssignedBy,
+                    AssignedTo   = @AssignedTo,
+                    AssignedDate = @AssignedDate
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1";
+
+            var approvalParameters = new DynamicParameters();
+            approvalParameters.Add("@AssignedBy", empId);
+            approvalParameters.Add("@AssignedTo", approverId);
+            approvalParameters.Add("@AssignedDate", DateTime.Now);
+            approvalParameters.Add("@CRID", crId);
+            approvalParameters.Add("@StepID", assignStepId);
+
+            int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, approvalParameters);
+
+            if (approvalRowsAffected <= 0)
+            {
+                const string insertApprovalSql = @"
+                    INSERT INTO Approval
+                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                    VALUES
+                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+                var insertParameters = new DynamicParameters();
+                insertParameters.Add("@CRID", crId);
+                insertParameters.Add("@StepID", assignStepId);
+                insertParameters.Add("@AssignedBy", empId);
+                insertParameters.Add("@AssignedTo", approverId);
+                insertParameters.Add("@AssignedDate", DateTime.Now);
+                insertParameters.Add("@Active", true);
+
+                _connectionService.ExecuteWithPara(insertApprovalSql, insertParameters);
+            }
+
+            return true;
+        }
+
+
+
     }
 }

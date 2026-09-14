@@ -6,6 +6,7 @@ using VF_CR_Management_System.Business.ChangeRequestHandler;
 using VF_CR_Management_System.Business.DivisionHandler;
 using VF_CR_Management_System.Business.ModuleHandler;
 using VF_CR_Management_System.Business.UserHandler;
+using VF_CR_Management_System.Business.VendorHandler;
 
 namespace VF_CR_Management_System.Controllers
 {
@@ -15,13 +16,15 @@ namespace VF_CR_Management_System.Controllers
         private readonly IUserService _userService;
         private readonly IModuleService _moduleService;
         private readonly IDivisionService _divisionService;
+        private readonly IVendorService _vendorService;
 
-        public CRManagementController(IChangeRequestService changeRequestService, IUserService userService, IModuleService moduleService, IDivisionService divisionService)
+        public CRManagementController(IChangeRequestService changeRequestService, IUserService userService, IModuleService moduleService, IDivisionService divisionService, IVendorService vendorService)
         {
             _changeRequestService = changeRequestService;
             _userService = userService;
             _moduleService = moduleService;
             _divisionService = divisionService;
+            _vendorService = vendorService;
         }
 
         [HttpGet]
@@ -251,9 +254,49 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpGet]
-        public IActionResult Assessment()
+        public async Task<IActionResult> Assessment()
         {
+            var vendors = await _vendorService.GetAllVendorsAsync();
+            ViewBag.Vendors = vendors;
             return View();
+        }
+
+
+        [HttpPost]
+        public async Task<IActionResult> EditAssessment(int id, IFormCollection collection)
+        {
+            try
+            {
+                var userName = HttpContext.Session.GetString("UserName");
+                var empNo = HttpContext.Session.GetString("EmpNo");
+
+                bool updated = await _changeRequestService.UpdateAssessmentAsync(id, collection, userName, empNo);
+                if (updated)
+                {
+                    return Json(new
+                    {
+                        success = true,
+                        message = "Assessment updated successfully",
+                        redirectUrl = Url.Action("DraftTable", "CRManagement")
+                    });
+                }
+                else
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Failed to update Change Request"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = $"Error: {ex.Message}"
+                });
+            }
         }
 
         [HttpGet]

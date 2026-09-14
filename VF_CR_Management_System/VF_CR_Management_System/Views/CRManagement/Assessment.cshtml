@@ -1,5 +1,9 @@
-﻿@{
+﻿@using VF_CR_Management_System.Data.Models
+@{
     ViewData["Title"] = "CR Assessment";
+}
+@{
+    var vendors = ViewBag.Vendors as List<Vendor>;
 }
 @{
     var username = Context.Session.GetString("UserName");
@@ -16,7 +20,7 @@
             </div>
 
             <div class="card-body">
-                <form>
+                <form id="assessmentForm">
 
                     <!-- Change Request details passed from the CR Details modal, shown as read-only labels -->
                     <div class="card border mb-4">
@@ -105,17 +109,17 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Effort Estimate ( Days )</label>
-                                    <input type="number" class="form-control" min="0" step="0.5">
+                                    <input type="number" name="EffortEstimateDays" id="effortEstimateDays" class="form-control" min="0" step="0.5">
                                 </div>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label">Activities &amp; Tasks</label>
-                                <textarea class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
+                                <textarea name="ActivitiesTasks" id="activitiesTasks" class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Fixed Asset Information</label>
-                                <textarea class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
+                                <textarea name="FixedAssetInfo" id="fixedAssetInfo" class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
                             </div>
                         </div>
 
@@ -140,11 +144,21 @@
 
                                     <div id="vendorSupportDetails" class="mb-3" style="display: none;">
                                         <label class="form-label">Vendor Name</label>
-                                        <input type="text" class="form-control">
+                                        <select id="VendorID" name="VendorID" class="form-control select2" data-toggle="select2">
+                                            <option value="" selected disabled hidden>Select Vendor</option>
+                                            @if (vendors != null)
+                                            {
+                                                @foreach (var vendor in vendors)
+                                                {
+                                                    <option value="@vendor.Id">@vendor.VendorName</option>
+                                                }
+                                            }
+                                        </select>
+                                        <span id="vendorIdError" class="text-danger"></span>
                                     </div>
                                     <div id="proposalNumber" class="mb-3" style="display: none;">
                                         <label class="form-label">Proposal Number</label>
-                                        <input type="text" class="form-control">
+                                        <input type="text" name="ProposalNumber" id="proposalNumberInput" class="form-control">
                                     </div>
 
                                     <!-- Attachment upload (only when Vendor Support = Yes) -->
@@ -166,10 +180,26 @@
 
                     <!-- Actions -->
                     <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <button type="button" class="btn btn-outline-danger">Cancel</button>
+                        <button type="button"
+                                class="btn btn-outline-danger"
+                                onclick="window.location.href='@Url.Action("AssessmentsTable")'">
+                            Cancel
+                        </button>
+
                         <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-danger">Save</button>
-                            <button type="submit" class="btn btn-primary">Submit</button>
+                            <button type="button"
+                                    id="btn-save"
+                                    class="btn btn-danger"
+                                    data-status="1">
+                                Save
+                            </button>
+
+                            <button type="submit"
+                                    id="submitBtn"
+                                    class="btn btn-primary"
+                                    data-status="2">
+                                Submit
+                            </button>
                         </div>
                     </div>
                 </form>
@@ -179,9 +209,11 @@
 </div><!-- end row -->
 
 <script>
+   
     document.addEventListener("DOMContentLoaded", function () {
-
         // ---- Vendor support toggle (existing behavior) ----
+        var saveBtn = document.getElementById('btn-save');
+        var submitBtn = document.getElementById('submitBtn');
         var vendorYes = document.getElementById('vendorSupportYes');
         var vendorNo = document.getElementById('vendorSupportNo');
         var vendorDetails = document.getElementById('vendorSupportDetails');
@@ -208,6 +240,7 @@
         //      &division=...&module=...&priority=...&status=...&requestedby=...&requesteddate=...&currentapprover=...
         var params = new URLSearchParams(window.location.search);
 
+        var crId = params.get('id');
         var crNumber = params.get('crnumber');
         var title = params.get('title');
         var summary = params.get('summary');
@@ -236,5 +269,87 @@
         document.getElementById('requestedBy').textContent = requestedBy || '—';
         document.getElementById('requestedDate').textContent = requestedDate || '—';
         document.getElementById('currentApprover').textContent = currentApprover || '—';
-    });
+
+        // ---- Submit handler: POST the form to the backend ----
+        var assessmentForm = document.getElementById('assessmentForm');
+        var submitBtn = document.getElementById('submitBtn');
+
+        submitBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        alert();
+        if (!crId) {
+            Swal.fire({
+                title: 'Could not submit',
+                text: 'Missing Change Request ID. Cannot submit the assessment.',
+                icon: 'error',
+                customClass: { confirmButton: 'btn btn-primary' },
+                buttonsStyling: false
+            });
+            return;
+        }
+
+        var formData = new FormData(assessmentForm);
+
+        submitBtn.disabled = true;
+        var originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Submitting...';
+
+        $.ajax({
+            url: '@Url.Action("EditAssessment", "CRManagement")',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: {
+                "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+            },
+            success: function (data) {
+
+                if (!data.success) {
+                    Swal.fire({
+                        title: 'Could not save',
+                        text: data.message || 'Failed to update Change Request assessment.',
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                    return;
+                }
+
+                Swal.fire({
+                    title: 'Saved!',
+                    text: data.message || 'Assessment updated successfully.',
+                    icon: 'success',
+                    customClass: { confirmButton: 'btn btn-primary' },
+                    buttonsStyling: false
+                }).then(function () {
+
+                    if (data.redirectUrl) {
+                        window.location.href = data.redirectUrl;
+                    }
+                });
+            },
+
+            error: function (xhr) {
+
+                var msg =
+                    (xhr.responseJSON && xhr.responseJSON.message) ||
+                    'Failed to update the assessment. Please try again.';
+
+                Swal.fire({
+                    title: 'Error',
+                    text: msg,
+                    icon: 'error',
+                    customClass: { confirmButton: 'btn btn-primary' },
+                    buttonsStyling: false
+                });
+            },
+
+            complete: function () {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+    });    
+});
 </script>
