@@ -5,6 +5,8 @@
     var vendors = ViewBag.Vendors as List<Vendor>;
     var effortEstimateDays = ViewBag.EffortEstimateDays as double? ?? 0;
     var approverUserName = ViewBag.ApproverUserName as string;
+}
+@{
     var username = Context.Session.GetString("UserName");
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");

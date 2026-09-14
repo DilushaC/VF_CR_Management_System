@@ -256,11 +256,39 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> Assessment()
+        public async Task<IActionResult> Assessment(int? id)
         {
-            var vendors = await _vendorService.GetAllVendorsAsync();
-            ViewBag.Vendors = vendors;
-            return View();
+            if (id == null)
+            {
+                return RedirectToAction("Index");
+            }
+
+            try
+            {
+                var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
+                if (changeRequest == null)
+                {
+                    return NotFound();
+                }
+
+                var vendors = await _vendorService.GetAllVendorsAsync();
+                ViewBag.Vendors = vendors;
+
+                ViewBag.ApproverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id.Value);
+
+                double effortEstimateDays = 0;
+                if (changeRequest.DueDate.HasValue)
+                {
+                    effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
+                }
+                ViewBag.EffortEstimateDays = effortEstimateDays;
+
+                return View("Assessment", changeRequest);
+            }
+            catch (Exception ex)
+            {
+                return View("Error");
+            }
         }
 
 
