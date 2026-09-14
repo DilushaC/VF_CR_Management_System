@@ -22,6 +22,8 @@ namespace VF_CR_Management_System.Data.Models
         public string ApproverID { get; set; }
         public int WorkflowID { get; set; }
         public int StatusID { get; set; }
+        public string FixedAssets { get; set; }
+        public string ActivitiesTasks { get; set; }
         public string BusinessImpact { get; set; }
         public string Reason { get; set; }
         public string ExpectedBenefit { get; set; }

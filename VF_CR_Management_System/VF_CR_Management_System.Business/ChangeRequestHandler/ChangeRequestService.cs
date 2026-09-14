@@ -146,6 +146,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.Summary,
                     cr.ChangeTitle,
                     cr.ChangeTypeID,
+                    cr.ActivitiesTasks,
+                    cr.FixedAssets,
                     ct.ChangeTypeName AS ChangeType,
                     cr.OtherType,
                     cr.PriorityID,
@@ -157,7 +159,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.StatusID,
                     s.StatusName      AS Status,
                     cr.RequesterUserName AS RequestedBy,
-                    cr.RequestedDate
+                    cr.RequestedDate,
+                    cr.DueDate
                 FROM [CRManagementDB].[dbo].[ChangeRequest] cr
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] ct ON ct.ChangeTypeID = cr.ChangeTypeID
                 LEFT JOIN [CRManagementDB].[dbo].[Priority]   p  ON p.PriorityID   = cr.PriorityID

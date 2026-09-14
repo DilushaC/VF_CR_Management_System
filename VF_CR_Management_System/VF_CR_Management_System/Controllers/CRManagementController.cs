@@ -110,7 +110,9 @@ namespace VF_CR_Management_System.Controllers
                 divisionID = changeRequest.DivisionID,
                 moduleID = changeRequest.ModuleID,
                 statusID = changeRequest.StatusID,
-                approverUserName = approverUserName
+                approverUserName = approverUserName,
+                fixedAssets = changeRequest.FixedAssets,
+                activitiesTasks = changeRequest.ActivitiesTasks
             });
         }
 
@@ -287,7 +289,7 @@ namespace VF_CR_Management_System.Controllers
                     {
                         success = true,
                         message = "Assessment updated successfully",
-                        redirectUrl = Url.Action("DraftTable", "CRManagement")
+                        redirectUrl = Url.Action("AssessmentsTable", "CRManagement")
                     });
                 }
                 else
@@ -375,6 +377,45 @@ namespace VF_CR_Management_System.Controllers
             ViewBag.CurrentEmpNo = empNo;
             var crs = await _changeRequestService.GetAllChangeRequestsAssessmentsAsync(empNo);
             return View(crs);
+        }
+
+
+        [HttpGet]
+        public async Task<IActionResult> EditAssessment(int? id)
+        {
+            if (id == null)
+            {
+                return RedirectToAction("AssessmentsTable");
+            }
+
+            try
+            {
+                var userName = HttpContext.Session.GetString("UserName");
+                var empNo = HttpContext.Session.GetString("EmpNo");
+
+                var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
+                if (changeRequest == null)
+                {
+                    return NotFound();
+                }
+
+                ViewBag.ApproverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id.Value);
+
+                // Effort estimate (days) = DueDate - Now, clamped at 0 so a past-due date
+                // never shows a negative number.
+                double effortEstimateDays = 0;
+                if (changeRequest.DueDate.HasValue)
+                {
+                    effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
+                }
+                ViewBag.EffortEstimateDays = effortEstimateDays;
+
+                return View("Assessment", changeRequest);
+            }
+            catch (Exception ex)
+            {
+                return View("Error");
+            }
         }
     }
 }
