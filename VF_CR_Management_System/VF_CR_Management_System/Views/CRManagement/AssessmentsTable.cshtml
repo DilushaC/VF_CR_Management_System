@@ -321,26 +321,12 @@
             }
 
             // Show "Go to Assessment" only when the CR has been approved.
-            // Pass EVERY modal field through as query string params so the
-            // Assessment screen can show them all as read-only labels
-            // without an extra round trip to the server.
+            // The Assessment page now fetches everything itself via
+            // GetChangeRequestByIdAsync, so we only need to pass the id.
             if (normalizedStatus === 'approved') {
-                var qs = new URLSearchParams({
-                    id: crid || '',
-                    crnumber: crnumber || '',
-                    title: title || '',
-                    summary: summary || '',
-                    changetype: changetype || '',
-                    division: division || '',
-                    module: module || '',
-                    priority: priority || '',
-                    status: status || '',
-                    requestedby: requestedby || '',
-                    requesteddate: requesteddate || '',
-                    currentapprover: currentApprover || ''
-                }).toString();
-
-                $assessmentBtn.attr('href', assessmentUrlBase + '?' + qs).removeClass('d-none');
+                $assessmentBtn
+                    .attr('href', assessmentUrlBase + '?id=' + encodeURIComponent(crid || ''))
+                    .removeClass('d-none');
             } else {
                 $assessmentBtn.addClass('d-none');
             }
@@ -355,106 +341,5 @@
             });
         });
 
-        $approveBtn.on('click', function () {
-            var crid = $(crDetailsModal).data('crid');
-            var approverId = $('#modal-approver').val();
-
-            if (!approverId) {
-                $('#modal-approver-error').removeClass('d-none');
-                return;
-            }
-            $('#modal-approver-error').addClass('d-none');
-
-            Swal.fire({
-                target: crDetailsModal,
-                title: 'Approve this Change Request?',
-                text: 'This action cannot be undone.',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Yes, approve it',
-                cancelButtonText: 'Cancel',
-                confirmButtonColor: '#0acf97',
-                cancelButtonColor: '#6c757d'
-            }).then(function (result) {
-                if (!result.isConfirmed) return;
-
-                $.ajax({
-                    url: '@Url.Action("Approve", "CRManagement")',
-                    type: 'POST',
-                    data: { id: crid, ApproverID: approverId },
-                    headers: {
-                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                    },
-                    success: function () {
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Approved!',
-                            text: 'The Change Request has been approved.',
-                            icon: 'success'
-                        }).then(function () { location.reload(); });
-                    },
-                    error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to approve the CR. Please try again.';
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Error',
-                            text: msg,
-                            icon: 'error'
-                        });
-                    }
-                });
-            });
-        });
-
-        $rejectBtn.on('click', function () {
-            var crid = $(crDetailsModal).data('crid');
-
-            Swal.fire({
-                target: crDetailsModal,
-                title: 'Reject this Change Request?',
-                input: 'textarea',
-                inputPlaceholder: 'Enter reason for rejection...',
-                inputAttributes: { 'aria-label': 'Rejection reason' },
-                showCancelButton: true,
-                confirmButtonText: 'Yes, reject it',
-                cancelButtonText: 'Cancel',
-                confirmButtonColor: '#fa5c7c',
-                cancelButtonColor: '#6c757d',
-                inputValidator: function (value) {
-                    if (!value || !value.trim()) {
-                        return 'Please provide a reason for rejection.';
-                    }
-                }
-            }).then(function (result) {
-                if (!result.isConfirmed) return;
-                var reason = result.value;
-
-                $.ajax({
-                    url: '@Url.Action("Reject", "CRManagement")',
-                    type: 'POST',
-                    data: { id: crid, RejectReason: reason },
-                    headers: {
-                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                    },
-                    success: function () {
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Rejected',
-                            text: 'The Change Request has been rejected.',
-                            icon: 'success'
-                        }).then(function () { location.reload(); });
-                    },
-                    error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to reject the CR. Please try again.';
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Error',
-                            text: msg,
-                            icon: 'error'
-                        });
-                    }
-                });
-            });
-        });
     </script>
 }
