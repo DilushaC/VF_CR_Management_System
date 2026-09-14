@@ -319,9 +319,27 @@
                 $approverWrapper.addClass('d-none');
             }
 
-            // Show "Go to Assessment" only when the CR has been approved
+            // Show "Go to Assessment" only when the CR has been approved.
+            // Pass EVERY modal field through as query string params so the
+            // Assessment screen can show them all as read-only labels
+            // without an extra round trip to the server.
             if (normalizedStatus === 'approved') {
-                $assessmentBtn.attr('href', assessmentUrlBase + '?id=' + crid).removeClass('d-none');
+                var qs = new URLSearchParams({
+                    id: crid || '',
+                    crnumber: crnumber || '',
+                    title: title || '',
+                    summary: summary || '',
+                    changetype: changetype || '',
+                    division: division || '',
+                    module: module || '',
+                    priority: priority || '',
+                    status: status || '',
+                    requestedby: requestedby || '',
+                    requesteddate: requesteddate || '',
+                    currentapprover: currentApprover || ''
+                }).toString();
+
+                $assessmentBtn.attr('href', assessmentUrlBase + '?' + qs).removeClass('d-none');
             } else {
                 $assessmentBtn.addClass('d-none');
             }

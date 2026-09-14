@@ -12,41 +12,96 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header border-bottom border-dashed d-flex align-items-center">
-                <h4 class="header-title mb-0">Section 2 : Change Assessment (Implementer) - CR10000021212121</h4>
+                <h4 class="header-title mb-0" id="assessmentHeader">Section 2 : Change Assessment (Implementer)</h4>
             </div>
 
             <div class="card-body">
                 <form>
+
+                    <!-- Change Request details passed from the CR Details modal, shown as read-only labels -->
+                    <div class="card border mb-4">
+                        <div class="card-header bg-light-subtle">
+                            <h6 class="fs-15 mb-0">Change Request Details</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">CR Number:</label>
+                                    <span id="crNumber"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Title:</label>
+                                    <span id="crTitle"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
+                                    <span id="changeType"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Priority:</label>
+                                    <span id="priority"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Division:</label>
+                                    <span id="division"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Module:</label>
+                                    <span id="module"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Status:</label>
+                                    <span id="crStatus"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
+                                    <span id="requestedBy"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
+                                    <span id="requestedDate"></span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Approver:</label>
+                                    <span id="currentApprover"></span>
+                                </div>
+                                <div class="col-md-12">
+                                    <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
+                                    <span id="crSummary"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row g-3">
 
                         <!-- Left Column -->
                         <div class="col-lg-6">
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
-                                    <label class="form-label">Implementer Name</label>
-                                    <input type="text" class="form-control" value="@username" disabled>
+                                    <label class="fw-bold text-dark d-block mb-1">Implementer Name :</label>
+                                    <span id="implementerName">@username</span>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Designation</label>
-                                    <input type="text" class="form-control" value="@designation" disabled>
+                                    <label class="fw-bold text-dark d-block mb-1">Designation :</label>
+                                    <span id="implementerDesignation">@designation</span>
+                                </div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Department :</label>
+                                    <span id="implementerDepartment">@department</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Email :</label>
+                                    <span id="implementerEmail">@email</span>
                                 </div>
                             </div>
 
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
-                                    <label class="form-label">Department</label>
-                                    <input type="text" class="form-control" value="@department" disabled>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" class="form-control" value="@email" disabled>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Request Date</label>
-                                    <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
+                                    <label class="fw-bold text-dark d-block mb-1">Request Date :</label>
+                                    <span id="requestDate">@DateTime.Now.ToString("dd/MM/yyyy")</span>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Effort Estimate ( Days )</label>
@@ -91,6 +146,18 @@
                                         <label class="form-label">Proposal Number</label>
                                         <input type="text" class="form-control">
                                     </div>
+
+                                    <!-- Attachment upload (only when Vendor Support = Yes) -->
+                                    <div id="attachmentSection" class="mb-3" style="display: none;">
+                                        <label class="form-label">Attachments</label>
+                                        <form action="https://themes.coderthemes.com/" method="post" class="dropzone" id="myAwesomeDropzone" data-plugin="dropzone"
+                                              data-previews-container="#file-previews"
+                                              data-upload-preview-template="#uploadPreviewTemplate">
+                                            <div class="fallback">
+                                                <input name="file" type="file" multiple />
+                                            </div>
+                                        </form>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -113,22 +180,61 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
+
+        // ---- Vendor support toggle (existing behavior) ----
         var vendorYes = document.getElementById('vendorSupportYes');
         var vendorNo = document.getElementById('vendorSupportNo');
         var vendorDetails = document.getElementById('vendorSupportDetails');
         var proposalNumberDetails = document.getElementById('proposalNumber');
+        var attachmentSection = document.getElementById('attachmentSection');
 
         function toggleVendorDetails() {
             if (vendorYes.checked) {
                 vendorDetails.style.display = 'block';
                 proposalNumberDetails.style.display = 'block';
+                attachmentSection.style.display = 'block';
             } else {
                 vendorDetails.style.display = 'none';
                 proposalNumberDetails.style.display = 'none';
+                attachmentSection.style.display = 'none';
             }
         }
 
         vendorYes.addEventListener('change', toggleVendorDetails);
         vendorNo.addEventListener('change', toggleVendorDetails);
+
+        // ---- Read ALL details passed from the CR Details modal via the query string ----
+        // e.g. /CRManagement/Assessment?id=12&crnumber=CR1000002&title=...&summary=...&changetype=...
+        //      &division=...&module=...&priority=...&status=...&requestedby=...&requesteddate=...&currentapprover=...
+        var params = new URLSearchParams(window.location.search);
+
+        var crNumber = params.get('crnumber');
+        var title = params.get('title');
+        var summary = params.get('summary');
+        var changeType = params.get('changetype');
+        var division = params.get('division');
+        var module = params.get('module');
+        var priority = params.get('priority');
+        var status = params.get('status');
+        var requestedBy = params.get('requestedby');
+        var requestedDate = params.get('requesteddate');
+        var currentApprover = params.get('currentapprover');
+
+        if (crNumber) {
+            document.getElementById('assessmentHeader').textContent =
+                'Section 2 : Change Assessment (Implementer) - ' + crNumber;
+        }
+
+        document.getElementById('crNumber').textContent = crNumber || '—';
+        document.getElementById('crTitle').textContent = title || '—';
+        document.getElementById('crSummary').textContent = summary || '—';
+        document.getElementById('changeType').textContent = changeType || '—';
+        document.getElementById('division').textContent = division || '—';
+        document.getElementById('module').textContent = module || '—';
+        document.getElementById('priority').textContent = priority || '—';
+        document.getElementById('crStatus').textContent = status || '—';
+        document.getElementById('requestedBy').textContent = requestedBy || '—';
+        document.getElementById('requestedDate').textContent = requestedDate || '—';
+        document.getElementById('currentApprover').textContent = currentApprover || '—';
     });
 </script>
