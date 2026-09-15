@@ -162,6 +162,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.StatusID,
                     s.StatusName      AS Status,
                     cr.RequesterUserName AS RequestedBy,
+                    App.AssignedTo    AS ApproverUserName,
                     cr.RequestedDate,
                     cr.DueDate
                 FROM [CRManagementDB].[dbo].[ChangeRequest] cr
@@ -170,6 +171,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[Division]   dv ON dv.DivisionID  = cr.DivisionID
                 LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID    = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID    = cr.StatusID
+                LEFT JOIN [dbo].[Approval] App                    ON App.CRID     = cr.CRID
                 WHERE cr.Active = 1
                   AND cr.CRID = @CRID";
 
@@ -179,35 +181,48 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (changeRequest == null)
                 return null;
 
-            // Resolve RequestedBy (raw username) into a display name from the Users DB
-            // (separate connection/DB from CRManagementDB)
-            if (!string.IsNullOrWhiteSpace(changeRequest.RequestedBy))
+            // Resolve RequestedBy / ApproverUserName (raw usernames) into display names
+            // from the Users DB (separate connection/DB from CRManagementDB)
+            var userNames = new[] { changeRequest.RequestedBy, changeRequest.ApproverUserName }
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct()
+                .ToList();
+
+            if (userNames.Any())
             {
                 const string usersQuery = @"
                     SELECT UserName, FirstName, LastName
                     FROM Users
-                    WHERE UserName = @UserName";
+                    WHERE UserName IN @UserNames";
 
                 var userParams = new DynamicParameters();
-                userParams.Add("@UserName", changeRequest.RequestedBy);
+                userParams.Add("@UserNames", userNames);
 
                 var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
 
-                if (usersTable.Rows.Count > 0)
-                {
-                    var userRow = usersTable.Rows[0];
-                    var fullName = $"{userRow.Field<string?>("FirstName")} {userRow.Field<string?>("LastName")}".Trim();
+                var nameLookup = usersTable.AsEnumerable()
+                    .ToDictionary(
+                        r => r.Field<string>("UserName"),
+                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        StringComparer.OrdinalIgnoreCase);
 
-                    if (!string.IsNullOrWhiteSpace(fullName))
-                    {
-                        changeRequest.RequestedBy = fullName;
-                    }
+                if (!string.IsNullOrWhiteSpace(changeRequest.RequestedBy) &&
+                    nameLookup.TryGetValue(changeRequest.RequestedBy, out var requesterFullName) &&
+                    !string.IsNullOrWhiteSpace(requesterFullName))
+                {
+                    changeRequest.RequestedBy = requesterFullName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(changeRequest.ApproverUserName) &&
+                    nameLookup.TryGetValue(changeRequest.ApproverUserName, out var approverFullName) &&
+                    !string.IsNullOrWhiteSpace(approverFullName))
+                {
+                    changeRequest.ApproverUserName = approverFullName;
                 }
             }
 
             return changeRequest;
         }
-
         public async Task<string> GetAssignedApproverUserNameAsync(int crId)
         {
             if (crId <= 0)
