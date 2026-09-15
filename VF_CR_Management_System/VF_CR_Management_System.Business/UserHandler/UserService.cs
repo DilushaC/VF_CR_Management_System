@@ -24,16 +24,32 @@ namespace VF_CR_Management_System.Business.UserHandler
 
         public async Task<UserModel?> ValidateUserAsync(string username, string password, int productId)
         {
-            // 1. Authenticate AD
+            // 1. Authenticate AD (credential check only — display data now comes from our own tables)
             var response = await _aDAuthentication.AuthenticatewithAD(username, password);
             if (!response.Status)
                 return null;
 
-            // 2. Get User
+            // 2. Get User joined with Department and Designation
             const string userQuery = @"
-                SELECT *
-                FROM Users
-                WHERE UserName = @UserName AND IsActive = 1";
+                SELECT
+                    u.Id,
+                    u.UserName,
+                    u.FirstName,
+                    u.LastName,
+                    u.Email,
+                    u.Phone,
+                    u.PrimaryBranchId,
+                    u.PrimaryDepartmentId,
+                    u.DesignationId,
+                    u.IsActive,
+                    d.DepartmentName,
+                    des.DesignationName
+                FROM Users u
+                LEFT JOIN Department d
+                    ON u.PrimaryDepartmentId = d.Id AND d.IsActive = 1
+                LEFT JOIN Designation des
+                    ON u.DesignationId = des.Id AND des.IsActive = 1
+                WHERE u.UserName = @UserName AND u.IsActive = 1";
 
             var userParams = new DynamicParameters();
             userParams.Add("@UserName", username);
@@ -44,14 +60,17 @@ namespace VF_CR_Management_System.Business.UserHandler
 
             var userRow = userData.Rows[0];
 
+            var firstName = userRow.Field<string?>("FirstName") ?? string.Empty;
+            var lastName = userRow.Field<string?>("LastName") ?? string.Empty;
+
             var user = new UserModel
             {
                 Id = userRow.Field<int>("Id"),
-                DisplayName = response.Data.DisplayName,
-                UserName = response.Data.Username,
-                DisplayDesignation = response.Data.Title,
-                DisplayDepartment = response.Data.Department,
-                Email = response.Data.Email,
+                DisplayName = $"{firstName} {lastName}".Trim(),
+                UserName = userRow.Field<string>("UserName"),
+                DisplayDesignation = userRow.Field<string?>("DesignationName") ?? string.Empty,
+                DisplayDepartment = userRow.Field<string?>("DepartmentName") ?? string.Empty,
+                Email = userRow.Field<string?>("Email") ?? string.Empty,
                 IsActive = userRow.Field<bool>("IsActive")
             };
 
@@ -108,18 +127,14 @@ namespace VF_CR_Management_System.Business.UserHandler
                       )
                 ORDER BY m.DisplayOrder";
 
-
-
             var menuParams = new DynamicParameters();
             menuParams.Add("@UserId", user.Id);
             menuParams.Add("@ProductId", productId);
-
 
             var menuData = _connectionService.ReturnWithPara2(menuQuery, menuParams);
 
             if (menuData != null && menuData.Rows.Count > 0)
             {
-                // Deduplicate by MenuItem Id to avoid duplicates caused by multiple products
                 user.MenuItems = menuData.AsEnumerable()
                     .Select(r => new MenuItem
                     {
@@ -139,7 +154,6 @@ namespace VF_CR_Management_System.Business.UserHandler
                     .Select(g => g.First())
                     .OrderBy(m => m.DisplayOrder)
                     .ToList();
-
             }
 
             // 5. Populate PageUrls for session
