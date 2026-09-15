@@ -267,6 +267,11 @@
         var $rejectBtn = $('#modal-reject-btn');
         var $approverWrapper = $('#modal-approver-wrapper');
 
+        // Single source of truth for the currently-open CR's id — a plain JS
+        // variable, not jQuery's .data() cache and not a DOM attribute, so
+        // there's no ambiguity about where it lives or how it's read.
+        var currentCrId = null;
+
         function normalize(value) {
             return (value || '').trim().toLowerCase();
         }
@@ -274,7 +279,25 @@
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
 
-            var crid = button.getAttribute('data-bs-crid');
+            if (!button) {
+                console.error('crDetailsModal opened without a relatedTarget button — cannot determine CRID.');
+                currentCrId = null;
+                return;
+            }
+
+            var succeeded = ["ChangeRequest", ""];
+            var rawCrid = button.getAttribute('data-bs-crid');
+
+            // not in this script.
+            if (!rawCrid || rawCrid === '0') {
+                console.warn('[crDetailsModal] Button has invalid data-bs-crid:', JSON.stringify(rawCrid), button);
+            }
+
+            currentCrId = parseInt(rawCrid, 10);
+            if (isNaN(currentCrId) || currentCrId <= 0) {
+                currentCrId = null;
+            }
+
             var crnumber = button.getAttribute('data-bs-crnumber');
             var title = button.getAttribute('data-bs-title');
             var summary = button.getAttribute('data-bs-summary');
@@ -297,9 +320,6 @@
             crDetailsModal.querySelector('#modal-requestedby').textContent = requestedby || '';
             crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
             crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
-            crDetailsModal.querySelector('#modal-currentapprover').textContent = currentApprover || '';
-
-            $(crDetailsModal).data('crid', crid);
 
             var normalizedStatus = normalize(status);
 
@@ -327,6 +347,13 @@
             $('#modal-approver-error').addClass('d-none');
         });
 
+        // Clear the id once the modal is fully hidden, so a stale id from a
+        // previous open can never leak into a later click if show.bs.modal
+        // somehow didn't fire correctly.
+        $(crDetailsModal).on('hidden.bs.modal', function () {
+            currentCrId = null;
+        });
+
         $(crDetailsModal).on('shown.bs.modal', function () {
             $('#modal-approver').select2({
                 dropdownParent: $(crDetailsModal)
@@ -334,7 +361,16 @@
         });
 
         $approveBtn.on('click', function () {
-            var crid = $(crDetailsModal).data('crid');
+            if (!currentCrId) {
+                Swal.fire({
+                    target: crDetailsModal,
+                    title: 'Could not approve',
+                    text: 'No valid Change Request ID was found. Please close this dialog and try again.',
+                    icon: 'error'
+                });
+                return;
+            }
+
             var approverId = $('#modal-approver').val();
 
             if (!approverId) {
@@ -359,7 +395,7 @@
                 $.ajax({
                     url: '@Url.Action("Approve", "CRManagement")',
                     type: 'POST',
-                    data: { id: crid, ApproverID: approverId },
+                    data: { id: currentCrId, ApproverID: approverId },
                     headers: {
                         "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
                     },
@@ -385,7 +421,15 @@
         });
 
         $rejectBtn.on('click', function () {
-            var crid = $(crDetailsModal).data('crid');
+            if (!currentCrId) {
+                Swal.fire({
+                    target: crDetailsModal,
+                    title: 'Could not reject',
+                    text: 'No valid Change Request ID was found. Please close this dialog and try again.',
+                    icon: 'error'
+                });
+                return;
+            }
 
             Swal.fire({
                 target: crDetailsModal,
@@ -410,7 +454,7 @@
                 $.ajax({
                     url: '@Url.Action("Reject", "CRManagement")',
                     type: 'POST',
-                    data: { id: crid, RejectReason: reason },
+                    data: { id: currentCrId, RejectReason: reason },
                     headers: {
                         "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
                     },

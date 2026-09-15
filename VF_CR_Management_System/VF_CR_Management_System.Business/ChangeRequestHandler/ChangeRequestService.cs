@@ -20,7 +20,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         {
             _connectionService = connectionService;
         }
-        public async Task<int> CreateChangeRequestAsync(IFormCollection collection,string empId)
+        public async Task<int> CreateChangeRequestAsync(IFormCollection collection, string empId)
         {
             // Required fields
             if (!int.TryParse(collection["ChangeTypeID"], out var changeTypeId))
@@ -878,26 +878,41 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (string.IsNullOrWhiteSpace(rejectReason))
                 throw new ArgumentException("Please provide a reason for rejection.");
 
+            // 1. Resolve the StepID for the "CR Reject" workflow step
+            const string getStepIdSql = @"
+                SELECT StepID
+                FROM WorkflowStep
+                WHERE StepName = @StepName
+                  AND Active = 1";
+
+            var stepParams = new DynamicParameters();
+            stepParams.Add("@StepName", "CR Reject");
+
+            var stepTable = _connectionService.ReturnWithPara(getStepIdSql, stepParams);
+            if (stepTable == null || stepTable.Rows.Count == 0)
+                throw new InvalidOperationException("Workflow step 'CR Reject' is not configured.");
+
+            var rejectStepId = stepTable.Rows[0].Field<int>("StepID");
+
+            // 2. Update the CR's current active Approval row: record the rejection
+            //    and move it onto the "CR Reject" step.
             const string updateApprovalSql = @"
                 UPDATE a
                 SET
                     a.ApprovalDate = @ApprovalDate,
                     a.IsApproved = @IsApproved,
-                    a.Comments = @Comments
+                    a.Comments = @Comments,
+                    a.StepID = @NewStepID
                 FROM Approval AS a
-                INNER JOIN WorkflowStep AS ws
-                    ON ws.StepID = a.StepID
                 WHERE a.CRID = @CRID
-                  AND ws.StepName = @StepName
-                  AND ws.Active = 1
                   AND a.Active = 1";
 
             var approvalParameters = new DynamicParameters();
             approvalParameters.Add("@ApprovalDate", DateTime.Now);
             approvalParameters.Add("@IsApproved", false);
             approvalParameters.Add("@Comments", rejectReason);
+            approvalParameters.Add("@NewStepID", rejectStepId);
             approvalParameters.Add("@CRID", crId);
-            approvalParameters.Add("@StepName", "CR Submission");
 
             int approvalRowsAffected =
                 _connectionService.ExecuteWithPara(
@@ -907,6 +922,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (approvalRowsAffected <= 0)
                 return false;
 
+            // 3. Move the ChangeRequest itself into "Rejected" status
             const string updateStatusSql = @"
                 UPDATE cr
                 SET cr.StatusID = s.StatusID
@@ -1030,7 +1046,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             crParameters.Add("@ActivitiesTasks", activitiesTasks);
             crParameters.Add("@FixedAssets", fixedAssetInfo);
             crParameters.Add("@DueDate", targetDate);
-            crParameters.Add("@VendorID", vendorID);
+            if (vendorID == "")
+                crParameters.Add("@VendorID", null);
+            else
+                crParameters.Add("@VendorID", vendorID);
             crParameters.Add("@ProposalNumber", poposalNumber);
             crParameters.Add("@CRID", crId);
 
