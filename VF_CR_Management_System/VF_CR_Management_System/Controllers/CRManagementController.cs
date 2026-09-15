@@ -426,6 +426,8 @@ namespace VF_CR_Management_System.Controllers
                 {
                     return NotFound();
                 }
+                var vendors = await _vendorService.GetAllVendorsAsync();
+                ViewBag.Vendors = vendors;
 
                 ViewBag.ApproverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id.Value);
 

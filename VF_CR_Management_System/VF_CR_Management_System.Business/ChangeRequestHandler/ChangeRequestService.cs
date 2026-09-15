@@ -148,6 +148,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.ChangeTypeID,
                     cr.ActivitiesTasks,
                     cr.FixedAssets,
+                    cr.VendorID,
+                    cr.ProposalNumber,
                     ct.ChangeTypeName AS ChangeType,
                     cr.OtherType,
                     cr.PriorityID,
@@ -782,6 +784,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             double.TryParse(estimationDaysStr, out double estimationDays);
             DateTime targetDate = DateTime.Now.AddDays(estimationDays);
 
+            var vendorID = collection["VendorID"].ToString();
+            var poposalNumber = collection["ProposalNumber"].ToString();
 
             const string updateCrSql = @"
                 UPDATE ChangeRequest
@@ -789,6 +793,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ActivitiesTasks = @ActivitiesTasks,
                     FixedAssets  = @FixedAssets,
                     DueDate = @DueDate,
+                    VendorID = @VendorID,
+                    ProposalNumber = @ProposalNumber,
                     StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = 'AssessmentDraft')
                 WHERE CRID = @CRID
                   AND Active = 1";
@@ -797,6 +803,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             crParameters.Add("@ActivitiesTasks", activitiesTasks);
             crParameters.Add("@FixedAssets", fixedAssetInfo);
             crParameters.Add("@DueDate", targetDate);
+            crParameters.Add("@VendorID", vendorID);
+            crParameters.Add("@ProposalNumber", poposalNumber);
             crParameters.Add("@CRID", crId);
 
             _connectionService.ExecuteWithPara(updateCrSql, crParameters);

@@ -5,6 +5,10 @@
     var vendors = ViewBag.Vendors as List<Vendor>;
     var effortEstimateDays = ViewBag.EffortEstimateDays as double? ?? 0;
     var approverUserName = ViewBag.ApproverUserName as string;
+
+    // If VendorID is a non-nullable int on the model, use: int selectedVendorId = Model.VendorID;
+    int selectedVendorId = Model.VendorID;
+    var hasVendorSupport = selectedVendorId > 0;
 }
 @{
     var username = Context.Session.GetString("UserName");
@@ -142,36 +146,43 @@
                                     <label class="form-label">Vendor Support Required</label>
                                     <div class="mb-3">
                                         <div class="form-check form-check-inline">
-                                            <input type="radio" id="vendorSupportYes" name="vendorSupport" value="yes" class="form-check-input">
+                                            <input type="radio" id="vendorSupportYes" name="vendorSupport" value="yes"
+                                                   class="form-check-input" checked="@hasVendorSupport">
                                             <label class="form-check-label" for="vendorSupportYes">Yes</label>
                                         </div>
                                         <div class="form-check form-check-inline">
-                                            <input type="radio" id="vendorSupportNo" name="vendorSupport" value="no" class="form-check-input">
+                                            <input type="radio" id="vendorSupportNo" name="vendorSupport" value="no"
+                                                   class="form-check-input" checked="@(!hasVendorSupport)">
                                             <label class="form-check-label" for="vendorSupportNo">No</label>
                                         </div>
                                     </div>
 
-                                    <div id="vendorSupportDetails" class="mb-3" style="display: none;">
+                                    <div id="vendorSupportDetails" class="mb-3"
+                                         style="display: @(hasVendorSupport ? "block" : "none");">
                                         <label class="form-label">Vendor Name</label>
                                         <select id="VendorID" name="VendorID" class="form-control select2" data-toggle="select2">
-                                            <option value="" selected disabled hidden>Select Vendor</option>
+                                            <option value="" disabled hidden selected="@(!hasVendorSupport)">Select Vendor</option>
                                             @if (vendors != null)
                                             {
-                                                @foreach (var vendor in vendors)
+                                                foreach (var vendor in vendors)
                                                 {
-                                                    <option value="@vendor.Id">@vendor.VendorName</option>
+                                                    <option value="@vendor.Id" selected="@(vendor.Id == selectedVendorId)">@vendor.VendorName</option>
                                                 }
                                             }
                                         </select>
                                         <span id="vendorIdError" class="text-danger"></span>
                                     </div>
-                                    <div id="proposalNumber" class="mb-3" style="display: none;">
+
+                                    <div id="proposalNumber" class="mb-3"
+                                         style="display: @(hasVendorSupport ? "block" : "none");">
                                         <label class="form-label">Proposal Number</label>
-                                        <input type="text" name="ProposalNumber" id="proposalNumberInput" class="form-control">
+                                        <input type="text" name="ProposalNumber" id="proposalNumberInput"
+                                               class="form-control" value="@Model.ProposalNumber">
                                     </div>
 
                                     <!-- Attachment upload (only when Vendor Support = Yes) -->
-                                    <div id="attachmentSection" class="mb-3" style="display: none;">
+                                    <div id="attachmentSection" class="mb-3"
+                                         style="display: @(hasVendorSupport ? "block" : "none");">
                                         <label class="form-label">Attachments</label>
                                         <form action="https://themes.coderthemes.com/" method="post" class="dropzone" id="myAwesomeDropzone" data-plugin="dropzone"
                                               data-previews-container="#file-previews"
@@ -219,7 +230,8 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
-        // ---- Vendor support toggle ----
+        var selectedVendorId = @selectedVendorId;
+
         var saveBtn = document.getElementById('btn-save');
         var submitBtn = document.getElementById('submitBtn');
         var vendorYes = document.getElementById('vendorSupportYes');
@@ -227,21 +239,32 @@
         var vendorDetails = document.getElementById('vendorSupportDetails');
         var proposalNumberDetails = document.getElementById('proposalNumber');
         var attachmentSection = document.getElementById('attachmentSection');
+        var vendorSelect = document.getElementById('VendorID');
 
         function toggleVendorDetails() {
-            if (vendorYes.checked) {
-                vendorDetails.style.display = 'block';
-                proposalNumberDetails.style.display = 'block';
-                attachmentSection.style.display = 'block';
-            } else {
-                vendorDetails.style.display = 'none';
-                proposalNumberDetails.style.display = 'none';
-                attachmentSection.style.display = 'none';
+            var show = vendorYes.checked ? 'block' : 'none';
+            vendorDetails.style.display = show;
+            proposalNumberDetails.style.display = show;
+            attachmentSection.style.display = show;
+
+            // Clear the vendor selection when support is switched off,
+            // so a stale VendorID isn't posted back.
+            if (!vendorYes.checked && vendorSelect) {
+                if (window.jQuery && $(vendorSelect).data('select2')) {
+                    $(vendorSelect).val('').trigger('change.select2');
+                } else {
+                    vendorSelect.value = '';
+                }
             }
         }
 
         vendorYes.addEventListener('change', toggleVendorDetails);
         vendorNo.addEventListener('change', toggleVendorDetails);
+
+        // Make sure select2 reflects the pre-selected vendor after it initialises.
+        if (selectedVendorId > 0 && window.jQuery && $(vendorSelect).data('select2')) {
+            $(vendorSelect).val(String(selectedVendorId)).trigger('change.select2');
+        }
 
         // ---- Function to handle both Save and Submit actions ----
         function handleFormSubmission(btnElement) {
@@ -258,11 +281,17 @@
                 return;
             }
 
+            // Validate vendor selection when support is required.
+            var vendorError = document.getElementById('vendorIdError');
+            if (vendorError) { vendorError.textContent = ''; }
+
+            if (vendorYes.checked && (!vendorSelect.value || vendorSelect.value === '')) {
+                if (vendorError) { vendorError.textContent = 'Please select a vendor.'; }
+                return;
+            }
+
             var assessmentForm = document.getElementById('assessmentForm');
             var formData = new FormData(assessmentForm);
-            // 'Id' is already included via the hidden #crIdField input.
-
-            // Pass the status code (1 for Save, 2 for Submit) based on the button clicked
             var statusValue = btnElement.getAttribute('data-status');
             if (statusValue) {
                 formData.append('Status', statusValue);
@@ -324,7 +353,6 @@
             });
         }
 
-        // Attach click handlers for both Save and Submit buttons
         submitBtn.addEventListener('click', function (e) {
             e.preventDefault();
             handleFormSubmission(submitBtn);
