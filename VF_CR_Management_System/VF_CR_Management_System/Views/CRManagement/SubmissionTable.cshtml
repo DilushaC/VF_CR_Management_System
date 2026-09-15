@@ -285,10 +285,8 @@
                 return;
             }
 
-            var succeeded = ["ChangeRequest", ""];
             var rawCrid = button.getAttribute('data-bs-crid');
 
-            // not in this script.
             if (!rawCrid || rawCrid === '0') {
                 console.warn('[crDetailsModal] Button has invalid data-bs-crid:', JSON.stringify(rawCrid), button);
             }
@@ -323,13 +321,13 @@
 
             var normalizedStatus = normalize(status);
 
-            // A CR that's already been decided (Approved or Rejected) is no longer
-            // actionable — Approve/Reject only make sense while it's still pending.
-            var isDecided = normalizedStatus === 'approved' || normalizedStatus === 'rejected';
+            // Approve/Reject only make sense while the CR is still in the
+            // "Submitted" state — any other status hides both buttons.
+            var isSubmitted = normalizedStatus === 'submitted';
 
-            // Only show Approve/Reject when the CR isn't already decided AND the
+            // Only show Approve/Reject when the CR is Submitted AND the
             // logged-in user is the assigned approver on it.
-            var canAct = !isDecided &&
+            var canAct = isSubmitted &&
                 normalize(currentApprover) !== '' &&
                 normalize(currentApprover) === normalize(currentEmpNo);
 
