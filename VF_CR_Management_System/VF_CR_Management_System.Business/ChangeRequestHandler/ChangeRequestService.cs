@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Threading.Tasks;
@@ -173,7 +174,38 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                   AND cr.CRID = @CRID";
 
             var result = _connectionService.Query<ChangeRequest>(sql, new { CRID = crId });
-            return result.FirstOrDefault();
+            var changeRequest = result.FirstOrDefault();
+
+            if (changeRequest == null)
+                return null;
+
+            // Resolve RequestedBy (raw username) into a display name from the Users DB
+            // (separate connection/DB from CRManagementDB)
+            if (!string.IsNullOrWhiteSpace(changeRequest.RequestedBy))
+            {
+                const string usersQuery = @"
+                    SELECT UserName, FirstName, LastName
+                    FROM Users
+                    WHERE UserName = @UserName";
+
+                var userParams = new DynamicParameters();
+                userParams.Add("@UserName", changeRequest.RequestedBy);
+
+                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+                if (usersTable.Rows.Count > 0)
+                {
+                    var userRow = usersTable.Rows[0];
+                    var fullName = $"{userRow.Field<string?>("FirstName")} {userRow.Field<string?>("LastName")}".Trim();
+
+                    if (!string.IsNullOrWhiteSpace(fullName))
+                    {
+                        changeRequest.RequestedBy = fullName;
+                    }
+                }
+            }
+
+            return changeRequest;
         }
 
         public async Task<string> GetAssignedApproverUserNameAsync(int crId)
@@ -485,10 +517,61 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
         }
 
+        //public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
+        //{
+        //    const int draftStatusId = 2;
+
+
+        //    var sql = $@"
+        //        SELECT
+        //            cr.CRID,
+        //            cr.CRNumber,
+        //            cr.ChangeTitle,
+        //            cr.Summary,
+        //            ct.ChangeTypeName AS ChangeType,
+        //            p.PriorityName AS Priority,
+        //            cr.DivisionID,
+        //            d.DivisionName AS Division,
+        //            cr.ModuleID,
+        //            m.ModuleName AS Module,
+        //            s.StatusName AS Status,
+        //            cr.RequesterUserName AS RequestedBy,
+        //            App.AssignedTo AS ApproverUserName,
+        //            cr.RequestedDate
+        //        FROM [dbo].[Approval] AS App
+        //        INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
+        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
+        //            ON ct.ChangeTypeID = cr.ChangeTypeID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
+        //            ON p.PriorityID = cr.PriorityID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
+        //            ON d.DivisionID = cr.DivisionID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
+        //            ON m.ModuleID = cr.ModuleID
+        //        LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
+        //            ON s.StatusID = cr.StatusID
+        //        WHERE cr.Active = 1
+        //            AND App.StepID = 7
+        //         AND cr.StatusID != 7
+        //            AND App.AssignedTo = @EmpNo
+        //        ORDER BY
+        //            cr.CRID DESC;
+        //        ";
+
+        //    var result = _connectionService.Query<ChangeRequest>(
+        //        sql,
+        //        new
+        //        {
+        //            EmpNo = empNo,
+        //            DraftStatusId = draftStatusId
+        //        });
+
+        //    return Task.FromResult<IEnumerable<ChangeRequest>>(result);
+        //}
+
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
             const int draftStatusId = 2;
-
 
             var sql = $@"
                 SELECT
@@ -520,21 +603,60 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND App.StepID = 7
-	                AND cr.StatusID != 7
+                    AND cr.StatusID != 7
                     AND App.AssignedTo = @EmpNo
                 ORDER BY
                     cr.CRID DESC;
                 ";
 
-            var result = _connectionService.Query<ChangeRequest>(
+            var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,
                 new
                 {
                     EmpNo = empNo,
                     DraftStatusId = draftStatusId
-                });
+                }).ToList();
 
-            return Task.FromResult<IEnumerable<ChangeRequest>>(result);
+            if (!changeRequests.Any())
+                return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
+
+            // Batch-fetch display names from the Users DB (separate connection/DB)
+            var userNames = changeRequests
+                .Select(cr => cr.RequestedBy)
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct()
+                .ToList();
+
+            if (userNames.Any())
+            {
+                const string usersQuery = @"
+                    SELECT UserName, FirstName, LastName
+                    FROM Users
+                    WHERE UserName IN @UserNames";
+
+                var userParams = new DynamicParameters();
+                userParams.Add("@UserNames", userNames);
+
+                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+                var nameLookup = usersTable.AsEnumerable()
+                    .ToDictionary(
+                        r => r.Field<string>("UserName"),
+                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        StringComparer.OrdinalIgnoreCase);
+
+                foreach (var cr in changeRequests)
+                {
+                    if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
+                        nameLookup.TryGetValue(cr.RequestedBy, out var fullName) &&
+                        !string.IsNullOrWhiteSpace(fullName))
+                    {
+                        cr.RequestedBy = fullName;
+                    }
+                }
+            }
+
+            return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
         }
 
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsRejectionsAsync(string empNo)
@@ -571,21 +693,66 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND App.StepID = 13
-	
                     AND (App.AssignedTo = @EmpNo OR RequesterUserName = @EmpNo)
                 ORDER BY
                     cr.CRID DESC;
                 ";
 
-            var result = _connectionService.Query<ChangeRequest>(
+            var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,
                 new
                 {
                     EmpNo = empNo,
                     DraftStatusId = draftStatusId
-                });
+                }).ToList();
 
-            return Task.FromResult<IEnumerable<ChangeRequest>>(result);
+            if (!changeRequests.Any())
+                return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
+
+            // Batch-fetch display names from the Users DB (separate connection/DB)
+            var userNames = changeRequests
+                .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct()
+                .ToList();
+
+            if (userNames.Any())
+            {
+                const string usersQuery = @"
+                    SELECT UserName, FirstName, LastName
+                    FROM Users
+                    WHERE UserName IN @UserNames";
+
+                var userParams = new DynamicParameters();
+                userParams.Add("@UserNames", userNames);
+
+                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+                var nameLookup = usersTable.AsEnumerable()
+                    .ToDictionary(
+                        r => r.Field<string>("UserName"),
+                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        StringComparer.OrdinalIgnoreCase);
+
+                foreach (var cr in changeRequests)
+                {
+                    if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFullName) &&
+                        !string.IsNullOrWhiteSpace(requesterFullName))
+                    {
+                        cr.RequestedBy = requesterFullName;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFullName) &&
+                        !string.IsNullOrWhiteSpace(approverFullName))
+                    {
+                        cr.ApproverUserName = approverFullName;
+                    }
+                }
+            }
+
+            return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
         }
 
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo)
@@ -622,21 +789,66 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND App.StepID = 8
-	
                     AND App.AssignedTo = @EmpNo
                 ORDER BY
                     cr.CRID DESC;
                 ";
 
-            var result = _connectionService.Query<ChangeRequest>(
+            var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,
                 new
                 {
                     EmpNo = empNo,
                     DraftStatusId = draftStatusId
-                });
+                }).ToList();
 
-            return Task.FromResult<IEnumerable<ChangeRequest>>(result);
+            if (!changeRequests.Any())
+                return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
+
+            // Batch-fetch display names from the Users DB (separate connection/DB)
+            var userNames = changeRequests
+                .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct()
+                .ToList();
+
+            if (userNames.Any())
+            {
+                const string usersQuery = @"
+                    SELECT UserName, FirstName, LastName
+                    FROM Users
+                    WHERE UserName IN @UserNames";
+
+                var userParams = new DynamicParameters();
+                userParams.Add("@UserNames", userNames);
+
+                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+                var nameLookup = usersTable.AsEnumerable()
+                    .ToDictionary(
+                        r => r.Field<string>("UserName"),
+                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        StringComparer.OrdinalIgnoreCase);
+
+                foreach (var cr in changeRequests)
+                {
+                    if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFullName) &&
+                        !string.IsNullOrWhiteSpace(requesterFullName))
+                    {
+                        cr.RequestedBy = requesterFullName;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFullName) &&
+                        !string.IsNullOrWhiteSpace(approverFullName))
+                    {
+                        cr.ApproverUserName = approverFullName;
+                    }
+                }
+            }
+
+            return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
         }
 
 

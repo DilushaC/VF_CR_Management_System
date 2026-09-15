@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = "CR Management";
     var currentEmpNo = ViewBag.CurrentEmpNo as string ?? string.Empty;
+    var userName = ViewBag.UserName as string ?? string.Empty;
 }
 
 <div class="row">
@@ -9,7 +10,7 @@
         <div class="card">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <h4 class="header-title mb-0">Change Requests</h4>
+                    <h4 class="header-title mb-0">Pending Approvals & Approved</h4>
                 </div>
 
                 <style>
@@ -117,6 +118,10 @@
                                             {
                                                 <span class="badge bg-success">@cr.Status</span>
                                             }
+                                            else if (string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-success">Approved</span>
+                                            }
                                             else
                                             {
                                                 @cr.Status
@@ -199,10 +204,6 @@
                     <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
                         <span id="modal-requestedby"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Approver:</label>
-                        <span id="modal-currentapprover"></span>
                     </div>
                     <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>

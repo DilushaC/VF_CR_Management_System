@@ -384,7 +384,9 @@ namespace VF_CR_Management_System.Controllers
         public async Task<IActionResult> SubmissionTable()
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
+            var userName = HttpContext.Session.GetString("UserName");
             ViewBag.CurrentEmpNo = empNo;
+            ViewBag.UserName = userName;
             var users = await _userService.GetAllUsersAsync();
             ViewBag.Users = users;
             var crs = await _changeRequestService.GetAllChangeRequestsSubmissionsAsync(empNo);

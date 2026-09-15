@@ -8,7 +8,7 @@
         <div class="card">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <h4 class="header-title mb-0">Draft Change Requests</h4>
+                    <h4 class="header-title mb-0">Draft Change Requests & Submissions</h4>
                 </div>
 
                 <style>
@@ -76,7 +76,6 @@
                                 <th>Module</th>
                                 <th>Priority</th>
                                 <th>Status</th>
-                                <th>Requested By</th>
                                 <th>Requested Date</th>
                                 <th>Actions</th>
                             </tr>
@@ -108,7 +107,6 @@
                                         <td>
                                             <span class="badge bg-warning">@cr.Status</span>
                                         </td>
-                                        <td>@cr.RequestedBy</td>
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
                                             @if(cr.Status == "Draft")
