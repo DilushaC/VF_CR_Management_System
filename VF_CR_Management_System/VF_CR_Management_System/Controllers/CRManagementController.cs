@@ -491,46 +491,6 @@ namespace VF_CR_Management_System.Controllers
             }
         }
 
-        //[HttpGet]
-        //public async Task<IActionResult> PreviewAttachment(int id)
-        //{
-        //    try
-        //    {
-        //        var attachment = await _changeRequestService.GetAttachmentByIdAsync(id);
-
-        //        if (attachment == null)
-        //            return NotFound();
-
-        //        if (!System.IO.File.Exists(attachment.FilePath))
-        //            return NotFound("The file could not be found on the server.");
-
-        //        // Only allow inline preview for actual image types — anything else falls
-        //        // back to a normal download rather than being rendered in the browser.
-        //        var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
-        //        var extension = Path.GetExtension(attachment.FilePath).ToLowerInvariant();
-
-        //        if (!imageExtensions.Contains(extension))
-        //        {
-        //            return BadRequest("Preview is only available for image files.");
-        //        }
-
-        //        var provider = new FileExtensionContentTypeProvider();
-        //        if (!provider.TryGetContentType(attachment.FilePath, out var contentType))
-        //        {
-        //            contentType = "application/octet-stream";
-        //        }
-
-        //        var fileBytes = await System.IO.File.ReadAllBytesAsync(attachment.FilePath);
-
-        //        // No fileDownloadName here — this is what keeps the response "inline"
-        //        // instead of forcing Content-Disposition: attachment.
-        //        return File(fileBytes, contentType);
-        //    }
-        //    catch (Exception)
-        //    {
-        //        return StatusCode(500, "An error occurred while loading the preview.");
-        //    }
-        //}
         [HttpGet]
         public async Task<IActionResult> PreviewAttachment(int id)
         {
