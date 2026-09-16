@@ -180,17 +180,28 @@
                                                class="form-control" value="@Model.ProposalNumber">
                                     </div>
 
-                                    <!-- Attachment upload (only when Vendor Support = Yes) -->
-                                    <div id="attachmentSection" class="mb-3"
-                                         style="display: @(hasVendorSupport ? "block" : "none");">
+                                    <div id="attachmentSection" class="mb-3" style="display: @(hasVendorSupport ? "block" : "none");">
                                         <label class="form-label">Attachments</label>
-                                        <form action="https://themes.coderthemes.com/" method="post" class="dropzone" id="myAwesomeDropzone" data-plugin="dropzone"
-                                              data-previews-container="#file-previews"
-                                              data-upload-preview-template="#uploadPreviewTemplate">
-                                            <div class="fallback">
-                                                <input name="file" type="file" multiple />
+                                        <input type="file" name="file" id="attachmentInput" class="form-control" multiple>
+
+                                        @{
+                                            var existingAttachments = ViewBag.Attachments as IEnumerable<VF_CR_Management_System.Data.Models.Attachment>;
+                                        }
+                                        @if (existingAttachments != null && existingAttachments.Any())
+                                        {
+                                            <div class="mt-2">
+                                                <label class="form-label fw-bold mb-1">Previously Uploaded Files</label>
+                                                <ul class="list-unstyled mb-0" id="existingAttachmentsList">
+                                                    @foreach (var att in existingAttachments)
+                                                    {
+                                                        <li>
+                                                            <i class="mdi mdi-paperclip"></i> @att.FileName
+                                                            <small class="text-muted">(@att.UploadedDate.ToString("yyyy/MM/dd"))</small>
+                                                        </li>
+                                                    }
+                                                </ul>
                                             </div>
-                                        </form>
+                                        }
                                     </div>
                                 </div>
                             </div>

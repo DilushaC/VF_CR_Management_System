@@ -284,6 +284,9 @@ namespace VF_CR_Management_System.Controllers
                 }
                 ViewBag.EffortEstimateDays = effortEstimateDays;
 
+                var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id.Value);
+                ViewBag.Attachments = attachments;
+
                 return View("Assessment", changeRequest);
             }
             catch (Exception ex)
@@ -291,7 +294,6 @@ namespace VF_CR_Management_System.Controllers
                 return View("Error");
             }
         }
-
 
         [HttpPost]
         public async Task<IActionResult> CreateAssessment(IFormCollection collection)
@@ -443,6 +445,9 @@ namespace VF_CR_Management_System.Controllers
                     effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
                 }
                 ViewBag.EffortEstimateDays = effortEstimateDays;
+
+                var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id.Value);
+                ViewBag.Attachments = attachments;
 
                 return View("Assessment", changeRequest);
             }

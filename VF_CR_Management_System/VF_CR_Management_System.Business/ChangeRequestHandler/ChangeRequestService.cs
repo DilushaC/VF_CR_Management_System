@@ -224,6 +224,32 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequest;
         }
+
+        public Task<IEnumerable<Attachment>> GetAttachmentsByCrIdAsync(int crId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            const string sql = @"
+                SELECT
+                    AttachmentID,
+                    CRID,
+                    FileName,
+                    FilePath,
+                    UploadedBy,
+                    UploadedDate,
+                    Active
+                FROM [CRManagementDB].[dbo].[Attachment]
+                WHERE CRID = @CRID
+                  AND Active = 1
+                ORDER BY UploadedDate DESC";
+
+            var result = _connectionService.Query<Attachment>(sql, new { CRID = crId })
+                            ?? Enumerable.Empty<Attachment>();
+
+            return Task.FromResult(result);
+        }
+
         public async Task<string> GetAssignedApproverUserNameAsync(int crId)
         {
             if (crId <= 0)
