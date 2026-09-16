@@ -284,6 +284,9 @@ namespace VF_CR_Management_System.Controllers
                 var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id.Value);
                 ViewBag.Attachments = attachments;
 
+                var users = await _userService.GetAllUsersAsync();
+                ViewBag.Users = users;
+
                 return View("Assessment", changeRequest);
             }
             catch (Exception ex)

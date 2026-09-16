@@ -49,5 +49,6 @@ namespace VF_CR_Management_System.Data.Models
         // populated via the LEFT JOIN in GetAllChangeRequestsSubmissionsAsync.
         // Null when there's no pending step-8 approval for this CR.
         public string? ApproverUserName { get; set; }
+        public string? ISOfficerUserName { get; set; }
     }
 }

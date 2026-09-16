@@ -947,6 +947,65 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return rowsAffected > 0;
         }
 
+        //public async Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
+        //{
+        //    if (crId <= 0)
+        //        throw new ArgumentException("Invalid Change Request.");
+
+        //    var activitiesTasks = collection["ActivitiesTasks"].ToString();
+        //    if (string.IsNullOrWhiteSpace(activitiesTasks))
+        //    {
+        //        throw new ArgumentException("Please fill out Activities & Tasks.");
+        //    }
+
+        //    var fixedAssetInfo = collection["FixedAssetInfo"].ToString();
+        //    if (string.IsNullOrWhiteSpace(fixedAssetInfo))
+        //    {
+        //        throw new ArgumentException("Please fill out Fixed Asset Info.");
+        //    }
+
+        //    var estimationDaysStr = collection["EffortEstimateDays"].ToString();
+
+        //    double.TryParse(estimationDaysStr, out double estimationDays);
+        //    DateTime targetDate = DateTime.Now.AddDays(estimationDays);
+
+        //    var vendorID = collection["VendorID"].ToString();
+        //    var poposalNumber = collection["ProposalNumber"].ToString();
+
+        //    const string updateCrSql = @"
+        //        UPDATE ChangeRequest
+        //        SET 
+        //            ActivitiesTasks = @ActivitiesTasks,
+        //            FixedAssets  = @FixedAssets,
+        //            DueDate = @DueDate,
+        //            VendorID = @VendorID,
+        //            ProposalNumber = @ProposalNumber,
+        //            StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = 'AssessmentDraft')
+        //        WHERE CRID = @CRID
+        //          AND Active = 1";
+
+        //    var crParameters = new DynamicParameters();
+        //    crParameters.Add("@ActivitiesTasks", activitiesTasks);
+        //    crParameters.Add("@FixedAssets", fixedAssetInfo);
+        //    crParameters.Add("@DueDate", targetDate);
+        //    if (vendorID == "")
+        //        crParameters.Add("@VendorID", null);
+        //    else
+        //        crParameters.Add("@VendorID", vendorID);
+        //    crParameters.Add("@ProposalNumber", poposalNumber);
+        //    crParameters.Add("@CRID", crId);
+
+        //    _connectionService.ExecuteWithPara(updateCrSql, crParameters);
+
+        //    var files = collection.Files?.Where(f => f.Length > 0).ToList();
+        //    if (files != null && files.Count > 0)
+        //    {
+        //        await SaveAttachmentsAsync(crId, files, userName);
+        //    }
+
+        //    return true;
+        //}
+
         public async Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
@@ -972,6 +1031,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var vendorID = collection["VendorID"].ToString();
             var poposalNumber = collection["ProposalNumber"].ToString();
 
+            // "1" = Save (btn-save, data-status="1")  -> keep as AssessmentDraft
+            // "2" = Submit (submitBtn, data-status="2") -> move to Development + log workflow step
+            var statusValue = collection["Status"].ToString();
+            bool isSubmit = statusValue == "2";
+
+            var targetStatusName = isSubmit ? "Development" : "AssessmentDraft";
+
             const string updateCrSql = @"
                 UPDATE ChangeRequest
                 SET 
@@ -980,7 +1046,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     DueDate = @DueDate,
                     VendorID = @VendorID,
                     ProposalNumber = @ProposalNumber,
-                    StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = 'AssessmentDraft')
+                    StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = @TargetStatusName)
                 WHERE CRID = @CRID
                   AND Active = 1";
 
@@ -993,18 +1059,64 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             else
                 crParameters.Add("@VendorID", vendorID);
             crParameters.Add("@ProposalNumber", poposalNumber);
+            crParameters.Add("@TargetStatusName", targetStatusName);
             crParameters.Add("@CRID", crId);
 
             _connectionService.ExecuteWithPara(updateCrSql, crParameters);
 
+            // ---- Handle attachments included in the same form submission ----
             var files = collection.Files?.Where(f => f.Length > 0).ToList();
             if (files != null && files.Count > 0)
             {
                 await SaveAttachmentsAsync(crId, files, userName);
             }
 
+            // ---- On Submit only: log the "Development" workflow step in Approval ----
+            if (isSubmit)
+            {
+                await InsertDevelopmentApprovalStepAsync(crId, empId);
+            }
+
             return true;
         }
+
+        private async Task InsertDevelopmentApprovalStepAsync(int crId, string empId)
+        {
+            const string getStepIdSql = @"
+                SELECT StepID
+                FROM WorkflowStep
+                WHERE StepName = @StepName
+                  AND Active = 1";
+
+            var stepParams = new DynamicParameters();
+            stepParams.Add("@StepName", "Development");
+
+            var stepTable = _connectionService.ReturnWithPara(getStepIdSql, stepParams);
+            if (stepTable == null || stepTable.Rows.Count == 0)
+                throw new InvalidOperationException("Workflow step 'Development' is not configured.");
+
+            var developmentStepId = stepTable.Rows[0].Field<int>("StepID");
+
+            const string insertApprovalSql = @"
+                INSERT INTO Approval
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, IsApproved, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @IsApproved, @Active)";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@StepID", developmentStepId);
+            parameters.Add("@AssignedBy", empId);
+            parameters.Add("@AssignedTo", empId); // implementer is both assigner and assignee for this step
+            //approval date not updating
+            parameters.Add("@AssignedDate", DateTime.Now);
+            parameters.Add("@IsApproved", true);
+            parameters.Add("@Active", true);
+
+            await Task.Run(() => _connectionService.ExecuteWithPara(insertApprovalSql, parameters));
+        }
+
+
 
         private async Task SaveAttachmentsAsync(int crId, List<IFormFile> files, string uploadedBy)
         {
