@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.StaticFiles;
 using System;
 using System.Net.Mail;
 using System.Threading.Tasks;
@@ -454,6 +455,61 @@ namespace VF_CR_Management_System.Controllers
             catch (Exception ex)
             {
                 return View("Error");
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadAttachment(int id)
+        {
+            try
+            {
+                var attachment = await _changeRequestService.GetAttachmentByIdAsync(id);
+
+                if (attachment == null)
+                    return NotFound();
+
+                if (!System.IO.File.Exists(attachment.FilePath))
+                    return NotFound("The file could not be found on the server.");
+
+                // Resolve a proper content-type from the file's extension, falling back
+                // to a generic binary stream if it isn't recognised.
+                var provider = new FileExtensionContentTypeProvider();
+                if (!provider.TryGetContentType(attachment.FilePath, out var contentType))
+                {
+                    contentType = "application/octet-stream";
+                }
+
+                var fileBytes = await System.IO.File.ReadAllBytesAsync(attachment.FilePath);
+
+                // FileName here is the original uploaded name (not the on-disk unique name),
+                // so the browser downloads it with the name the user originally uploaded.
+                return File(fileBytes, contentType, attachment.FileName);
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, "An error occurred while downloading the file.");
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteAttachment(int id)
+        {
+            try
+            {
+                var userName = HttpContext.Session.GetString("UserName");
+
+                var success = await _changeRequestService.DeleteAttachmentAsync(id, userName);
+
+                if (!success)
+                {
+                    return Json(new { success = false, message = "Attachment not found or already removed." });
+                }
+
+                return Json(new { success = true, message = "Attachment removed." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = $"Error: {ex.Message}" });
             }
         }
     }

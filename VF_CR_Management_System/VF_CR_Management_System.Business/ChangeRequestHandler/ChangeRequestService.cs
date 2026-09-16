@@ -250,6 +250,30 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return Task.FromResult(result);
         }
 
+        public Task<Attachment> GetAttachmentByIdAsync(int attachmentId)
+        {
+            if (attachmentId <= 0)
+                throw new ArgumentException("Invalid attachment.");
+
+            const string sql = @"
+                SELECT
+                    AttachmentID,
+                    CRID,
+                    FileName,
+                    FilePath,
+                    UploadedBy,
+                    UploadedDate,
+                    Active
+                FROM [CRManagementDB].[dbo].[Attachment]
+                WHERE AttachmentID = @AttachmentID
+                  AND Active = 1";
+
+            var result = _connectionService.Query<Attachment>(sql, new { AttachmentID = attachmentId });
+            var attachment = result?.FirstOrDefault();
+
+            return Task.FromResult(attachment);
+        }
+
         public async Task<string> GetAssignedApproverUserNameAsync(int crId)
         {
             if (crId <= 0)
@@ -1137,6 +1161,50 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
                 _connectionService.ExecuteWithPara(insertAttachmentSql, attachmentParameters);
             }
+        }
+
+        public async Task<bool> DeleteAttachmentAsync(int attachmentId, string deletedByEmpId)
+        {
+            if (attachmentId <= 0)
+                throw new ArgumentException("Invalid attachment.");
+
+            // Fetch first so we know the file path to remove from disk.
+            var attachment = await GetAttachmentByIdAsync(attachmentId);
+            if (attachment == null)
+                return false;
+
+            const string updateSql = @"
+                UPDATE [CRManagementDB].[dbo].[Attachment]
+                SET Active = 0,
+                    DeletedBy = @DeletedBy
+                WHERE AttachmentID = @AttachmentID
+                  AND Active = 1";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@AttachmentID", attachmentId);
+            parameters.Add("@DeletedBy", deletedByEmpId);
+
+            int rowsAffected = _connectionService.ExecuteWithPara(updateSql, parameters);
+
+            if (rowsAffected <= 0)
+                return false;
+
+            // Best-effort physical file cleanup — don't fail the whole operation if this
+            // doesn't succeed (e.g. file already missing, or locked by another process).
+            try
+            {
+                if (System.IO.File.Exists(attachment.FilePath))
+                {
+                    System.IO.File.Delete(attachment.FilePath);
+                }
+            }
+            catch
+            {
+                // Swallow: the DB row is already marked inactive, which is what
+                // matters for the UI/listing. The file being deleted is a bonus.
+            }
+
+            return true;
         }
 
 
