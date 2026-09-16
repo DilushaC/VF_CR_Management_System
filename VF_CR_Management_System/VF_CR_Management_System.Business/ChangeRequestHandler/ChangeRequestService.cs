@@ -60,13 +60,21 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please select a Module.");
             }
-            if (!int.TryParse(collection["ApproverID"], out var approverId))
-            {
-                throw new ArgumentException("Please select a Approver.");
-            }
             if (!int.TryParse(collection["StatusID"], out var statusId))
             {
                 throw new ArgumentException("Missing or invalid status.");
+            }
+
+            // Approver is only required when actually submitting (StatusID = 2).
+            // A draft save (StatusID = 1) can be stored without one — it's collected
+            // later via the Submit confirmation dialog.
+            var approverIdRaw = collection["ApproverID"].ToString();
+            int approverId = 0;
+            bool hasApprover = int.TryParse(approverIdRaw, out approverId);
+
+            if (statusId == 2 && !hasApprover)
+            {
+                throw new ArgumentException("Please select a Approver.");
             }
 
             const string crSql = @"
@@ -116,24 +124,32 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (newCrId <= 0)
                 return 0;
 
-            const string approvalSql = @"
-                INSERT INTO Approval
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+            // Only create the Approval row if an approver was actually selected —
+            // a plain draft save may not have one yet.
+            if (hasApprover)
+            {
+                const string approvalSql = @"
+                    INSERT INTO Approval
+                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                    VALUES
+                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
 
-            var approvalParameters = new DynamicParameters();
-            approvalParameters.Add("@CRID", newCrId);
-            approvalParameters.Add("@StepID", 7);
-            approvalParameters.Add("@AssignedBy", empId);
-            approvalParameters.Add("@AssignedTo", approverId);
-            approvalParameters.Add("@AssignedDate", DateTime.Now);
-            approvalParameters.Add("@Active", true);
+                var approvalParameters = new DynamicParameters();
+                approvalParameters.Add("@CRID", newCrId);
+                approvalParameters.Add("@StepID", 7);
+                approvalParameters.Add("@AssignedBy", empId);
+                approvalParameters.Add("@AssignedTo", approverId);
+                approvalParameters.Add("@AssignedDate", DateTime.Now);
+                approvalParameters.Add("@Active", true);
 
-            int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
+                int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
 
-            // Return the CRID only if both inserts succeeded; 0 signals failure to the caller.
-            return approvalRowsAffected > 0 ? newCrId : 0;
+                // Return the CRID only if both inserts succeeded; 0 signals failure to the caller.
+                return approvalRowsAffected > 0 ? newCrId : 0;
+            }
+
+            // Draft with no approver yet — CR row alone is enough to signal success.
+            return newCrId;
         }
 
         public async Task<ChangeRequest> GetChangeRequestByIdAsync(int crId)
@@ -327,7 +343,19 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 throw new ArgumentException("Please select a Module.");
             }
-            if (!int.TryParse(collection["ApproverID"], out var approverId))
+
+            // Approver is only required when the caller is actually submitting.
+            // Draft edits/saves don't need one yet.
+            if (!int.TryParse(collection["StatusID"], out var incomingStatusId))
+            {
+                incomingStatusId = 1; // default to draft if not present
+            }
+
+            var approverIdRaw = collection["ApproverID"].ToString();
+            int approverId = 0;
+            bool hasApprover = int.TryParse(approverIdRaw, out approverId);
+
+            if (incomingStatusId == 2 && !hasApprover)
             {
                 throw new ArgumentException("Please select a Approver.");
             }
@@ -364,43 +392,47 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (crRowsAffected <= 0)
                 return false;
 
-            const int assignStepId = 7;
-
-            const string updateApprovalSql = @"
-                UPDATE Approval
-                SET AssignedBy   = @AssignedBy,
-                    AssignedTo   = @AssignedTo,
-                    AssignedDate = @AssignedDate
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1";
-
-            var approvalParameters = new DynamicParameters();
-            approvalParameters.Add("@AssignedBy", empId);
-            approvalParameters.Add("@AssignedTo", approverId);
-            approvalParameters.Add("@AssignedDate", DateTime.Now);
-            approvalParameters.Add("@CRID", crId);
-            approvalParameters.Add("@StepID", assignStepId);
-
-            int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, approvalParameters);
-
-            if (approvalRowsAffected <= 0)
+            // Only touch the Approval row if an approver was actually chosen.
+            if (hasApprover)
             {
-                const string insertApprovalSql = @"
-                    INSERT INTO Approval
-                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                    VALUES
-                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                const int assignStepId = 7;
 
-                var insertParameters = new DynamicParameters();
-                insertParameters.Add("@CRID", crId);
-                insertParameters.Add("@StepID", assignStepId);
-                insertParameters.Add("@AssignedBy", empId);
-                insertParameters.Add("@AssignedTo", approverId);
-                insertParameters.Add("@AssignedDate", DateTime.Now);
-                insertParameters.Add("@Active", true);
+                const string updateApprovalSql = @"
+                    UPDATE Approval
+                    SET AssignedBy   = @AssignedBy,
+                        AssignedTo   = @AssignedTo,
+                        AssignedDate = @AssignedDate
+                    WHERE CRID = @CRID
+                      AND StepID = @StepID
+                      AND Active = 1";
 
-                _connectionService.ExecuteWithPara(insertApprovalSql, insertParameters);
+                var approvalParameters = new DynamicParameters();
+                approvalParameters.Add("@AssignedBy", empId);
+                approvalParameters.Add("@AssignedTo", approverId);
+                approvalParameters.Add("@AssignedDate", DateTime.Now);
+                approvalParameters.Add("@CRID", crId);
+                approvalParameters.Add("@StepID", assignStepId);
+
+                int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, approvalParameters);
+
+                if (approvalRowsAffected <= 0)
+                {
+                    const string insertApprovalSql = @"
+                INSERT INTO Approval
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+                    var insertParameters = new DynamicParameters();
+                    insertParameters.Add("@CRID", crId);
+                    insertParameters.Add("@StepID", assignStepId);
+                    insertParameters.Add("@AssignedBy", empId);
+                    insertParameters.Add("@AssignedTo", approverId);
+                    insertParameters.Add("@AssignedDate", DateTime.Now);
+                    insertParameters.Add("@Active", true);
+
+                    _connectionService.ExecuteWithPara(insertApprovalSql, insertParameters);
+                }
             }
 
             return true;

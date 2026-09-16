@@ -185,7 +185,7 @@
                                 </div>
                             </div>
 
-                            <div class="card border mb-3">
+                            <div class="card border mb-3" id="approver-wrapper" style="display:none;">
                                 <div class="card-header bg-light-subtle">
                                     <h6 class="fs-15 mb-0">Division Head Selection</h6>
                                 </div>
@@ -201,7 +201,6 @@
                                             }
                                         }
                                     </select>
-                                    @*                                     <span asp-validation-for="UserID" class="text-danger"></span> *@
                                 </div>
                             </div>
                         </div>
@@ -326,17 +325,66 @@
                     return;
                 }
 
+                var approverSelect = document.getElementById('ApproverID');
+                var optionsHtml = approverSelect.innerHTML;
+
                 Swal.fire({
                     title: 'Submit this Change Request?',
-                    text: 'This will send the CR forward for processing.',
+                    html:
+                        '<p class="mb-3">This will send the CR forward for processing.</p>' +
+                        '<div class="text-start">' +
+                            '<label class="form-label fw-bold" for="swal-approver">Select Division Head</label>' +
+                            '<select id="swal-approver" class="form-control select2" style="width:100%;">' + optionsHtml + '</select>' +
+                            '<span id="swal-approver-error" class="text-danger d-none d-block mt-1">Please select a Division Head.</span>' +
+                        '</div>',
                     icon: 'question',
                     showCancelButton: true,
                     confirmButtonText: 'Yes, submit it',
                     cancelButtonText: 'Cancel',
-                    confirmButtonColor: '#0d6efd',
-                    cancelButtonColor: '#6c757d'
+                    customClass: { confirmButton: 'btn btn-primary me-2', cancelButton: 'btn btn-outline-secondary' },
+                    buttonsStyling: false,
+                    focusConfirm: false,
+                    didOpen: function () {
+                        $('#swal-approver').select2({
+                            dropdownParent: $('.swal2-popup'),
+                            placeholder: 'Select User',
+                            width: '100%'
+                        });
+
+                        // Pre-select the current value, if one was already chosen on the page
+                        // (e.g. loaded from an existing draft via populateFormFromData).
+                        if (approverSelect.value) {
+                            $('#swal-approver').val(approverSelect.value).trigger('change');
+                        }
+
+                        $('#swal-approver').on('change', function () {
+                            if (this.value) {
+                                document.getElementById('swal-approver-error').classList.add('d-none');
+                            }
+                        });
+                    },
+                    willClose: function () {
+                        if ($('#swal-approver').data('select2')) {
+                            $('#swal-approver').select2('destroy');
+                        }
+                    },
+                    preConfirm: function () {
+                        var swalSelect = document.getElementById('swal-approver');
+                        var errorSpan = document.getElementById('swal-approver-error');
+
+                        if (!swalSelect.value) {
+                            errorSpan.classList.remove('d-none');
+                            return false; // keeps the alert open — validation only happens here, on Submit
+                        }
+
+                        return swalSelect.value;
+                    }
                 }).then(function (result) {
                     if (result.isConfirmed) {
+                        // Sync the chosen value back into the real (hidden) form select
+                        // so it's included in FormData when the form is submitted.
+                        approverSelect.value = result.value;
+
                         statusInput.value = submitBtn.dataset.status; // "2"
                         saveChangeRequest(/* thenSubmitWorkflow */ !isNewCr);
                     }
