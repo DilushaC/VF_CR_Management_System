@@ -182,8 +182,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (changeRequest == null)
                 return null;
 
-            // Resolve RequestedBy / ApproverUserName (raw usernames) into display names
-            // from the Users DB (separate connection/DB from CRManagementDB)
             var userNames = new[] { changeRequest.RequestedBy, changeRequest.ApproverUserName }
                 .Where(u => !string.IsNullOrWhiteSpace(u))
                 .Distinct()
@@ -440,55 +438,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return $"{prefix}{(lastNumber + 1):D3}";   // <-- D3, not D5
         }
 
-        //public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAsync(string empNo, string filter)
-        //{
-        //    const int draftStatusId = 1;
-
-        //    string filterCondition = filter switch
-        //    {
-        //        "draft" => "AND cr.RequesterUserName = @EmpNo AND cr.StatusID = @DraftStatusId",
-
-        //        _ => "AND cr.RequesterUserName = @EmpNo"
-        //    };
-
-        //    var sql = $@"
-        //        SELECT
-        //            cr.CRID,
-        //            cr.CRNumber,
-        //            cr.ChangeTitle,
-        //            cr.Summary,
-        //            ct.ChangeTypeName AS ChangeType,
-        //            p.PriorityName AS Priority,
-        //            cr.DivisionID,
-        //            d.DivisionName AS Division,
-        //            cr.ModuleID,
-        //            m.ModuleName AS Module,
-        //            s.StatusName AS Status,
-        //            cr.RequesterUserName AS RequestedBy,
-        //            cr.RequestedDate
-        //        FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
-        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
-        //            ON ct.ChangeTypeID = cr.ChangeTypeID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
-        //            ON p.PriorityID = cr.PriorityID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
-        //            ON d.DivisionID = cr.DivisionID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
-        //            ON m.ModuleID = cr.ModuleID
-        //        LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
-        //            ON s.StatusID = cr.StatusID
-        //        WHERE cr.Active = 1
-        //            {filterCondition}
-        //        ORDER BY
-        //            cr.RequestedDate DESC,
-        //            cr.CRID DESC;";
-
-        //    var result = _connectionService.Query<ChangeRequest>(
-        //        sql,
-        //        new { EmpNo = empNo, DraftStatusId = draftStatusId });
-
-        //    return Task.FromResult<IEnumerable<ChangeRequest>>(result);
-        //}
         public async Task<bool> ApproveChangeRequestAsync(int crId, int approverId, string approvedByEmpId)
         {
             if (crId <= 0)
@@ -571,7 +520,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND cr.RequesterUserName = @EmpNo
-                    AND cr.StatusID IN (1, 2)
+                    AND cr.StatusID <> 7
                 ORDER BY
                     cr.CRID DESC;";
 
@@ -582,58 +531,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return Task.FromResult<IEnumerable<ChangeRequest>>(result);
         }
-
-        //public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
-        //{
-        //    const int draftStatusId = 2;
-
-
-        //    var sql = $@"
-        //        SELECT
-        //            cr.CRID,
-        //            cr.CRNumber,
-        //            cr.ChangeTitle,
-        //            cr.Summary,
-        //            ct.ChangeTypeName AS ChangeType,
-        //            p.PriorityName AS Priority,
-        //            cr.DivisionID,
-        //            d.DivisionName AS Division,
-        //            cr.ModuleID,
-        //            m.ModuleName AS Module,
-        //            s.StatusName AS Status,
-        //            cr.RequesterUserName AS RequestedBy,
-        //            App.AssignedTo AS ApproverUserName,
-        //            cr.RequestedDate
-        //        FROM [dbo].[Approval] AS App
-        //        INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
-        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
-        //            ON ct.ChangeTypeID = cr.ChangeTypeID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
-        //            ON p.PriorityID = cr.PriorityID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
-        //            ON d.DivisionID = cr.DivisionID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
-        //            ON m.ModuleID = cr.ModuleID
-        //        LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
-        //            ON s.StatusID = cr.StatusID
-        //        WHERE cr.Active = 1
-        //            AND App.StepID = 7
-        //         AND cr.StatusID != 7
-        //            AND App.AssignedTo = @EmpNo
-        //        ORDER BY
-        //            cr.CRID DESC;
-        //        ";
-
-        //    var result = _connectionService.Query<ChangeRequest>(
-        //        sql,
-        //        new
-        //        {
-        //            EmpNo = empNo,
-        //            DraftStatusId = draftStatusId
-        //        });
-
-        //    return Task.FromResult<IEnumerable<ChangeRequest>>(result);
-        //}
 
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
@@ -686,7 +583,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (!changeRequests.Any())
                 return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
 
-            // Batch-fetch display names from the Users DB (separate connection/DB)
             var userNames = changeRequests
                 .Select(cr => cr.RequestedBy)
                 .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -775,7 +671,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (!changeRequests.Any())
                 return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
 
-            // Batch-fetch display names from the Users DB (separate connection/DB)
             var userNames = changeRequests
                 .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
                 .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -871,7 +766,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (!changeRequests.Any())
                 return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
 
-            // Batch-fetch display names from the Users DB (separate connection/DB)
             var userNames = changeRequests
                 .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
                 .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -929,7 +823,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (string.IsNullOrWhiteSpace(rejectReason))
                 throw new ArgumentException("Please provide a reason for rejection.");
 
-            // 1. Resolve the StepID for the "CR Reject" workflow step
             const string getStepIdSql = @"
                 SELECT StepID
                 FROM WorkflowStep
@@ -945,8 +838,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var rejectStepId = stepTable.Rows[0].Field<int>("StepID");
 
-            // 2. Update the CR's current active Approval row: record the rejection
-            //    and move it onto the "CR Reject" step.
             const string updateApprovalSql = @"
                 UPDATE a
                 SET
@@ -1106,7 +997,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             _connectionService.ExecuteWithPara(updateCrSql, crParameters);
 
-            // ---- Handle attachments included in the same form submission ----
             var files = collection.Files?.Where(f => f.Length > 0).ToList();
             if (files != null && files.Count > 0)
             {
@@ -1116,10 +1006,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return true;
         }
 
-        /// <summary>
-        /// Saves uploaded files to H:\CRMS Attachment\{crId}\ and records each one
-        /// in the Attachment table. UploadedBy is the session UserName passed in from the controller.
-        /// </summary>
         private async Task SaveAttachmentsAsync(int crId, List<IFormFile> files, string uploadedBy)
         {
             if (string.IsNullOrWhiteSpace(uploadedBy))
@@ -1140,7 +1026,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 if (formFile.Length == 0) continue;
 
-                // Avoid overwriting files with the same original name
                 var safeFileName = Path.GetFileNameWithoutExtension(formFile.FileName);
                 var extension = Path.GetExtension(formFile.FileName);
                 var uniqueFileName = $"{safeFileName}_{DateTime.Now:yyyyMMddHHmmssfff}{extension}";
@@ -1153,7 +1038,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
                 var attachmentParameters = new DynamicParameters();
                 attachmentParameters.Add("@CRID", crId);
-                attachmentParameters.Add("@FileName", formFile.FileName); // original name, for display/download
+                attachmentParameters.Add("@FileName", formFile.FileName);
                 attachmentParameters.Add("@FilePath", fullPath);
                 attachmentParameters.Add("@UploadedBy", uploadedBy);
                 attachmentParameters.Add("@UploadedDate", DateTime.Now);
@@ -1189,8 +1074,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (rowsAffected <= 0)
                 return false;
 
-            // Best-effort physical file cleanup — don't fail the whole operation if this
-            // doesn't succeed (e.g. file already missing, or locked by another process).
             try
             {
                 if (System.IO.File.Exists(attachment.FilePath))
@@ -1200,8 +1083,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             }
             catch
             {
-                // Swallow: the DB row is already marked inactive, which is what
-                // matters for the UI/listing. The file being deleted is a bonus.
             }
 
             return true;

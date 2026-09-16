@@ -401,36 +401,44 @@
             }).then(function (result) {
                 if (!result.isConfirmed) return;
 
-                $.ajax({
-                    url: '@Url.Action("DeleteAttachment", "CRManagement")',
-                    type: 'POST',
-                    data: { id: attachmentId },
-                    headers: {
-                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                    },
-                    success: function (data) {
-                        if (data.success) {
-                            listItem.remove();
-                        } else {
-                            Swal.fire({
-                                title: 'Could not remove',
-                                text: data.message || 'Failed to remove attachment.',
-                                icon: 'error',
-                                customClass: { confirmButton: 'btn btn-primary' },
-                                buttonsStyling: false
-                            });
-                        }
-                    },
-                    error: function () {
+            $.ajax({
+                url: '@Url.Action("DeleteAttachment", "CRManagement")',
+                type: 'POST',
+                data: { id: attachmentId },
+                headers: {
+                    "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                },
+                success: function (data) {
+                    if (data.success) {
+                        listItem.remove();
+
                         Swal.fire({
-                            title: 'Error',
-                            text: 'Failed to remove attachment. Please try again.',
+                            title: 'Deleted!',
+                            text: data.message || 'Attachment removed successfully.',
+                            icon: 'success',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                    } else {
+                        Swal.fire({
+                            title: 'Could not remove',
+                            text: data.message || 'Failed to remove attachment.',
                             icon: 'error',
                             customClass: { confirmButton: 'btn btn-primary' },
                             buttonsStyling: false
                         });
                     }
-                });
+                },
+                error: function () {
+                    Swal.fire({
+                        title: 'Error',
+                        text: 'Failed to remove attachment. Please try again.',
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                }
+            });
             });
         });
     });

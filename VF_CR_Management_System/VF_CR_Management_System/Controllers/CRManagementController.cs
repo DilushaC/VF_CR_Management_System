@@ -83,8 +83,6 @@ namespace VF_CR_Management_System.Controllers
 
             ViewBag.CRID = id;
 
-            // Reuses the Create view (no model passed — the view reads ViewBag.CRID and
-            // fetches the rest via AJAX).
             return View("Create");
         }
 
@@ -99,8 +97,6 @@ namespace VF_CR_Management_System.Controllers
 
             var approverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id);
 
-            // Shape matches populateFormFromData() in Create.cshtml exactly — field names
-            // are already camelCase here, so no ASP.NET Core JSON casing surprises.
             return Json(new
             {
                 crid = changeRequest.CRID,
@@ -160,7 +156,7 @@ namespace VF_CR_Management_System.Controllers
         {
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty; // adjust to however you resolve the logged-in EmpId
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty; 
                 var success = await _changeRequestService.ApproveChangeRequestAsync(id, ApproverID, empNo);
 
                 if (!success)
@@ -301,7 +297,6 @@ namespace VF_CR_Management_System.Controllers
         {
             try
             {
-                // Extract and parse ID from form collection
                 if (!int.TryParse(collection["id"], out int id))
                 {
                     return Json(new
@@ -368,17 +363,6 @@ namespace VF_CR_Management_System.Controllers
             return View();
         }
 
-        //[HttpGet]
-        //public async Task<IActionResult> Index(string filter = "all")
-        //{
-        //    var users = await _userService.GetAllUsersAsync();
-        //    ViewBag.Users = users;
-        //    var empNo = HttpContext.Session.GetString("EmpNo");
-        //    var changeRequests = await _changeRequestService.GetAllChangeRequestsAsync(empNo, filter);
-        //    ViewBag.CurrentFilter = filter;
-        //    return View(changeRequests);
-        //}
-
         public async Task<IActionResult> DraftTable()
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
@@ -438,8 +422,6 @@ namespace VF_CR_Management_System.Controllers
 
                 ViewBag.ApproverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id.Value);
 
-                // Effort estimate (days) = DueDate - Now, clamped at 0 so a past-due date
-                // never shows a negative number.
                 double effortEstimateDays = 0;
                 if (changeRequest.DueDate.HasValue)
                 {
@@ -471,8 +453,6 @@ namespace VF_CR_Management_System.Controllers
                 if (!System.IO.File.Exists(attachment.FilePath))
                     return NotFound("The file could not be found on the server.");
 
-                // Resolve a proper content-type from the file's extension, falling back
-                // to a generic binary stream if it isn't recognised.
                 var provider = new FileExtensionContentTypeProvider();
                 if (!provider.TryGetContentType(attachment.FilePath, out var contentType))
                 {
@@ -481,8 +461,6 @@ namespace VF_CR_Management_System.Controllers
 
                 var fileBytes = await System.IO.File.ReadAllBytesAsync(attachment.FilePath);
 
-                // FileName here is the original uploaded name (not the on-disk unique name),
-                // so the browser downloads it with the name the user originally uploaded.
                 return File(fileBytes, contentType, attachment.FileName);
             }
             catch (Exception)
