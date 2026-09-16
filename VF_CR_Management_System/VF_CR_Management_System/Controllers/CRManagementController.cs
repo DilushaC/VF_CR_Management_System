@@ -1,7 +1,8 @@
-﻿using System;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Net.Mail;
+using System.Threading.Tasks;
 using VF_CR_Management_System.Business.ChangeRequestHandler;
 using VF_CR_Management_System.Business.DivisionHandler;
 using VF_CR_Management_System.Business.ModuleHandler;
@@ -338,6 +339,7 @@ namespace VF_CR_Management_System.Controllers
                 });
             }
         }
+
 
         [HttpGet]
         public IActionResult AssesmentSecurity()

@@ -15,6 +15,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
     public class ChangeRequestService : IChangeRequestService
     {
         private readonly _ConnectionService _connectionService;
+        private const string AttachmentRootFolder = @"H:\CRMS Attachment";
 
         public ChangeRequestService(_ConnectionService connectionService)
         {
@@ -1055,7 +1056,61 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             _connectionService.ExecuteWithPara(updateCrSql, crParameters);
 
+            // ---- Handle attachments included in the same form submission ----
+            var files = collection.Files?.Where(f => f.Length > 0).ToList();
+            if (files != null && files.Count > 0)
+            {
+                await SaveAttachmentsAsync(crId, files, userName);
+            }
+
             return true;
+        }
+
+        /// <summary>
+        /// Saves uploaded files to H:\CRMS Attachment\{crId}\ and records each one
+        /// in the Attachment table. UploadedBy is the session UserName passed in from the controller.
+        /// </summary>
+        private async Task SaveAttachmentsAsync(int crId, List<IFormFile> files, string uploadedBy)
+        {
+            if (string.IsNullOrWhiteSpace(uploadedBy))
+                throw new ArgumentException("Session expired. Please log in again before uploading attachments.");
+
+            var rootPath = Path.Combine(AttachmentRootFolder, crId.ToString());
+
+            if (!Directory.Exists(rootPath))
+                Directory.CreateDirectory(rootPath);
+
+            const string insertAttachmentSql = @"
+                INSERT INTO [CRManagementDB].[dbo].[Attachment]
+                    (CRID, FileName, FilePath, UploadedBy, UploadedDate, Active)
+                VALUES
+                    (@CRID, @FileName, @FilePath, @UploadedBy, @UploadedDate, @Active)";
+
+            foreach (var formFile in files)
+            {
+                if (formFile.Length == 0) continue;
+
+                // Avoid overwriting files with the same original name
+                var safeFileName = Path.GetFileNameWithoutExtension(formFile.FileName);
+                var extension = Path.GetExtension(formFile.FileName);
+                var uniqueFileName = $"{safeFileName}_{DateTime.Now:yyyyMMddHHmmssfff}{extension}";
+                var fullPath = Path.Combine(rootPath, uniqueFileName);
+
+                using (var stream = new FileStream(fullPath, FileMode.Create))
+                {
+                    await formFile.CopyToAsync(stream);
+                }
+
+                var attachmentParameters = new DynamicParameters();
+                attachmentParameters.Add("@CRID", crId);
+                attachmentParameters.Add("@FileName", formFile.FileName); // original name, for display/download
+                attachmentParameters.Add("@FilePath", fullPath);
+                attachmentParameters.Add("@UploadedBy", uploadedBy);
+                attachmentParameters.Add("@UploadedDate", DateTime.Now);
+                attachmentParameters.Add("@Active", true);
+
+                _connectionService.ExecuteWithPara(insertAttachmentSql, attachmentParameters);
+            }
         }
 
 

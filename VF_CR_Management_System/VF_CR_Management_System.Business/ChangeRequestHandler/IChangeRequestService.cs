@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using VF_CR_Management_System.Data.Models;
+
 namespace VF_CR_Management_System.Business.ChangeRequestHandler
 {
     public interface IChangeRequestService
@@ -22,6 +23,5 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<bool> SubmitChangeRequestAsync(int crId, string submittedByEmpId);
         Task<bool> DeleteChangeRequestAsync(int crId, string requestedByEmpId);
         Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empNo);
-
     }
 }
