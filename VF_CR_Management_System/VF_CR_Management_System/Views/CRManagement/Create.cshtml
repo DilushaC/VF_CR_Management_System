@@ -228,21 +228,12 @@
             var submitBtn = document.getElementById('btn-submit');
             var statusInput = document.getElementById('StatusID');
 
-            // Captured ONCE at page load, before any create/update happens, so we know
-            // whether this page started out as a brand-new CR or an existing draft.
-            // Create (StatusID=2) already fully submits a brand-new CR in one step, so
-            // for a new CR we must NOT chain a second call to the Submit endpoint —
-            // its WHERE CRNumber LIKE 'Waiting-%' would match 0 rows (the CR already
-            // has a real CRNumber by then) and report a false "Failed to submit" error.
             var isNewCr = (parseInt(document.getElementById('CRID').value, 10) || 0) <= 0;
 
             var $division = $('#DivisionID');
             var $moduleCard = $('#moduleCard');
             var $module = $('#ModuleID');
 
-            // Loads modules for the given division via AJAX, replaces the Module
-            // select's options, and shows/hides the Module card accordingly.
-            // preselectId: optional module id to select once options are loaded (edit mode).
             function loadModulesForDivision(divisionId, preselectId) {
                 if (!divisionId) {
                     $module.empty().append('<option value="" selected disabled hidden>Select Module</option>').trigger('change');

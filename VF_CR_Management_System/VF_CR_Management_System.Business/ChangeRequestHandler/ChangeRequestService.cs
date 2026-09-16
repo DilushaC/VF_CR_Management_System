@@ -23,58 +23,45 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         }
         public async Task<int> CreateChangeRequestAsync(IFormCollection collection, string empId)
         {
-            // Required fields
-            if (!int.TryParse(collection["ChangeTypeID"], out var changeTypeId))
-            {
-                throw new ArgumentException("Please select a change type.");
-            }
-            if (!int.TryParse(collection["PriorityID"], out var priorityId))
-            {
-                throw new ArgumentException("Please select a change priority.");
-            }
-            var changeTitle = collection["ChangeTitle"].ToString();
-            if (string.IsNullOrWhiteSpace(changeTitle))
-            {
-                throw new ArgumentException("Please provide a Change Title");
-            }
-            var summary = collection["Summary"].ToString();
-            if (string.IsNullOrWhiteSpace(summary))
-            {
-                throw new ArgumentException("Please provide a change summary and business justification.");
-            }
-            var title = collection["Title"].ToString();
-            if (string.IsNullOrWhiteSpace(summary))
-            {
-                throw new ArgumentException("Please provide Title for the Change Request");
-            }
-            var otherChangeType = collection["OtherChangeType"].ToString();
-            if (changeTypeId == 5 && string.IsNullOrWhiteSpace(otherChangeType))
-            {
-                throw new ArgumentException("Please specify the change type.");
-            }
-            if (!int.TryParse(collection["DivisionID"], out var divisionId))
-            {
-                throw new ArgumentException("Please select a Division.");
-            }
-            if (!int.TryParse(collection["ModuleID"], out var moduleId))
-            {
-                throw new ArgumentException("Please select a Module.");
-            }
             if (!int.TryParse(collection["StatusID"], out var statusId))
             {
                 throw new ArgumentException("Missing or invalid status.");
             }
 
-            // Approver is only required when actually submitting (StatusID = 2).
-            // A draft save (StatusID = 1) can be stored without one — it's collected
-            // later via the Submit confirmation dialog.
+            bool isSubmit = statusId == 2;
+
+            // ---- Parse everything leniently first ----
+            int.TryParse(collection["ChangeTypeID"], out var changeTypeId);
+            int.TryParse(collection["PriorityID"], out var priorityId);
+            var changeTitle = collection["ChangeTitle"].ToString();
+            var summary = collection["Summary"].ToString();
+            var otherChangeType = collection["OtherChangeType"].ToString();
+            int.TryParse(collection["DivisionID"], out var divisionId);
+            int.TryParse(collection["ModuleID"], out var moduleId);
+
             var approverIdRaw = collection["ApproverID"].ToString();
             int approverId = 0;
             bool hasApprover = int.TryParse(approverIdRaw, out approverId);
 
-            if (statusId == 2 && !hasApprover)
+            // ---- Full validation only applies when actually submitting ----
+            if (isSubmit)
             {
-                throw new ArgumentException("Please select a Approver.");
+                if (changeTypeId <= 0)
+                    throw new ArgumentException("Please select a change type.");
+                if (priorityId <= 0)
+                    throw new ArgumentException("Please select a change priority.");
+                if (string.IsNullOrWhiteSpace(changeTitle))
+                    throw new ArgumentException("Please provide a Change Title");
+                if (string.IsNullOrWhiteSpace(summary))
+                    throw new ArgumentException("Please provide a change summary and business justification.");
+                if (changeTypeId == 5 && string.IsNullOrWhiteSpace(otherChangeType))
+                    throw new ArgumentException("Please specify the change type.");
+                if (divisionId <= 0)
+                    throw new ArgumentException("Please select a Division.");
+                if (moduleId <= 0)
+                    throw new ArgumentException("Please select a Module.");
+                if (!hasApprover)
+                    throw new ArgumentException("Please select a Approver.");
             }
 
             const string crSql = @"
@@ -100,11 +87,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 crParameters.Add("@RequesterUserName", empId);
                 crParameters.Add("@ChangeTitle", changeTitle);
                 crParameters.Add("@Summary", summary);
-                crParameters.Add("@ChangeTypeID", changeTypeId);
+                crParameters.Add("@ChangeTypeID", changeTypeId > 0 ? (int?)changeTypeId : null);
                 crParameters.Add("@OtherType", otherChangeType);
-                crParameters.Add("@PriorityID", priorityId);
-                crParameters.Add("@ModuleID", moduleId);
-                crParameters.Add("@DivisionID", divisionId);
+                crParameters.Add("@PriorityID", priorityId > 0 ? (int?)priorityId : null);
+                crParameters.Add("@ModuleID", moduleId > 0 ? (int?)moduleId : null);
+                crParameters.Add("@DivisionID", divisionId > 0 ? (int?)divisionId : null);
                 crParameters.Add("@RequestedDate", DateTime.Now);
                 crParameters.Add("@StatusID", statusId);
                 crParameters.Add("@Active", true);
@@ -124,8 +111,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (newCrId <= 0)
                 return 0;
 
-            // Only create the Approval row if an approver was actually selected —
-            // a plain draft save may not have one yet.
             if (hasApprover)
             {
                 const string approvalSql = @"
@@ -144,11 +129,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
                 int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
 
-                // Return the CRID only if both inserts succeeded; 0 signals failure to the caller.
                 return approvalRowsAffected > 0 ? newCrId : 0;
             }
 
-            // Draft with no approver yet — CR row alone is enough to signal success.
             return newCrId;
         }
 
@@ -312,52 +295,43 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
 
-            if (!int.TryParse(collection["ChangeTypeID"], out var changeTypeId))
-            {
-                throw new ArgumentException("Please select a change type.");
-            }
-            if (!int.TryParse(collection["PriorityID"], out var priorityId))
-            {
-                throw new ArgumentException("Please select a change priority.");
-            }
-            var changeTitle = collection["ChangeTitle"].ToString();
-            if (string.IsNullOrWhiteSpace(changeTitle))
-            {
-                throw new ArgumentException("Please provide a Change Request Title");
-            }
-            var summary = collection["Summary"].ToString();
-            if (string.IsNullOrWhiteSpace(summary))
-            {
-                throw new ArgumentException("Please provide a change summary and business justification.");
-            }
-            var otherChangeType = collection["OtherChangeType"].ToString();
-            if (changeTypeId == 5 && string.IsNullOrWhiteSpace(otherChangeType))
-            {
-                throw new ArgumentException("Please specify the change type.");
-            }
-            if (!int.TryParse(collection["DivisionID"], out var divisionId))
-            {
-                throw new ArgumentException("Please select a DIvision.");
-            }
-            if (!int.TryParse(collection["ModuleID"], out var moduleId))
-            {
-                throw new ArgumentException("Please select a Module.");
-            }
-
-            // Approver is only required when the caller is actually submitting.
-            // Draft edits/saves don't need one yet.
             if (!int.TryParse(collection["StatusID"], out var incomingStatusId))
             {
                 incomingStatusId = 1; // default to draft if not present
             }
 
+            bool isSubmit = incomingStatusId == 2;
+
+            int.TryParse(collection["ChangeTypeID"], out var changeTypeId);
+            int.TryParse(collection["PriorityID"], out var priorityId);
+            var changeTitle = collection["ChangeTitle"].ToString();
+            var summary = collection["Summary"].ToString();
+            var otherChangeType = collection["OtherChangeType"].ToString();
+            int.TryParse(collection["DivisionID"], out var divisionId);
+            int.TryParse(collection["ModuleID"], out var moduleId);
+
             var approverIdRaw = collection["ApproverID"].ToString();
             int approverId = 0;
             bool hasApprover = int.TryParse(approverIdRaw, out approverId);
 
-            if (incomingStatusId == 2 && !hasApprover)
+            if (isSubmit)
             {
-                throw new ArgumentException("Please select a Approver.");
+                if (changeTypeId <= 0)
+                    throw new ArgumentException("Please select a change type.");
+                if (priorityId <= 0)
+                    throw new ArgumentException("Please select a change priority.");
+                if (string.IsNullOrWhiteSpace(changeTitle))
+                    throw new ArgumentException("Please provide a Change Request Title");
+                if (string.IsNullOrWhiteSpace(summary))
+                    throw new ArgumentException("Please provide a change summary and business justification.");
+                if (changeTypeId == 5 && string.IsNullOrWhiteSpace(otherChangeType))
+                    throw new ArgumentException("Please specify the change type.");
+                if (divisionId <= 0)
+                    throw new ArgumentException("Please select a DIvision.");
+                if (moduleId <= 0)
+                    throw new ArgumentException("Please select a Module.");
+                if (!hasApprover)
+                    throw new ArgumentException("Please select a Approver.");
             }
 
             const int draftStatusId = 1;
@@ -379,11 +353,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var crParameters = new DynamicParameters();
             crParameters.Add("@Summary", summary);
             crParameters.Add("@ChangeTitle", changeTitle);
-            crParameters.Add("@ChangeTypeID", changeTypeId);
+            crParameters.Add("@ChangeTypeID", changeTypeId > 0 ? (int?)changeTypeId : null);
             crParameters.Add("@OtherType", otherChangeType);
-            crParameters.Add("@PriorityID", priorityId);
-            crParameters.Add("@DivisionID", divisionId);
-            crParameters.Add("@ModuleID", moduleId);
+            crParameters.Add("@PriorityID", priorityId > 0 ? (int?)priorityId : null);
+            crParameters.Add("@DivisionID", divisionId > 0 ? (int?)divisionId : null);
+            crParameters.Add("@ModuleID", moduleId > 0 ? (int?)moduleId : null);
             crParameters.Add("@StatusID", draftStatusId);
             crParameters.Add("@CRID", crId);
 
@@ -392,7 +366,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (crRowsAffected <= 0)
                 return false;
 
-            // Only touch the Approval row if an approver was actually chosen.
             if (hasApprover)
             {
                 const int assignStepId = 7;
@@ -418,10 +391,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 if (approvalRowsAffected <= 0)
                 {
                     const string insertApprovalSql = @"
-                INSERT INTO Approval
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                        INSERT INTO Approval
+                            (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                        VALUES
+                            (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
 
                     var insertParameters = new DynamicParameters();
                     insertParameters.Add("@CRID", crId);
@@ -437,7 +410,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return true;
         }
-
         private static bool IsDuplicateCrNumberError(Exception ex)
         {
             for (var current = ex; current != null; current = current.InnerException)
