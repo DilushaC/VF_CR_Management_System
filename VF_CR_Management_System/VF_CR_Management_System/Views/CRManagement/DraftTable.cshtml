@@ -105,7 +105,26 @@
                                             }
                                         </td>
                                         <td>
-                                            <span>@cr.Status</span>
+                                            @if (string.Equals(cr.Status, "Submitted", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-warning">@cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-success">@cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-info">Assessment Draft</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Development", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-secondary">Assessment Done</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Status
+                                            }
                                         </td>
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
