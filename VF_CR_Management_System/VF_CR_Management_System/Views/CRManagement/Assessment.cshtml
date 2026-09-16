@@ -194,11 +194,38 @@
                                                 <ul class="list-unstyled mb-0" id="existingAttachmentsList">
                                                     @foreach (var att in existingAttachments)
                                                     {
+                                                        var ext = System.IO.Path.GetExtension(att.FileName).ToLowerInvariant();
+                                                        var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+                                                        var isImage = imageExtensions.Contains(ext);
+                                                        var isPdf = ext == ".pdf";
+
                                                         <li class="d-flex align-items-center gap-2 mb-1" data-attachment-id="@att.AttachmentID">
                                                             <i class="mdi mdi-paperclip"></i>
-                                                            <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = att.AttachmentID })">
-                                                                @att.FileName
-                                                            </a>
+
+                                                            @if (isImage)
+                                                            {
+                                                                <a href="javascript:void(0);"
+                                                                   class="preview-attachment-link"
+                                                                   data-attachment-id="@att.AttachmentID"
+                                                                   data-file-name="@att.FileName">
+                                                                    @att.FileName
+                                                                </a>
+                                                            }
+                                                            else if (isPdf)
+                                                            {
+                                                                <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = att.AttachmentID })"
+                                                                   target="_blank"
+                                                                   rel="noopener noreferrer">
+                                                                    @att.FileName
+                                                                </a>
+                                                            }
+                                                            else
+                                                            {
+                                                                <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = att.AttachmentID })">
+                                                                    @att.FileName
+                                                                </a>
+                                                            }
+
                                                             <small class="text-muted">(@att.UploadedDate.ToString("yyyy/MM/dd"))</small>
                                                             <a href="javascript:void(0);"
                                                                class="text-danger remove-attachment-btn"
@@ -246,6 +273,20 @@
             </div> <!-- end card-body -->
         </div> <!-- end card -->
     </div><!-- end col -->
+    <!-- Attachment image preview modal -->
+    <div class="modal fade" id="attachmentPreviewModal" tabindex="-1" aria-labelledby="attachmentPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="attachmentPreviewModalLabel">Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="attachmentPreviewImage" src="" class="img-fluid" alt="Attachment preview" style="max-height: 70vh;" />
+                </div>
+            </div>
+        </div>
+    </div>
 </div><!-- end row -->
 
 <script>
@@ -440,6 +481,24 @@
                 }
             });
             });
+        });
+    });
+        // ---- Preview an image attachment in a modal ----
+    document.querySelectorAll('.preview-attachment-link').forEach(function (link) {
+        link.addEventListener('click', function () {
+            var attachmentId = link.getAttribute('data-attachment-id');
+            var fileName = link.getAttribute('data-file-name');
+
+            var previewUrl = '@Url.Action("PreviewAttachment", "CRManagement")' + '?id=' + attachmentId;
+
+            var img = document.getElementById('attachmentPreviewImage');
+            img.src = previewUrl;
+
+            document.getElementById('attachmentPreviewModalLabel').textContent = fileName;
+
+            var modalEl = document.getElementById('attachmentPreviewModal');
+            var modal = new bootstrap.Modal(modalEl);
+            modal.show();
         });
     });
 </script>
