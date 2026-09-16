@@ -947,65 +947,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return rowsAffected > 0;
         }
 
-        //public async Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
-        //{
-        //    if (crId <= 0)
-        //        throw new ArgumentException("Invalid Change Request.");
-
-        //    var activitiesTasks = collection["ActivitiesTasks"].ToString();
-        //    if (string.IsNullOrWhiteSpace(activitiesTasks))
-        //    {
-        //        throw new ArgumentException("Please fill out Activities & Tasks.");
-        //    }
-
-        //    var fixedAssetInfo = collection["FixedAssetInfo"].ToString();
-        //    if (string.IsNullOrWhiteSpace(fixedAssetInfo))
-        //    {
-        //        throw new ArgumentException("Please fill out Fixed Asset Info.");
-        //    }
-
-        //    var estimationDaysStr = collection["EffortEstimateDays"].ToString();
-
-        //    double.TryParse(estimationDaysStr, out double estimationDays);
-        //    DateTime targetDate = DateTime.Now.AddDays(estimationDays);
-
-        //    var vendorID = collection["VendorID"].ToString();
-        //    var poposalNumber = collection["ProposalNumber"].ToString();
-
-        //    const string updateCrSql = @"
-        //        UPDATE ChangeRequest
-        //        SET 
-        //            ActivitiesTasks = @ActivitiesTasks,
-        //            FixedAssets  = @FixedAssets,
-        //            DueDate = @DueDate,
-        //            VendorID = @VendorID,
-        //            ProposalNumber = @ProposalNumber,
-        //            StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = 'AssessmentDraft')
-        //        WHERE CRID = @CRID
-        //          AND Active = 1";
-
-        //    var crParameters = new DynamicParameters();
-        //    crParameters.Add("@ActivitiesTasks", activitiesTasks);
-        //    crParameters.Add("@FixedAssets", fixedAssetInfo);
-        //    crParameters.Add("@DueDate", targetDate);
-        //    if (vendorID == "")
-        //        crParameters.Add("@VendorID", null);
-        //    else
-        //        crParameters.Add("@VendorID", vendorID);
-        //    crParameters.Add("@ProposalNumber", poposalNumber);
-        //    crParameters.Add("@CRID", crId);
-
-        //    _connectionService.ExecuteWithPara(updateCrSql, crParameters);
-
-        //    var files = collection.Files?.Where(f => f.Length > 0).ToList();
-        //    if (files != null && files.Count > 0)
-        //    {
-        //        await SaveAttachmentsAsync(crId, files, userName);
-        //    }
-
-        //    return true;
-        //}
-
         public async Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
@@ -1038,17 +979,25 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var targetStatusName = isSubmit ? "Development" : "AssessmentDraft";
 
+            // Only required when actually submitting — the SweetAlert on the client
+            // already guarantees a selection before Submit posts, via preConfirm.
+            var isOfficerUserName = collection["ISOfficerUserName"].ToString();
+            if (isSubmit && string.IsNullOrWhiteSpace(isOfficerUserName))
+            {
+                throw new ArgumentException("Please select an IS Officer.");
+            }
+
             const string updateCrSql = @"
-                UPDATE ChangeRequest
-                SET 
-                    ActivitiesTasks = @ActivitiesTasks,
-                    FixedAssets  = @FixedAssets,
-                    DueDate = @DueDate,
-                    VendorID = @VendorID,
-                    ProposalNumber = @ProposalNumber,
-                    StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = @TargetStatusName)
-                WHERE CRID = @CRID
-                  AND Active = 1";
+        UPDATE ChangeRequest
+        SET 
+            ActivitiesTasks = @ActivitiesTasks,
+            FixedAssets  = @FixedAssets,
+            DueDate = @DueDate,
+            VendorID = @VendorID,
+            ProposalNumber = @ProposalNumber,
+            StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = @TargetStatusName)
+        WHERE CRID = @CRID
+          AND Active = 1";
 
             var crParameters = new DynamicParameters();
             crParameters.Add("@ActivitiesTasks", activitiesTasks);
@@ -1074,13 +1023,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             // ---- On Submit only: log the "Development" workflow step in Approval ----
             if (isSubmit)
             {
-                await InsertDevelopmentApprovalStepAsync(crId, empId);
+                await InsertDevelopmentApprovalStepAsync(crId, empId, isOfficerUserName);
             }
 
             return true;
         }
 
-        private async Task InsertDevelopmentApprovalStepAsync(int crId, string empId)
+        private async Task InsertDevelopmentApprovalStepAsync(int crId, string empId, string isOfficerUserName)
         {
             const string getStepIdSql = @"
                 SELECT StepID
@@ -1107,8 +1056,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             parameters.Add("@CRID", crId);
             parameters.Add("@StepID", developmentStepId);
             parameters.Add("@AssignedBy", empId);
-            parameters.Add("@AssignedTo", empId); // implementer is both assigner and assignee for this step
-            //approval date not updating
+            parameters.Add("@AssignedTo", isOfficerUserName); // now the selected IS Officer, not the implementer
             parameters.Add("@AssignedDate", DateTime.Now);
             parameters.Add("@IsApproved", true);
             parameters.Add("@Active", true);

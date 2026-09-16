@@ -454,8 +454,6 @@
                     buttonsStyling: false,
                     focusConfirm: false,
                     didOpen: function () {
-                        // Initialise select2 on the dropdown now that it's actually in the DOM.
-                        // dropdownParent keeps the select2 popup positioned correctly inside the SweetAlert overlay.
                         $('#swal-isofficer').select2({
                             dropdownParent: $('.swal2-popup'),
                             placeholder: 'Select User',
@@ -488,8 +486,6 @@
                     }
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        // Sync the chosen value back into the real (hidden) form select
-                        // so it's included in FormData when the form is submitted.
                         isOfficerSelect.value = result.value;
                         performSubmission();
                     }
