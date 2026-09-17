@@ -545,5 +545,37 @@ namespace VF_CR_Management_System.Controllers
                 return StatusCode(500, "An error occurred while loading the preview.");
             }
         }
+
+        [HttpGet]
+        public async Task<IActionResult> EditSecurity(int? id)
+        {
+            if (id == null)
+            {
+                return RedirectToAction("SecurityTable");
+            }
+
+            try
+            {
+                var userName = HttpContext.Session.GetString("UserName");
+                var empNo = HttpContext.Session.GetString("EmpNo");
+
+                var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
+                if (changeRequest == null)
+                {
+                    return NotFound();
+                }
+
+                ViewBag.ApproverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id.Value);
+
+                var users = await _userService.GetAllUsersAsync();
+                ViewBag.Users = users;
+
+                return View("AssessmentSecurity", changeRequest);
+            }
+            catch (Exception ex)
+            {
+                return View("Error");
+            }
+        }
     }
 }

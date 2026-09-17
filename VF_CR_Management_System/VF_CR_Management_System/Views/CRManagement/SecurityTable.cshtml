@@ -130,7 +130,7 @@
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
                                             <div class="d-flex gap-1">
-                                                @if (cr.Status == "Approved" || cr.Status == "Assessment")
+                                                @if (cr.Status == "Assessment")
                                                 {
                                                     <button type="button"
                                                             class="btn btn-sm btn-info btn-view"
@@ -151,13 +151,13 @@
                                                             data-bs-activities="@cr.ActivitiesTasks"
                                                             data-bs-fixedAssets="@cr.FixedAssets"
                                                             title="View">
-                                                        <i class="ri-eye-line"></i>
+                                                        <i class="ri-login-box-line"></i>
                                                     </button>
                                                 }
                                                 @if (cr.Status == "AssessmentDraft")
                                                 {
                                                     <div class="d-flex gap-1">
-                                                        <a href="@Url.Action("EditAssessment", "CRManagement", new { id = cr.CRID })"
+                                                        <a href="@Url.Action("EditSecurity", "CRManagement", new { id = cr.CRID })"
                                                            class="btn btn-sm btn-outline-primary"
                                                            title="Edit">
                                                             <i class="ri-edit-line"></i>
@@ -243,7 +243,9 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <a id="modal-assessment-btn" href="#" class="btn btn-warning d-none">Go to Assessment</a>
+                <a id="modal-security-assessment-btn" href="#" class="btn btn-primary d-none">
+                    <i class="ri-shield-check-line me-1"></i> Proceed to Security Assessment
+                </a>
             </div>
         </div>
     </div>
@@ -253,7 +255,6 @@
     <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
     <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
     <script>
-        // Logged-in user's EmpNo, rendered server-side so it can be compared client-side.
         var currentEmpNo = '@currentEmpNo';
 
         $(document).ready(function () {
@@ -270,18 +271,19 @@
             });
         });
 
-        // Populate the CR Details modal from the button that triggered it
         var crDetailsModal = document.getElementById('crDetailsModal');
         var $approveBtn = $('#modal-approve-btn');
         var $rejectBtn = $('#modal-reject-btn');
         var $approverWrapper = $('#modal-approver-wrapper');
+        var $assessmentBtn = $('#modal-assessment-btn');
+        var $securityAssessmentBtn = $('#modal-security-assessment-btn');
+
+        var assessmentUrlBase = '@Url.Action("Assessment", "CRManagement")';
+        var securityAssessmentUrlBase = '@Url.Action("SecurityAssessment", "CRManagement")'; // Change controller/action if needed
 
         function normalize(value) {
             return (value || '').trim().toLowerCase();
         }
-
-        var $assessmentBtn = $('#modal-assessment-btn');
-        var assessmentUrlBase = '@Url.Action("Assessment", "CRManagement")';
 
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
@@ -322,6 +324,7 @@
 
             var canAct = !isDecided &&
                 normalize(currentApprover) !== '' &&
+                normalize(currentEmpNo) !== '' &&
                 normalize(currentApprover) === normalize(currentEmpNo);
 
             if (canAct) {
@@ -334,9 +337,7 @@
                 $approverWrapper.addClass('d-none');
             }
 
-            // Show "Go to Assessment" only when the CR has been approved.
-            // The Assessment page now fetches everything itself via
-            // GetChangeRequestByIdAsync, so we only need to pass the id.
+            // Show "Go to Assessment" if status is "approved"
             if (normalizedStatus === 'approved') {
                 $assessmentBtn
                     .attr('href', assessmentUrlBase + '?id=' + encodeURIComponent(crid || ''))
@@ -345,15 +346,25 @@
                 $assessmentBtn.addClass('d-none');
             }
 
+            // Show "Proceed to Security Assessment" if status is "assessment"
+            if (normalizedStatus === 'assessment') {
+                $securityAssessmentBtn
+                    .attr('href', securityAssessmentUrlBase + '?id=' + encodeURIComponent(crid || ''))
+                    .removeClass('d-none');
+            } else {
+                $securityAssessmentBtn.addClass('d-none');
+            }
+
             $('#modal-approver').val('').trigger('change');
             $('#modal-approver-error').addClass('d-none');
         });
 
         $(crDetailsModal).on('shown.bs.modal', function () {
-            $('#modal-approver').select2({
-                dropdownParent: $(crDetailsModal)
-            });
+            if ($('#modal-approver').length) {
+                $('#modal-approver').select2({
+                    dropdownParent: $(crDetailsModal)
+                });
+            }
         });
-
     </script>
 }

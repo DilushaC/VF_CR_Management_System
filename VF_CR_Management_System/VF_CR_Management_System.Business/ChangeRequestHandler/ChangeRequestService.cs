@@ -1071,7 +1071,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,
                     App.AssignedTo AS ApproverUserName,
-                    cr.RequestedDate
+                    cr.RequestedDate,
+                    v.VendorName AS Vendor -- Added Vendor Name
                 FROM [dbo].[Approval] AS App
                 INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
@@ -1079,6 +1080,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
                 LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+                LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
                 WHERE cr.Active = 1
                     AND App.Active = 1
                     AND App.StepID = @StepID
