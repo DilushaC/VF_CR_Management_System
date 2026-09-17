@@ -634,7 +634,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (!changeRequests.Any())
                 return changeRequests;
 
-            // 3. Resolve Full Names for Requesters and Approvers from Users Table
+            // 3. Resolve Full Names and prepend UserName/EmpNo from Users Table
             var userNames = changeRequests
                 .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
                 .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -656,30 +656,32 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var nameLookup = usersTable.AsEnumerable()
                     .ToDictionary(
                         r => r.Field<string>("UserName"),
-                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        r =>
+                        {
+                            var uName = r.Field<string>("UserName");
+                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+                        },
                         StringComparer.OrdinalIgnoreCase);
 
                 foreach (var cr in changeRequests)
                 {
                     if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
-                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFullName) &&
-                        !string.IsNullOrWhiteSpace(requesterFullName))
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
                     {
-                        cr.RequestedBy = requesterFullName;
+                        cr.RequestedBy = requesterFormattedName;
                     }
 
                     if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
-                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFullName) &&
-                        !string.IsNullOrWhiteSpace(approverFullName))
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
                     {
-                        cr.ApproverUserName = approverFullName;
+                        cr.ApproverUserName = approverFormattedName;
                     }
                 }
             }
 
             return changeRequests;
         }
-
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
             const int draftStatusId = 2;
@@ -755,16 +757,26 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var nameLookup = usersTable.AsEnumerable()
                     .ToDictionary(
                         r => r.Field<string>("UserName"),
-                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        r =>
+                        {
+                            var uName = r.Field<string>("UserName");
+                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+                        },
                         StringComparer.OrdinalIgnoreCase);
 
                 foreach (var cr in changeRequests)
                 {
                     if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
-                        nameLookup.TryGetValue(cr.RequestedBy, out var fullName) &&
-                        !string.IsNullOrWhiteSpace(fullName))
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
                     {
-                        cr.RequestedBy = fullName;
+                        cr.RequestedBy = requesterFormattedName;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
+                    {
+                        cr.ApproverUserName = approverFormattedName;
                     }
                 }
             }
@@ -853,23 +865,26 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var nameLookup = usersTable.AsEnumerable()
                     .ToDictionary(
                         r => r.Field<string>("UserName"),
-                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        r =>
+                        {
+                            var uName = r.Field<string>("UserName");
+                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+                        },
                         StringComparer.OrdinalIgnoreCase);
 
                 foreach (var cr in changeRequests)
                 {
                     if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
-                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFullName) &&
-                        !string.IsNullOrWhiteSpace(requesterFullName))
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
                     {
-                        cr.RequestedBy = requesterFullName;
+                        cr.RequestedBy = requesterFormattedName;
                     }
 
                     if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
-                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFullName) &&
-                        !string.IsNullOrWhiteSpace(approverFullName))
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
                     {
-                        cr.ApproverUserName = approverFullName;
+                        cr.ApproverUserName = approverFormattedName;
                     }
                 }
             }
@@ -977,23 +992,26 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var nameLookup = usersTable.AsEnumerable()
                     .ToDictionary(
                         r => r.Field<string>("UserName"),
-                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        r =>
+                        {
+                            var uName = r.Field<string>("UserName");
+                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+                        },
                         StringComparer.OrdinalIgnoreCase);
 
                 foreach (var cr in changeRequests)
                 {
                     if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
-                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFullName) &&
-                        !string.IsNullOrWhiteSpace(requesterFullName))
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
                     {
-                        cr.RequestedBy = requesterFullName;
+                        cr.RequestedBy = requesterFormattedName;
                     }
 
                     if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
-                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFullName) &&
-                        !string.IsNullOrWhiteSpace(approverFullName))
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
                     {
-                        cr.ApproverUserName = approverFullName;
+                        cr.ApproverUserName = approverFormattedName;
                     }
                 }
             }
@@ -1103,23 +1121,26 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var nameLookup = usersTable.AsEnumerable()
                     .ToDictionary(
                         r => r.Field<string>("UserName"),
-                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        r =>
+                        {
+                            var uName = r.Field<string>("UserName");
+                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+                        },
                         StringComparer.OrdinalIgnoreCase);
 
                 foreach (var cr in changeRequests)
                 {
                     if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
-                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFullName) &&
-                        !string.IsNullOrWhiteSpace(requesterFullName))
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
                     {
-                        cr.RequestedBy = requesterFullName;
+                        cr.RequestedBy = requesterFormattedName;
                     }
 
                     if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
-                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFullName) &&
-                        !string.IsNullOrWhiteSpace(approverFullName))
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
                     {
-                        cr.ApproverUserName = approverFullName;
+                        cr.ApproverUserName = approverFormattedName;
                     }
                 }
             }
