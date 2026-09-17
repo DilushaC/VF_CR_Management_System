@@ -1047,6 +1047,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.DivisionID,
                     d.DivisionName AS Division,
                     cr.ModuleID,
+                    cr.ActivitiesTasks,
+                    cr.FixedAssets,
                     m.ModuleName AS Module,
                     s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,

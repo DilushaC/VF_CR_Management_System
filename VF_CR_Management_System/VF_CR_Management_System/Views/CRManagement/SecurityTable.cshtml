@@ -148,6 +148,8 @@
                                                             data-bs-requestedby="@cr.RequestedBy"
                                                             data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
                                                             data-bs-currentapprover="@cr.ApproverUserName"
+                                                            data-bs-activities="@cr.ActivitiesTasks"
+                                                            data-bs-fixedAssets="@cr.FixedAssets"
                                                             title="View">
                                                         <i class="ri-eye-line"></i>
                                                     </button>
@@ -225,9 +227,17 @@
                         <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
                         <span id="modal-requesteddate"></span>
                     </div>
-                    <div class="col-md-12">
+                    <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
                         <span id="modal-summary"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Activities & Tasks</label>
+                        <span id="modal-activities"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Fixed Assets</label>
+                        <span id="modal-fixedAssets"></span>
                     </div>
                 </div>
             </div>
@@ -288,6 +298,8 @@
             var requestedby = button.getAttribute('data-bs-requestedby');
             var requesteddate = button.getAttribute('data-bs-requesteddate');
             var currentApprover = button.getAttribute('data-bs-currentapprover');
+            var activities = button.getAttribute('data-bs-activities');
+            var fixedAssets = button.getAttribute('data-bs-fixedAssets');
 
             crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
             crDetailsModal.querySelector('#modal-title').textContent = title || '';
@@ -300,6 +312,8 @@
             crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
             crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
             crDetailsModal.querySelector('#modal-currentapprover').textContent = currentApprover || '';
+            crDetailsModal.querySelector('#modal-activities').textContent = activities || '';
+            crDetailsModal.querySelector('#modal-fixedAssets').textContent = fixedAssets || '';
 
             $(crDetailsModal).data('crid', crid);
 
