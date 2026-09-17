@@ -8,8 +8,7 @@
     var formAction = crId > 0
         ? Url.Action("Edit", "CRManagement", new { id = crId })
         : Url.Action("Create", "CRManagement");
-}
-@{
+
     var username = Context.Session.GetString("UserName");
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");
@@ -29,8 +28,7 @@
 
                     <!-- Holds 1 (Save) or 2 (Submit & Approve), set by JS right before submission -->
                     <input type="hidden" id="StatusID" name="StatusID" value="">
-                    <!-- Present only when editing an existing draft; used client-side to know
-                         whether to fetch/populate the form via AJAX -->
+                    <!-- Present only when editing an existing draft; used client-side to know whether to fetch/populate the form via AJAX -->
                     <input type="hidden" id="CRID" name="CRID" value="@crId">
 
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
@@ -67,23 +65,21 @@
                                     <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
                                 </div>
                                 <div class="col-md-6">
-                                    <!-- reserved for a future field (e.g. CR Reference No.) to balance this row -->
+                                    <!-- Reserved for future field -->
                                 </div>
                             </div>
 
                             <div class="row g-3 mb-3">
                                 <div class="col-md-12">
-                                    <label class="form-label">Change Request Title</label>
-                                    <input id="ChangeTitle" name="ChangeTitle" class="form-control">
-                                </div>
-                                <div class="col-md-6">
-                                    <!-- reserved for a future field (e.g. CR Reference No.) to balance this row -->
+                                    <label class="form-label" for="ChangeTitle">Change Request Title</label>
+                                    <input id="ChangeTitle" name="ChangeTitle" class="form-control" value="@Model?.ChangeTitle">
+                                    <span asp-validation-for="ChangeTitle" class="text-danger"></span>
                                 </div>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label" for="Summary">Change Summary &amp; Business Justification</label>
-                                <textarea id="Summary" name="Summary" class="form-control" rows="20"
+                                <textarea id="Summary" name="Summary" class="form-control" rows="18"
                                           placeholder="Write the explanation here...">@Model?.Summary</textarea>
                                 <span asp-validation-for="Summary" class="text-danger"></span>
                             </div>
@@ -91,6 +87,7 @@
 
                         <!-- Right Column -->
                         <div class="col-lg-6 d-flex flex-column">
+                            <!-- Change Type Card -->
                             <div class="card border mb-3">
                                 <div class="card-header bg-light-subtle">
                                     <h6 class="fs-15 mb-0">Change Type</h6>
@@ -116,7 +113,7 @@
                                         <input type="radio" id="customRadio7" name="ChangeTypeID" value="5" class="form-check-input" onchange="toggleOtherTextarea()">
                                         <label class="form-check-label" for="customRadio7">Other</label>
                                     </div>
-                                    <!-- Textarea shown only when "Other" is selected -->
+
                                     <div id="otherTextareaWrapper" class="mt-2" style="display: none;">
                                         <textarea id="otherTextarea" name="OtherChangeType" class="form-control form-control-sm" rows="2" placeholder="Please specify..."></textarea>
                                     </div>
@@ -125,6 +122,7 @@
                                 </div>
                             </div>
 
+                            <!-- Change Priority Card -->
                             <div class="card border mb-3">
                                 <div class="card-header bg-light-subtle">
                                     <h6 class="fs-15 mb-0">Change Priority</h6>
@@ -150,6 +148,7 @@
                                 </div>
                             </div>
 
+                            <!-- Division Card -->
                             <div class="card border mb-3">
                                 <div class="card-header bg-light-subtle">
                                     <h6 class="fs-15 mb-0">Division</h6>
@@ -158,9 +157,9 @@
                                     <label class="form-label" for="DivisionID">Select Division</label>
                                     <select id="DivisionID" name="DivisionID" class="form-control select2" data-toggle="select2">
                                         <option value="" selected disabled hidden>Select Division</option>
-                                        @if (ViewBag.Divisions != null)
+                                        @if (divisions != null)
                                         {
-                                            @foreach (var division in ViewBag.Divisions)
+                                            foreach (var division in divisions)
                                             {
                                                 <option value="@division.Id">@division.DivisionName</option>
                                             }
@@ -170,8 +169,7 @@
                                 </div>
                             </div>
 
-                            <!-- Module card is hidden until a Division is selected. Its options are
-                                 loaded via AJAX from GetModulesByDivision, filtered server-side. -->
+                            <!-- Module Card -->
                             <div class="card border mb-3" id="moduleCard" style="display: none;">
                                 <div class="card-header bg-light-subtle">
                                     <h6 class="fs-15 mb-0">Module</h6>
@@ -185,17 +183,18 @@
                                 </div>
                             </div>
 
+                            <!-- Hidden Approver Selector Source -->
                             <div class="card border mb-3" id="approver-wrapper" style="display:none;">
                                 <div class="card-header bg-light-subtle">
                                     <h6 class="fs-15 mb-0">Division Head Selection</h6>
                                 </div>
                                 <div class="card-body">
-                                    <label class="form-label" for="UserID">Select User</label>
+                                    <label class="form-label" for="ApproverID">Select User</label>
                                     <select id="ApproverID" name="ApproverID" class="form-control select2" data-toggle="select2">
                                         <option value="" selected disabled hidden>Select User</option>
-                                        @if (ViewBag.Users != null)
+                                        @if (users != null)
                                         {
-                                            @foreach (var user in ViewBag.Users)
+                                            foreach (var user in users)
                                             {
                                                 <option value="@user.UserName">@user.FirstName @user.LastName - @user.UserName</option>
                                             }
@@ -222,6 +221,17 @@
 </div><!-- end row -->
 @section Scripts {
     <script>
+        function toggleOtherTextarea() {
+            var selectedType = $('input[name="ChangeTypeID"]:checked').val();
+            var $wrapper = $('#otherTextareaWrapper');
+            if (selectedType === "5") {
+                $wrapper.slideDown(200);
+            } else {
+                $wrapper.slideUp(200);
+                $('#otherTextarea').val('');
+            }
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
             var form = document.getElementById('crForm');
             var saveBtn = document.getElementById('btn-save');
@@ -272,13 +282,12 @@
                     });
             }
 
-            // User changes Division manually -> reload Module options for that division
             $division.on('change', function () {
                 var divisionId = $(this).val();
                 loadModulesForDivision(divisionId, null);
             });
 
-            // SAVE button — StatusID = 1 (draft). Just saves/updates the CR, no workflow submit.
+            // Save (Draft) execution
             saveBtn.addEventListener('click', function () {
                 Swal.fire({
                     title: 'Save this Change Request?',
@@ -294,16 +303,13 @@
                     buttonsStyling: false
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        statusInput.value = saveBtn.dataset.status; // "1"
-                        saveChangeRequest(/* thenSubmitWorkflow */ false);
+                        statusInput.value = saveBtn.dataset.status;
+                        saveChangeRequest(false);
                     }
                 });
             });
 
-            // SUBMIT button — StatusID = 2.
-            // - New CR: Create already inserts it fully submitted, so no chained call needed.
-            // - Existing draft: Edit keeps it a draft (StatusID=1), so a chained Submit call
-            //   is required to actually promote it (real CRNumber + StatusID=2).
+            // Submit execution
             submitBtn.addEventListener('click', function () {
                 if (!$division.val()) {
                     Swal.fire({
@@ -326,7 +332,7 @@
                         '<div class="text-start">' +
                             '<label class="form-label fw-bold" for="swal-approver">Select Division Head</label>' +
                             '<select id="swal-approver" class="form-control select2" style="width:100%;">' + optionsHtml + '</select>' +
-                            '<span id="swal-approver-error" class="text-danger d-none d-block mt-1">Please select a Division Head.</span>' +
+                            '<span id="swal-approver-error" class="text-danger d-none mt-1">Please select a Division Head.</span>' +
                         '</div>',
                     icon: 'question',
                     showCancelButton: true,
@@ -342,8 +348,6 @@
                             width: '100%'
                         });
 
-                        // Pre-select the current value, if one was already chosen on the page
-                        // (e.g. loaded from an existing draft via populateFormFromData).
                         if (approverSelect.value) {
                             $('#swal-approver').val(approverSelect.value).trigger('change');
                         }
@@ -365,27 +369,20 @@
 
                         if (!swalSelect.value) {
                             errorSpan.classList.remove('d-none');
-                            return false; // keeps the alert open — validation only happens here, on Submit
+                            return false;
                         }
 
                         return swalSelect.value;
                     }
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        // Sync the chosen value back into the real (hidden) form select
-                        // so it's included in FormData when the form is submitted.
                         approverSelect.value = result.value;
-
-                        statusInput.value = submitBtn.dataset.status; // "2"
-                        saveChangeRequest(/* thenSubmitWorkflow */ !isNewCr);
+                        statusInput.value = submitBtn.dataset.status;
+                        saveChangeRequest(!isNewCr);
                     }
                 });
             });
 
-            // Saves/creates the CR via the form's own action (Create or Edit).
-            // If thenSubmitWorkflow is true, once the save succeeds it calls the
-            // Submit endpoint (same one used on the list page's Submit button) with
-            // the resulting CRID to push the CR into the approval workflow.
             function saveChangeRequest(thenSubmitWorkflow) {
                 var formData = new FormData(form);
 
@@ -393,99 +390,96 @@
                     method: 'POST',
                     body: formData
                 })
-                    .then(function (response) {
-                        if (!response.ok) {
-                            return response.text().then(function (text) {
-                                throw new Error('Server returned ' + response.status + ': ' + text);
-                            });
-                        }
-                        return response.json();
-                    })
-                    .then(function (data) {
-                        if (!data.success) {
-                            Swal.fire({
-                                title: 'Could not save',
-                                text: data.message,
-                                icon: 'error',
-                                customClass: { confirmButton: 'btn btn-primary' },
-                                buttonsStyling: false
-                            });
-                            return;
-                        }
-
-                        if (!thenSubmitWorkflow) {
-                            Swal.fire({
-                                title: statusInput.value === '2' ? 'Submitted!' : 'Saved!',
-                                text: data.message,
-                                icon: 'success',
-                                customClass: { confirmButton: 'btn btn-primary' },
-                                buttonsStyling: false
-                            }).then(function () {
-                                if (data.redirectUrl) {
-                                    window.location.href = data.redirectUrl;
-                                }
-                            });
-                            return;
-                        }
-
-                        // Resolve the CRID to submit — the CRID already on the page
-                        // (this branch only runs for an existing Edit, since new CRs
-                        // skip the chained call entirely — see isNewCr above).
-                        var crid = data.crid || parseInt(document.getElementById('CRID').value, 10) || 0;
-
-                        if (!crid) {
-                            Swal.fire({
-                                title: 'Could not submit',
-                                text: 'The Change Request was saved, but its ID could not be determined for submission.',
-                                icon: 'error',
-                                customClass: { confirmButton: 'btn btn-primary' },
-                                buttonsStyling: false
-                            });
-                            return;
-                        }
-
-                        $.ajax({
-                            url: '@Url.Action("Submit", "CRManagement")',
-                            type: 'POST',
-                            data: { id: crid },
-                            headers: {
-                                "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                            },
-                            success: function () {
-                                Swal.fire({
-                                    title: 'Submitted!',
-                                    text: 'The Change Request has been submitted.',
-                                    icon: 'success',
-                                    customClass: { confirmButton: 'btn btn-primary' },
-                                    buttonsStyling: false
-                                }).then(function () {
-                                    window.location.href = data.redirectUrl || '@Url.Action("DraftTable")';
-                                });
-                            },
-                            error: function (xhr) {
-                                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
-                                Swal.fire({
-                                    title: 'Error',
-                                    text: msg,
-                                    icon: 'error',
-                                    customClass: { confirmButton: 'btn btn-primary' },
-                                    buttonsStyling: false
-                                });
-                            }
+                .then(function (response) {
+                    if (!response.ok) {
+                        return response.text().then(function (text) {
+                            throw new Error('Server returned ' + response.status + ': ' + text);
                         });
-                    })
-                    .catch(function (err) {
+                    }
+                    return response.json();
+                })
+                .then(function (data) {
+                    if (!data.success) {
                         Swal.fire({
-                            title: 'Something went wrong',
-                            text: err.message,
+                            title: 'Could not save',
+                            text: data.message,
                             icon: 'error',
                             customClass: { confirmButton: 'btn btn-primary' },
                             buttonsStyling: false
                         });
+                        return;
+                    }
+
+                    if (!thenSubmitWorkflow) {
+                        Swal.fire({
+                            title: statusInput.value === '2' ? 'Submitted!' : 'Saved!',
+                            text: data.message,
+                            icon: 'success',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        }).then(function () {
+                            if (data.redirectUrl) {
+                                window.location.href = data.redirectUrl;
+                            }
+                        });
+                        return;
+                    }
+
+                    var crid = data.crid || parseInt(document.getElementById('CRID').value, 10) || 0;
+
+                    if (!crid) {
+                        Swal.fire({
+                            title: 'Could not submit',
+                            text: 'The Change Request was saved, but its ID could not be determined for submission.',
+                            icon: 'error',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                        return;
+                    }
+
+                    $.ajax({
+                        url: '@Url.Action("Submit", "CRManagement")',
+                        type: 'POST',
+                        data: { id: crid },
+                        headers: {
+                            "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        success: function () {
+                            Swal.fire({
+                                title: 'Submitted!',
+                                text: 'The Change Request has been submitted.',
+                                icon: 'success',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            }).then(function () {
+                                window.location.href = data.redirectUrl || '@Url.Action("DraftTable")';
+                            });
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
+                            Swal.fire({
+                                title: 'Error',
+                                text: msg,
+                                icon: 'error',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            });
+                        }
                     });
+                })
+                .catch(function (err) {
+                    Swal.fire({
+                        title: 'Something went wrong',
+                        text: err.message,
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                });
             }
 
-            // Editing an existing draft — fetch its values and populate the radios/selects.
+            // Hydrate Edit Form Data
             var crId = parseInt(document.getElementById('CRID').value, 10) || 0;
             if (crId > 0) {
                 fetch('@Url.Action("GetChangeRequestData", "CRManagement")' + '?id=' + crId)
@@ -507,56 +501,30 @@
                     });
             }
 
-            // Populates the form from the JSON returned by GetChangeRequestData.
-            // Property names come back camelCased by ASP.NET Core's default JSON serializer
-            // (changeTypeID, otherType, priorityID, divisionID, moduleID, summary) — adjust
-            // here if your controller action's JSON casing differs.
             function populateFormFromData(data) {
                 if (data.summary) {
                     document.getElementById('Summary').value = data.summary;
                 }
-
                 if (data.changeTitle) {
                     document.getElementById('ChangeTitle').value = data.changeTitle;
                 }
-
                 if (data.changeTypeID) {
-                    var typeRadio = document.querySelector('input[name="ChangeTypeID"][value="' + data.changeTypeID + '"]');
-                    if (typeRadio) {
-                        typeRadio.checked = true;
-                        toggleOtherTextarea();
-                    }
+                    $('input[name="ChangeTypeID"][value="' + data.changeTypeID + '"]').prop('checked', true).trigger('change');
                 }
-                if (data.otherType) {
-                    document.getElementById('otherTextarea').value = data.otherType;
+                if (data.otherChangeType) {
+                    $('#otherTextarea').val(data.otherChangeType);
                 }
-
                 if (data.priorityID) {
-                    var priorityRadio = document.querySelector('input[name="PriorityID"][value="' + data.priorityID + '"]');
-                    if (priorityRadio) {
-                        priorityRadio.checked = true;
-                    }
+                    $('input[name="PriorityID"][value="' + data.priorityID + '"]').prop('checked', true);
                 }
-
+                if (data.approverID) {
+                    $('#ApproverID').val(data.approverID).trigger('change');
+                }
                 if (data.divisionID) {
-                    $division.val(String(data.divisionID)).trigger('change.select2');
+                    $division.val(String(data.divisionID)).trigger('change');
                     loadModulesForDivision(data.divisionID, data.moduleID);
-                }
-
-                // ApproverID options are keyed by UserName, not a numeric id, so this
-                // expects the endpoint to return the approver's UserName (e.g. as
-                // data.approverUserName). Adjust the property name to whatever your
-                // GetChangeRequestData actually returns for this.
-                if (data.approverUserName) {
-                    $('#ApproverID').val(data.approverUserName).trigger('change');
                 }
             }
         });
-
-        function toggleOtherTextarea() {
-            const otherRadio = document.getElementById('customRadio7');
-            const wrapper = document.getElementById('otherTextareaWrapper');
-            wrapper.style.display = otherRadio.checked ? 'block' : 'none';
-        }
     </script>
 }

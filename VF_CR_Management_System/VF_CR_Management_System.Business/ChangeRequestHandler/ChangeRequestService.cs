@@ -113,15 +113,33 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             if (hasApprover)
             {
+                // 1. Fetch the StepID dynamically based on the StepName
+                const string getStepIdSql = @"
+                SELECT TOP 1 StepID 
+                FROM WorkflowStep 
+                WHERE StepName LIKE '%Department Head%' AND Active = 1
+                ORDER BY StepOrder ASC;";
+
+                // Use ExecuteScalar or similar helper method from your connection service
+                var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql);
+
+                if (stepIdObj == null || stepIdObj == DBNull.Value)
+                {
+                    throw new InvalidOperationException("Workflow step for 'Department Head' approval was not found or is inactive.");
+                }
+
+                int targetStepId = Convert.ToInt32(stepIdObj);
+
+                // 2. Insert into Approval table using the dynamically fetched StepID
                 const string approvalSql = @"
-                    INSERT INTO Approval
-                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                    VALUES
-                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                INSERT INTO Approval
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active);";
 
                 var approvalParameters = new DynamicParameters();
                 approvalParameters.Add("@CRID", newCrId);
-                approvalParameters.Add("@StepID", 7);
+                approvalParameters.Add("@StepID", targetStepId);
                 approvalParameters.Add("@AssignedBy", empId);
                 approvalParameters.Add("@AssignedTo", approverId);
                 approvalParameters.Add("@AssignedDate", DateTime.Now);
@@ -368,8 +386,23 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             if (hasApprover)
             {
-                const int assignStepId = 7;
+                // 1. Fetch StepID dynamically for Department Head approval
+                const string getStepIdSql = @"
+                    SELECT TOP 1 StepID 
+                    FROM WorkflowStep 
+                    WHERE StepName LIKE '%Department Head%' AND Active = 1
+                    ORDER BY StepOrder ASC;";
 
+                var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql);
+
+                if (stepIdObj == null || stepIdObj == DBNull.Value)
+                {
+                    throw new InvalidOperationException("Workflow step for 'Department Head' approval was not found or is inactive.");
+                }
+
+                int assignStepId = Convert.ToInt32(stepIdObj);
+
+                // 2. Attempt to update existing active record
                 const string updateApprovalSql = @"
                     UPDATE Approval
                     SET AssignedBy   = @AssignedBy,
@@ -388,6 +421,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
                 int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, approvalParameters);
 
+                // 3. Fallback to insert if no record was updated
                 if (approvalRowsAffected <= 0)
                 {
                     const string insertApprovalSql = @"
@@ -446,37 +480,44 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
-            if (approverId <= 0)
-                throw new ArgumentException("Please select an implementer.");
 
-            const int approveStepId = 8;
-            const int approvedStatusId = 3;
-
-            // 1. Insert the Approval step record
-            const string approvalSql = @"
-            INSERT INTO Approval
-                (CRID, StepID, AssignedBy, AssignedTo, ApprovalDate, IsApproved, Active)
-            VALUES
-                (@CRID, @StepID, @AssignedBy, @AssignedTo, @ApprovalDate, @IsApproved, @Active)";
+            // 1. Update existing Approval record for this CR
+            const string updateApprovalSql = @"
+                UPDATE Approval
+                SET IsApproved = 1,
+                    ApprovalDate = @ApprovalDate
+                WHERE CRID = @CRID
+                  AND Active = 1";
 
             var approvalParameters = new DynamicParameters();
             approvalParameters.Add("@CRID", crId);
-            approvalParameters.Add("@StepID", approveStepId);
-            approvalParameters.Add("@AssignedBy", approvedByEmpId);
-            approvalParameters.Add("@AssignedTo", approverId);
             approvalParameters.Add("@ApprovalDate", DateTime.Now);
-            approvalParameters.Add("@IsApproved", true);
-            approvalParameters.Add("@Active", true);
 
-            int approvalRowsAffected = _connectionService.ExecuteWithPara(approvalSql, approvalParameters);
+            int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, approvalParameters);
 
             if (approvalRowsAffected <= 0)
                 return false;
 
+            // 2. Fetch the Approved StatusID dynamically from CRStatus table
+            const string getStatusIdSql = @"
+                SELECT TOP 1 StatusID
+                FROM CRStatus
+                WHERE StatusName LIKE '%Approved%' AND Active = 1";
+
+            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql);
+
+            if (statusIdObj == null || statusIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Status 'Approved' was not found or is inactive in CRStatus table.");
+            }
+
+            int approvedStatusId = Convert.ToInt32(statusIdObj);
+
+            // 3. Update the ChangeRequest StatusID
             const string updateStatusSql = @"
-            UPDATE ChangeRequest
-            SET StatusID = @StatusID
-            WHERE CRID = @CRID";
+                UPDATE ChangeRequest
+                SET StatusID = @StatusID
+                WHERE CRID = @CRID";
 
             var statusParameters = new DynamicParameters();
             statusParameters.Add("@StatusID", approvedStatusId);
@@ -486,7 +527,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return statusRowsAffected > 0;
         }
-
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsDraftsAsync(string empNo)
         {
             const int draftStatusId = 1;
@@ -540,7 +580,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         {
             const int draftStatusId = 2;
 
-            var sql = $@"
+            var sql = @"
                 SELECT
                     cr.CRID,
                     cr.CRNumber,
@@ -569,12 +609,15 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
-                    AND App.StepID = 7
+                    AND App.StepID = (
+                        SELECT TOP 1 StepID 
+                        FROM [CRManagementDB].[dbo].[WorkflowStep] 
+                        WHERE StepName LIKE '%Department Head%' AND Active = 1
+                    )
                     AND cr.StatusID != 7
                     AND App.AssignedTo = @EmpNo
                 ORDER BY
-                    cr.CRID DESC;
-                ";
+                    cr.CRID DESC;";
 
             var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,
@@ -625,11 +668,25 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
         }
 
-        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsRejectionsAsync(string empNo)
+        public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsRejectionsAsync(string empNo)
         {
-            const int draftStatusId = 7;
+            // 1. Fetch the Rejected StatusID dynamically from CRStatus table
+            const string getRejectedStatusIdSql = @"
+                SELECT TOP 1 StatusID
+                FROM [CRManagementDB].[dbo].[CRStatus]
+                WHERE StatusName LIKE '%Reject%' AND Active = 1";
 
-            var sql = $@"
+            var statusIdObj = _connectionService.ExecuteScalar(getRejectedStatusIdSql);
+
+            if (statusIdObj == null || statusIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Status 'Rejected' was not found or is inactive in CRStatus table.");
+            }
+
+            int rejectedStatusId = Convert.ToInt32(statusIdObj);
+
+            // 2. Fetch Change Requests matching the Rejected Status and Approval conditions
+            const string sql = @"
                 SELECT
                     cr.CRID,
                     cr.CRNumber,
@@ -647,34 +704,30 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.RequestedDate
                 FROM [dbo].[Approval] AS App
                 INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
-                    ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
-                    ON p.PriorityID = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
-                    ON d.DivisionID = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
-                    ON m.ModuleID = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
-                    ON s.StatusID = cr.StatusID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
-                    AND App.StepID = 13
-                    AND (App.AssignedTo = @EmpNo OR RequesterUserName = @EmpNo)
+                    AND cr.StatusID = @StatusID
+                    AND (App.IsApproved = 0 OR App.IsApproved IS NULL)
+                    AND (App.AssignedTo = @EmpNo OR App.AssignedBy = @EmpNo OR cr.RequesterUserName = @EmpNo)
                 ORDER BY
-                    cr.CRID DESC;
-                ";
+                    cr.CRID DESC;";
 
             var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,
                 new
                 {
                     EmpNo = empNo,
-                    DraftStatusId = draftStatusId
+                    StatusID = rejectedStatusId
                 }).ToList();
 
             if (!changeRequests.Any())
-                return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
+                return changeRequests;
 
+            // 3. Resolve Full Names for Requesters and Approvers
             var userNames = changeRequests
                 .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
                 .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -717,9 +770,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 }
             }
 
-            return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
+            return changeRequests;
         }
-
         public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo)
         {
             const int draftStatusId = 7;
@@ -827,28 +879,12 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (string.IsNullOrWhiteSpace(rejectReason))
                 throw new ArgumentException("Please provide a reason for rejection.");
 
-            const string getStepIdSql = @"
-                SELECT StepID
-                FROM WorkflowStep
-                WHERE StepName = @StepName
-                  AND Active = 1";
-
-            var stepParams = new DynamicParameters();
-            stepParams.Add("@StepName", "CR Reject");
-
-            var stepTable = _connectionService.ReturnWithPara(getStepIdSql, stepParams);
-            if (stepTable == null || stepTable.Rows.Count == 0)
-                throw new InvalidOperationException("Workflow step 'CR Reject' is not configured.");
-
-            var rejectStepId = stepTable.Rows[0].Field<int>("StepID");
-
             const string updateApprovalSql = @"
                 UPDATE a
                 SET
                     a.ApprovalDate = @ApprovalDate,
                     a.IsApproved = @IsApproved,
-                    a.Comments = @Comments,
-                    a.StepID = @NewStepID
+                    a.Comments = @Comments
                 FROM Approval AS a
                 WHERE a.CRID = @CRID
                   AND a.Active = 1";
@@ -857,7 +893,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             approvalParameters.Add("@ApprovalDate", DateTime.Now);
             approvalParameters.Add("@IsApproved", false);
             approvalParameters.Add("@Comments", rejectReason);
-            approvalParameters.Add("@NewStepID", rejectStepId);
             approvalParameters.Add("@CRID", crId);
 
             int approvalRowsAffected =
