@@ -401,6 +401,14 @@ namespace VF_CR_Management_System.Controllers
             return View(crs);
         }
 
+        public async Task<IActionResult> SecurityTable()
+        {
+            var empNo = HttpContext.Session.GetString("EmpNo");
+            ViewBag.CurrentEmpNo = empNo;
+            var crs = await _changeRequestService.GetAllChangeRequestsSecurityAsync(empNo);
+            return View(crs);
+        }
+
 
         [HttpGet]
         public async Task<IActionResult> EditAssessment(int? id)

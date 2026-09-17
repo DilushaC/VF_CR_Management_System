@@ -9,7 +9,7 @@
         <div class="card">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <h4 class="header-title mb-0">Change Requests - Assesments</h4>
+                    <h4 class="header-title mb-0">Change Requests - Security</h4>
                 </div>
 
                 <style>
@@ -109,9 +109,13 @@
                                             }
                                         </td>
                                         <td>
-                                            @if (string.Equals(cr.Status, "Assessment", StringComparison.OrdinalIgnoreCase))
+                                            @if (string.Equals(cr.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
                                             {
-                                                <span class="badge bg-info">Sent to IS Officer</span>
+                                                <span class="badge bg-danger"><i class="ri-close-line"></i> @cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-success">@cr.Status</span>
                                             }
                                             else if (string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase))
                                             {
@@ -145,7 +149,7 @@
                                                             data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
                                                             data-bs-currentapprover="@cr.ApproverUserName"
                                                             title="View">
-                                                        <i class="ri-login-box-line"></i>
+                                                        <i class="ri-eye-line"></i>
                                                     </button>
                                                 }
                                                 @if (cr.Status == "AssessmentDraft")
