@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 namespace VF_CR_Management_System.Data.Models
 {
@@ -14,7 +15,6 @@ namespace VF_CR_Management_System.Data.Models
         public int ModuleID { get; set; }
         [Required(ErrorMessage = "Please select a change type.")]
         public int ChangeTypeID { get; set; }
-        // Only used when ChangeTypeID corresponds to "Other" - holds the free-text description
         public string OtherChangeType { get; set; }
         [Required(ErrorMessage = "Please select a change priority.")]
         public int PriorityID { get; set; }
@@ -37,18 +37,18 @@ namespace VF_CR_Management_System.Data.Models
         public int EmpID { get; set; }
 
         // Display-only properties, populated via joined lookup tables in list queries.
-        // Not used when inserting/creating a ChangeRequest.
         public string ChangeType { get; set; }
         public string Priority { get; set; }
         public string Module { get; set; }
         public string Division { get; set; }
         public string Status { get; set; }
         public string RequestedBy { get; set; }
+        public string Vendor { get; set; }   // NEW: populated via Vendor join
 
-        // Display-only: the EmpNo currently assigned at the pending StepID = 8 approval,
-        // populated via the LEFT JOIN in GetAllChangeRequestsSubmissionsAsync.
-        // Null when there's no pending step-8 approval for this CR.
         public string? ApproverUserName { get; set; }
         public string? ISOfficerUserName { get; set; }
+
+        // NEW: populated separately after the main query, not part of the SQL projection
+        public List<Attachment> Attachments { get; set; } = new();
     }
 }

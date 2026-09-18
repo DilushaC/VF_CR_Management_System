@@ -69,6 +69,33 @@
                         overflow: hidden;
                         text-overflow: ellipsis;
                     }
+
+                    #modal-attachments li {
+                        margin-bottom: 4px;
+                    }
+
+                        #modal-attachments li a {
+                            text-decoration: none;
+                            cursor: pointer;
+                        }
+
+                            #modal-attachments li a:hover {
+                                text-decoration: underline;
+                            }
+
+                    /* Stacked modal fix: image preview modal must sit above crDetailsModal */
+                    #imagePreviewModal {
+                        z-index: 1070;
+                    }
+
+                    .modal-backdrop + .modal-backdrop {
+                        z-index: 1065;
+                    }
+
+                    #imagePreviewImg {
+                        max-width: 100%;
+                        max-height: 70vh;
+                    }
                 </style>
 
                 <div class="table-responsive">
@@ -150,6 +177,9 @@
                                                             data-bs-currentapprover="@cr.ApproverUserName"
                                                             data-bs-activities="@cr.ActivitiesTasks"
                                                             data-bs-fixedAssets="@cr.FixedAssets"
+                                                            data-bs-vendor="@cr.Vendor"
+                                                            data-bs-proposalnumber="@cr.ProposalNumber"
+                                                            data-bs-attachments="@System.Text.Json.JsonSerializer.Serialize(cr.Attachments)"
                                                             title="View">
                                                         <i class="ri-login-box-line"></i>
                                                     </button>
@@ -216,6 +246,14 @@
                         <span id="modal-module"></span>
                     </div>
                     <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Vendor:</label>
+                        <span id="modal-vendor"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Proposal Number:</label>
+                        <span id="modal-proposalnumber"></span>
+                    </div>
+                    <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
                         <span id="modal-requestedby"></span>
                     </div>
@@ -239,6 +277,10 @@
                         <label class="fw-bold text-dark d-block mb-1">Fixed Assets</label>
                         <span id="modal-fixedAssets"></span>
                     </div>
+                    <div class="col-md-12">
+                        <label class="fw-bold text-dark d-block mb-1">Attachments:</label>
+                        <ul id="modal-attachments" class="list-unstyled mb-0"></ul>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -246,6 +288,32 @@
                 <a id="modal-security-assessment-btn" href="#" class="btn btn-primary d-none">
                     <i class="ri-shield-check-line me-1"></i> Proceed to Security Assessment
                 </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Image Preview Modal (stacked on top of crDetailsModal) -->
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="imagePreviewSpinner" class="py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <img id="imagePreviewImg" src="" alt="Attachment preview" class="img-fluid d-none" />
+            </div>
+            <div class="modal-footer">
+                <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
+                    <i class="ri-download-2-line me-1"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -279,11 +347,67 @@
         var $securityAssessmentBtn = $('#modal-security-assessment-btn');
 
         var assessmentUrlBase = '@Url.Action("Assessment", "CRManagement")';
-        var securityAssessmentUrlBase = '@Url.Action("SecurityAssessment", "CRManagement")'; // Change controller/action if needed
+        var securityAssessmentUrlBase = '@Url.Action("SecurityAssessment", "CRManagement")';
+        var previewUrlBase = '@Url.Action("PreviewAttachment", "CRManagement")';
+        var downloadUrlBase = '@Url.Action("DownloadAttachment", "CRManagement")';
+        var imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+        var pdfExtension = '.pdf';
 
         function normalize(value) {
             return (value || '').trim().toLowerCase();
         }
+
+        function escapeHtml(str) {
+            return $('<div>').text(str || '').html();
+        }
+
+        function getExtension(fileName) {
+            var idx = (fileName || '').lastIndexOf('.');
+            return idx >= 0 ? fileName.substring(idx).toLowerCase() : '';
+        }
+
+        // --- Image preview modal wiring ---
+        var imagePreviewModalEl = document.getElementById('imagePreviewModal');
+        var imagePreviewModal = new bootstrap.Modal(imagePreviewModalEl);
+        var $imagePreviewImg = $('#imagePreviewImg');
+        var $imagePreviewSpinner = $('#imagePreviewSpinner');
+        var $imagePreviewDownloadBtn = $('#imagePreviewDownloadBtn');
+
+        // Delegated click handler: attachments list is rebuilt each time the details modal opens,
+        // so binding on the static parent avoids needing to re-wire handlers after each render.
+        $('#modal-attachments').on('click', 'a[data-preview-type="image"]', function (e) {
+            e.preventDefault();
+
+            var attachmentId = $(this).data('attachment-id');
+            var fileName = $(this).data('file-name');
+            var previewUrl = previewUrlBase + '?id=' + encodeURIComponent(attachmentId);
+            var downloadUrl = downloadUrlBase + '?id=' + encodeURIComponent(attachmentId);
+
+            $imagePreviewImg.addClass('d-none').attr('src', '');
+            $imagePreviewSpinner.removeClass('d-none');
+            $imagePreviewDownloadBtn.attr('href', downloadUrl).attr('download', fileName);
+            $('#imagePreviewModalLabel').text(fileName || 'Attachment Preview');
+
+            imagePreviewModal.show();
+
+            var img = new Image();
+            img.onload = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.attr('src', previewUrl).removeClass('d-none');
+            };
+            img.onerror = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.removeClass('d-none').attr('alt', 'Failed to load image');
+            };
+            img.src = previewUrl;
+        });
+
+        // Keep crDetailsModal's backdrop visible when the nested image modal closes
+        imagePreviewModalEl.addEventListener('hidden.bs.modal', function () {
+            if (crDetailsModal.classList.contains('show')) {
+                document.body.classList.add('modal-open');
+            }
+        });
 
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
@@ -302,6 +426,9 @@
             var currentApprover = button.getAttribute('data-bs-currentapprover');
             var activities = button.getAttribute('data-bs-activities');
             var fixedAssets = button.getAttribute('data-bs-fixedAssets');
+            var vendor = button.getAttribute('data-bs-vendor');
+            var proposalNumber = button.getAttribute('data-bs-proposalnumber');
+            var attachmentsRaw = button.getAttribute('data-bs-attachments');
 
             crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
             crDetailsModal.querySelector('#modal-title').textContent = title || '';
@@ -310,12 +437,64 @@
             crDetailsModal.querySelector('#modal-priority').textContent = priority || '';
             crDetailsModal.querySelector('#modal-division').textContent = division || '';
             crDetailsModal.querySelector('#modal-module').textContent = module || '';
+            crDetailsModal.querySelector('#modal-vendor').textContent = vendor || '—';
+            crDetailsModal.querySelector('#modal-proposalnumber').textContent = proposalNumber || '—';
             crDetailsModal.querySelector('#modal-requestedby').textContent = requestedby || '';
             crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
             crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
             crDetailsModal.querySelector('#modal-currentapprover').textContent = currentApprover || '';
             crDetailsModal.querySelector('#modal-activities').textContent = activities || '';
             crDetailsModal.querySelector('#modal-fixedAssets').textContent = fixedAssets || '';
+
+            // Populate attachments: images open in a preview modal, PDFs open in a new tab, others download
+            var $attachmentsList = $('#modal-attachments').empty();
+            try {
+                var attachments = attachmentsRaw ? JSON.parse(attachmentsRaw) : [];
+                if (!attachments || attachments.length === 0) {
+                    $attachmentsList.append('<li class="text-muted">No attachments</li>');
+                } else {
+                    attachments.forEach(function (a) {
+                        var attachmentId = a.attachmentID || a.AttachmentID;
+                        var rawFileName = a.fileName || a.FileName;
+                        var fileName = escapeHtml(rawFileName);
+                        var uploadedBy = escapeHtml(a.uploadedBy || a.UploadedBy || '');
+                        var uploadedDate = a.uploadedDate || a.UploadedDate;
+                        var dateStr = uploadedDate ? new Date(uploadedDate).toLocaleDateString() : '';
+
+                        var meta = (uploadedBy || dateStr)
+                            ? ' <small class="text-muted">(' + [uploadedBy, dateStr].filter(Boolean).join(' — ') + ')</small>'
+                            : '';
+
+                        var ext = getExtension(rawFileName);
+                        var isImage = imageExtensions.indexOf(ext) !== -1;
+                        var isPdf = ext === pdfExtension;
+
+                        var $li = $('<li></li>');
+                        var $link = $('<a href="#"></a>')
+                            .attr('data-attachment-id', attachmentId)
+                            .attr('data-file-name', rawFileName);
+
+                        if (isImage) {
+                            $link.attr('data-preview-type', 'image');
+                            $link.html('<i class="ri-image-line me-1"></i>' + fileName);
+                        } else if (isPdf) {
+                            $link.attr('href', previewUrlBase + '?id=' + encodeURIComponent(attachmentId));
+                            $link.attr('target', '_blank');
+                            $link.attr('rel', 'noopener');
+                            $link.html('<i class="ri-file-pdf-line me-1"></i>' + fileName);
+                        } else {
+                            $link.attr('href', downloadUrlBase + '?id=' + encodeURIComponent(attachmentId));
+                            $link.attr('download', '');
+                            $link.html('<i class="ri-download-2-line me-1"></i>' + fileName);
+                        }
+
+                        $li.append($link).append(meta);
+                        $attachmentsList.append($li);
+                    });
+                }
+            } catch (e) {
+                $attachmentsList.append('<li class="text-muted">No attachments</li>');
+            }
 
             $(crDetailsModal).data('crid', crid);
 
@@ -337,7 +516,6 @@
                 $approverWrapper.addClass('d-none');
             }
 
-            // Show "Go to Assessment" if status is "approved"
             if (normalizedStatus === 'approved') {
                 $assessmentBtn
                     .attr('href', assessmentUrlBase + '?id=' + encodeURIComponent(crid || ''))
@@ -346,7 +524,6 @@
                 $assessmentBtn.addClass('d-none');
             }
 
-            // Show "Proceed to Security Assessment" if status is "assessment"
             if (normalizedStatus === 'assessment') {
                 $securityAssessmentBtn
                     .attr('href', securityAssessmentUrlBase + '?id=' + encodeURIComponent(crid || ''))

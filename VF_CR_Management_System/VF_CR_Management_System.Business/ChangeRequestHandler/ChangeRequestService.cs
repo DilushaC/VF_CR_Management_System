@@ -1060,6 +1060,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.CRNumber,
                     cr.ChangeTitle,
                     cr.Summary,
+                    cr.ProposalNumber,
                     ct.ChangeTypeName AS ChangeType,
                     p.PriorityName AS Priority,
                     cr.DivisionID,
@@ -1072,7 +1073,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.RequesterUserName AS RequestedBy,
                     App.AssignedTo AS ApproverUserName,
                     cr.RequestedDate,
-                    v.VendorName AS Vendor -- Added Vendor Name
+                    v.VendorName AS Vendor
                 FROM [dbo].[Approval] AS App
                 INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
@@ -1145,6 +1146,43 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                         cr.ApproverUserName = approverFormattedName;
                     }
                 }
+            }
+
+            // 5. Fetch attachments for all CRs in a single round-trip
+            var crIds = changeRequests.Select(cr => cr.CRID).Distinct().ToList();
+
+            const string attachmentsQuery = @"
+                SELECT AttachmentID, CRID, FileName, FilePath, UploadedBy, UploadedDate, Active
+                FROM [CRManagementDB].[dbo].[Attachment]
+                WHERE CRID IN @CRIDs AND Active = 1
+                ORDER BY UploadedDate DESC";
+
+            var attachmentParams = new DynamicParameters();
+            attachmentParams.Add("@CRIDs", crIds);
+
+            var attachmentsTable = _connectionService.ReturnWithPara(attachmentsQuery, attachmentParams);
+
+            var attachmentsByCrId = attachmentsTable.AsEnumerable()
+                .GroupBy(r => r.Field<int>("CRID"))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(r => new Attachment
+                    {
+                        AttachmentID = r.Field<int>("AttachmentID"),
+                        CRID = r.Field<int>("CRID"),
+                        FileName = r.Field<string>("FileName"),
+                        FilePath = r.Field<string>("FilePath"),
+                        UploadedBy = r.Field<string>("UploadedBy"),
+                        UploadedDate = r.Field<DateTime>("UploadedDate"),
+                        Active = r.Field<bool>("Active")
+                    }).ToList()
+                );
+
+            foreach (var cr in changeRequests)
+            {
+                cr.Attachments = attachmentsByCrId.TryGetValue(cr.CRID, out var files)
+                    ? files
+                    : new List<Attachment>();
             }
 
             return changeRequests;
