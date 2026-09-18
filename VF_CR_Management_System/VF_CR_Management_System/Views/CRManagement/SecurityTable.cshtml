@@ -183,6 +183,15 @@
                                                             title="View">
                                                         <i class="ri-login-box-line"></i>
                                                     </button>
+
+                                                    <!-- Direct link to the Security Assessment page for this CR.
+                                                         The id is passed via the route, so the controller can load
+                                                         the full ChangeRequest and render the CR Details card there. -->
+                                                    <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = cr.CRID })"
+                                                       class="btn btn-sm btn-outline-primary"
+                                                       title="Proceed to Security Assessment">
+                                                        <i class="ri-shield-check-line"></i>
+                                                    </a>
                                                 }
                                                 @if (cr.Status == "AssessmentDraft")
                                                 {
@@ -265,6 +274,10 @@
                         <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
                         <span id="modal-requesteddate"></span>
                     </div>
+                    @*                     <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Estimated Due Date:</label>
+                        <span id="modal-duedate"></span>
+                    </div> *@
                     <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
                         <span id="modal-summary"></span>
@@ -285,9 +298,6 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <a id="modal-security-assessment-btn" href="#" class="btn btn-primary d-none">
-                    <i class="ri-shield-check-line me-1"></i> Proceed to Security Assessment
-                </a>
             </div>
         </div>
     </div>
@@ -344,10 +354,8 @@
         var $rejectBtn = $('#modal-reject-btn');
         var $approverWrapper = $('#modal-approver-wrapper');
         var $assessmentBtn = $('#modal-assessment-btn');
-        var $securityAssessmentBtn = $('#modal-security-assessment-btn');
 
         var assessmentUrlBase = '@Url.Action("Assessment", "CRManagement")';
-        var securityAssessmentUrlBase = '@Url.Action("SecurityAssessment", "CRManagement")';
         var previewUrlBase = '@Url.Action("PreviewAttachment", "CRManagement")';
         var downloadUrlBase = '@Url.Action("DownloadAttachment", "CRManagement")';
         var imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
@@ -522,14 +530,6 @@
                     .removeClass('d-none');
             } else {
                 $assessmentBtn.addClass('d-none');
-            }
-
-            if (normalizedStatus === 'assessment') {
-                $securityAssessmentBtn
-                    .attr('href', securityAssessmentUrlBase + '?id=' + encodeURIComponent(crid || ''))
-                    .removeClass('d-none');
-            } else {
-                $securityAssessmentBtn.addClass('d-none');
             }
 
             $('#modal-approver').val('').trigger('change');

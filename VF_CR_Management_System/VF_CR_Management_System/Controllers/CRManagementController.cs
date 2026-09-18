@@ -341,11 +341,41 @@ namespace VF_CR_Management_System.Controllers
             }
         }
 
-
         [HttpGet]
-        public IActionResult AssesmentSecurity()
+        public async Task<IActionResult> AssesmentSecurity(int? id)
         {
-            return View();
+            if (id == null)
+            {
+                return RedirectToAction("Index");
+            }
+
+            try
+            {
+                var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
+                if (changeRequest == null)
+                {
+                    return NotFound();
+                }
+
+                double effortEstimateDays = 0;
+                if (changeRequest.DueDate.HasValue)
+                {
+                    effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
+                }
+                ViewBag.EffortEstimateDays = effortEstimateDays;
+
+                var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id.Value);
+                ViewBag.Attachments = attachments;
+
+                var users = await _userService.GetAllUsersAsync();
+                ViewBag.Users = users;
+
+                return View("AssesmentSecurity", changeRequest);
+            }
+            catch (Exception ex)
+            {
+                return View("Error");
+            }
         }
 
         [HttpGet]
@@ -570,7 +600,7 @@ namespace VF_CR_Management_System.Controllers
                 var users = await _userService.GetAllUsersAsync();
                 ViewBag.Users = users;
 
-                return View("AssessmentSecurity", changeRequest);
+                return View("AssesmentSecurity", changeRequest);
             }
             catch (Exception ex)
             {

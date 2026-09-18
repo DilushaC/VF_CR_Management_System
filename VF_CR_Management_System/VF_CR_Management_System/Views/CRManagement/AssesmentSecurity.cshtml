@@ -1,4 +1,5 @@
-﻿@{
+﻿@model VF_CR_Management_System.Data.Models.ChangeRequest
+@{
     ViewData["Title"] = "CR Assesment - Security";
 }
 @{
@@ -12,11 +13,126 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header border-bottom border-dashed d-flex align-items-center">
-                <h4 class="header-title mb-0">Section 2 : Security Requirements (IS Officer) - CR10000021212121</h4>
+                <h4 class="header-title mb-0">Section 2 : Security Requirements (IS Officer) - @Model.CRNumber</h4>
             </div>
 
             <div class="card-body">
-                <form>
+
+                <form id="securityAssessmentForm">
+
+                    <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
+
+                    <!-- Change Request details, bound directly from the model (same as Implementer Assessment view) -->
+                    <div class="card border mb-4">
+                        <div class="card-header bg-light-subtle">
+                            <h6 class="fs-15 mb-0">Change Request Details</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">CR Number:</label>
+                                    <span>@Model.CRNumber</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Title:</label>
+                                    <span>@Model.ChangeTitle</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
+                                    <span>@Model.ChangeType</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Priority:</label>
+                                    <span>@Model.Priority</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Division:</label>
+                                    <span>@(string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division)</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Module:</label>
+                                    <span>@Model.Module</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Status:</label>
+                                    <span>@Model.Status</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
+                                    <span>@Model.RequestedBy</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
+                                    <span>@Model.RequestedDate.ToString("yyyy/MM/dd")</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Approver:</label>
+                                    <span>@Model.ApproverUserName</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Estimated Due Date:</label>
+                                    <span>@(Model.DueDate.HasValue? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—")</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
+                                    <span>@Model.Summary</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Attachments -->
+                    <div class="card border mb-4">
+                        <div class="card-header bg-light-subtle">
+                            <h6 class="fs-15 mb-0">Attachments</h6>
+                        </div>
+                        <div class="card-body">
+                            @if (ViewBag.Attachments != null && ((IEnumerable<dynamic>)ViewBag.Attachments).Any())
+                            {
+                                <ul class="list-unstyled mb-0">
+                                    @foreach (var attachment in ViewBag.Attachments)
+                                    {
+                                        int attachmentId = attachment.AttachmentID;
+                                        string fileName = attachment.FileName;
+                                        string ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
+                                        bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(ext);
+                                        bool isPdf = ext == ".pdf";
+                                        string previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachmentId });
+                                        string downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachmentId });
+
+                                        <li class="mb-1">
+                                            @if (isImage)
+                                            {
+                                                <a href="javascript:void(0);" class="attachment-link"
+                                                   data-type="image"
+                                                   data-preview-url="@previewUrl"
+                                                   data-download-url="@downloadUrl"
+                                                   data-name="@fileName">
+                                                    <i class="ri-image-line me-1"></i>@fileName
+                                                </a>
+                                            }
+                                            else if (isPdf)
+                                            {
+                                                <a href="@previewUrl" target="_blank" rel="noopener">
+                                                    <i class="ri-file-pdf-line me-1"></i>@fileName
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <a href="@downloadUrl" download>
+                                                    <i class="ri-download-2-line me-1"></i>@fileName
+                                                </a>
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                            else
+                            {
+                                <p class="text-muted mb-0">No attachments found.</p>
+                            }
+                        </div>
+                    </div>
+
                     <div class="row g-3">
 
                         <!-- Left Column -->
@@ -48,15 +164,11 @@
                                     <label class="form-label">Request Date</label>
                                     <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Effort Estimate ( Days )</label>
-                                    <input type="number" class="form-control" min="0" step="0.5">
-                                </div>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label">Information Security Risk Assessment</label>
-                                <textarea class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
+                                <textarea name="SecurityRiskAssessment" id="securityRiskAssessment" class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
                             </div>
                         </div>
 
@@ -68,15 +180,15 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="form-check form-check-inline form-radio-secondary mb-0">
-                                        <input type="radio" id="customRadio9" name="customRadio2" class="form-check-input">
+                                        <input type="radio" id="customRadio9" name="ChangeImpact" value="Minor" class="form-check-input">
                                         <label class="form-check-label" for="customRadio9">Minor</label>
                                     </div>
                                     <div class="form-check form-check-inline form-radio-warning mb-0">
-                                        <input type="radio" id="customRadio10" name="customRadio2" class="form-check-input">
+                                        <input type="radio" id="customRadio10" name="ChangeImpact" value="Standard" class="form-check-input">
                                         <label class="form-check-label" for="customRadio10">Standard</label>
                                     </div>
                                     <div class="form-check form-check-inline form-radio-danger mb-0">
-                                        <input type="radio" id="customRadio11" name="customRadio2" class="form-check-input">
+                                        <input type="radio" id="customRadio11" name="ChangeImpact" value="Major" class="form-check-input">
                                         <label class="form-check-label" for="customRadio11">Major</label>
                                     </div>
                                 </div>
@@ -94,7 +206,71 @@
                         </div>
                     </div>
                 </form>
+
+                <!-- Image Preview Modal -->
+                <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div id="imagePreviewSpinner" class="py-5">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                                <img id="modalPreviewImage" src="" alt="" class="img-fluid d-none" />
+                            </div>
+                            <div class="modal-footer">
+                                <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
+                                    <i class="ri-download-2-line me-1"></i> Download
+                                </a>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div> <!-- end card-body -->
         </div> <!-- end card -->
     </div><!-- end col -->
 </div><!-- end row -->
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var imagePreviewModalEl = document.getElementById('imagePreviewModal');
+            var imagePreviewModal = new bootstrap.Modal(imagePreviewModalEl);
+            var $modalImg = $('#modalPreviewImage');
+            var $spinner = $('#imagePreviewSpinner');
+            var $downloadBtn = $('#imagePreviewDownloadBtn');
+
+            document.querySelectorAll('.attachment-link[data-type="image"]').forEach(function (link) {
+                link.addEventListener('click', function () {
+                    var previewUrl = this.getAttribute('data-preview-url');
+                    var downloadUrl = this.getAttribute('data-download-url');
+                    var fileName = this.getAttribute('data-name');
+
+                    $modalImg.addClass('d-none').attr('src', '');
+                    $spinner.removeClass('d-none');
+                    $downloadBtn.attr('href', downloadUrl).attr('download', fileName);
+                    document.getElementById('imagePreviewModalLabel').textContent = fileName || 'Attachment Preview';
+
+                    imagePreviewModal.show();
+
+                    var img = new Image();
+                    img.onload = function () {
+                        $spinner.addClass('d-none');
+                        $modalImg.attr('src', previewUrl).removeClass('d-none');
+                    };
+                    img.onerror = function () {
+                        $spinner.addClass('d-none');
+                        $modalImg.removeClass('d-none').attr('alt', 'Failed to load image');
+                    };
+                    img.src = previewUrl;
+                });
+            });
+        });
+    </script>
+}
