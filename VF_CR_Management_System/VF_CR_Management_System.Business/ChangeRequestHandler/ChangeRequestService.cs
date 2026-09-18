@@ -891,6 +891,136 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequests;
         }
+        //public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo)
+        //{
+        //    1.Fetch Assessment StepID dynamically from WorkflowStep
+        //    const string getAssessmentStepSql = @"
+        //        SELECT TOP 1 StepID 
+        //        FROM [CRManagementDB].[dbo].[WorkflowStep] 
+        //        WHERE StepName LIKE '%Assessment%' AND Active = 1
+        //        ORDER BY StepOrder ASC";
+
+        //    var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepSql);
+
+        //    if (stepIdObj == null || stepIdObj == DBNull.Value)
+        //    {
+        //        throw new InvalidOperationException("Workflow step for 'Assessment' was not found or is inactive.");
+        //    }
+
+        //    int assessmentStepId = Convert.ToInt32(stepIdObj);
+
+        //    2.Fetch StatusIDs dynamically for 'Approved' and 'Assessmentdraft' from CRStatus
+        //    const string getStatusIdsSql = @"
+        //        SELECT StatusID 
+        //        FROM [CRManagementDB].[dbo].[CRStatus] 
+        //        WHERE (StatusName LIKE '%Approved%' OR StatusName LIKE '%AssessmentDraft%' OR StatusName LIKE '%Assessment%') 
+        //          AND Active = 1";
+
+        //    var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
+        //    var statusIds = statusTable.AsEnumerable()
+        //        .Select(r => r.Field<int>("StatusID"))
+        //        .ToList();
+
+        //    if (!statusIds.Any())
+        //    {
+        //        return Enumerable.Empty<ChangeRequest>();
+        //    }
+
+        //    3.Query Change Requests joined with Approval
+        //    const string sql = @"
+        //        SELECT
+        //            cr.CRID,
+        //            cr.CRNumber,
+        //            cr.ChangeTitle,
+        //            cr.Summary,
+        //            cr.ActivitiesTasks,
+        //            cr.FixedAssets,
+        //            ct.ChangeTypeName AS ChangeType,
+        //            p.PriorityName AS Priority,
+        //            cr.DivisionID,
+        //            d.DivisionName AS Division,
+        //            cr.ModuleID,
+        //            m.ModuleName AS Module,
+        //            s.StatusName AS Status,
+        //            cr.RequesterUserName AS RequestedBy,
+        //            App.AssignedTo AS ApproverUserName,
+        //            cr.RequestedDate
+        //        FROM [dbo].[Approval] AS App
+        //        INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
+        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
+        //        LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+        //        WHERE cr.Active = 1
+        //            AND App.Active = 1
+        //            AND App.StepID = @StepID
+        //            AND App.AssignedTo = @EmpNo
+        //            AND cr.StatusID IN @StatusIDs
+        //        ORDER BY
+        //            cr.CRID DESC;";
+
+        //    var changeRequests = _connectionService.Query<ChangeRequest>(
+        //        sql,
+        //        new
+        //        {
+        //            EmpNo = empNo,
+        //            StepID = assessmentStepId,
+        //            StatusIDs = statusIds
+        //        }).ToList();
+
+        //    if (!changeRequests.Any())
+        //        return changeRequests;
+
+        //    4.Resolve Full Names for Requesters and Approvers
+
+        //   var userNames = changeRequests
+        //       .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
+        //       .Where(u => !string.IsNullOrWhiteSpace(u))
+        //       .Distinct()
+        //       .ToList();
+
+        //    if (userNames.Any())
+        //        {
+        //            const string usersQuery = @"
+        //            SELECT UserName, FirstName, LastName
+        //            FROM Users
+        //            WHERE UserName IN @UserNames";
+
+        //            var userParams = new DynamicParameters();
+        //            userParams.Add("@UserNames", userNames);
+
+        //            var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+        //            var nameLookup = usersTable.AsEnumerable()
+        //                .ToDictionary(
+        //                    r => r.Field<string>("UserName"),
+        //                    r =>
+        //                    {
+        //                        var uName = r.Field<string>("UserName");
+        //                        var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+        //                        return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+        //                    },
+        //                    StringComparer.OrdinalIgnoreCase);
+
+        //            foreach (var cr in changeRequests)
+        //            {
+        //                if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
+        //                    nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
+        //                {
+        //                    cr.RequestedBy = requesterFormattedName;
+        //                }
+
+        //                if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
+        //                    nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
+        //                {
+        //                    cr.ApproverUserName = approverFormattedName;
+        //                }
+        //            }
+        //        }
+
+        //    return changeRequests;
+        //}
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo)
         {
             // 1. Fetch Assessment StepID dynamically from WorkflowStep
@@ -904,12 +1034,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             if (stepIdObj == null || stepIdObj == DBNull.Value)
             {
-                throw new InvalidOperationException("Workflow step for 'Assessment' was not found or is inactive.");
+                throw new InvalidOperationException("Workflow step for 'Security' was not found or is inactive.");
             }
 
             int assessmentStepId = Convert.ToInt32(stepIdObj);
 
-            // 2. Fetch StatusIDs dynamically for 'Approved' and 'Assessmentdraft' from CRStatus
             const string getStatusIdsSql = @"
                 SELECT StatusID 
                 FROM [CRManagementDB].[dbo].[CRStatus] 
@@ -933,16 +1062,20 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.CRNumber,
                     cr.ChangeTitle,
                     cr.Summary,
+                    cr.ProposalNumber,
                     ct.ChangeTypeName AS ChangeType,
                     p.PriorityName AS Priority,
                     cr.DivisionID,
                     d.DivisionName AS Division,
                     cr.ModuleID,
+                    cr.ActivitiesTasks,
+                    cr.FixedAssets,
                     m.ModuleName AS Module,
                     s.StatusName AS Status,
                     cr.RequesterUserName AS RequestedBy,
                     App.AssignedTo AS ApproverUserName,
-                    cr.RequestedDate
+                    cr.RequestedDate,
+                    v.VendorName AS Vendor
                 FROM [dbo].[Approval] AS App
                 INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
@@ -950,6 +1083,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
                 LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+                LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
                 WHERE cr.Active = 1
                     AND App.Active = 1
                     AND App.StepID = @StepID
@@ -1016,9 +1150,45 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 }
             }
 
+            // 5. Fetch attachments for all CRs in a single round-trip
+            var crIds = changeRequests.Select(cr => cr.CRID).Distinct().ToList();
+
+            const string attachmentsQuery = @"
+                SELECT AttachmentID, CRID, FileName, FilePath, UploadedBy, UploadedDate, Active
+                FROM [CRManagementDB].[dbo].[Attachment]
+                WHERE CRID IN @CRIDs AND Active = 1
+                ORDER BY UploadedDate DESC";
+
+            var attachmentParams = new DynamicParameters();
+            attachmentParams.Add("@CRIDs", crIds);
+
+            var attachmentsTable = _connectionService.ReturnWithPara(attachmentsQuery, attachmentParams);
+
+            var attachmentsByCrId = attachmentsTable.AsEnumerable()
+                .GroupBy(r => r.Field<int>("CRID"))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(r => new Attachment
+                    {
+                        AttachmentID = r.Field<int>("AttachmentID"),
+                        CRID = r.Field<int>("CRID"),
+                        FileName = r.Field<string>("FileName"),
+                        FilePath = r.Field<string>("FilePath"),
+                        UploadedBy = r.Field<string>("UploadedBy"),
+                        UploadedDate = r.Field<DateTime>("UploadedDate"),
+                        Active = r.Field<bool>("Active")
+                    }).ToList()
+                );
+
+            foreach (var cr in changeRequests)
+            {
+                cr.Attachments = attachmentsByCrId.TryGetValue(cr.CRID, out var files)
+                    ? files
+                    : new List<Attachment>();
+            }
+
             return changeRequests;
         }
-
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSecurityAsync(string empNo)
         {
             // 1. Fetch Assessment StepID dynamically from WorkflowStep
