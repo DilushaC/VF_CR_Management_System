@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Reflection;
 using System.Threading.Tasks;
 using VF_CR_Management_System.Business.ConnectionHandler;
 using VF_CR_Management_System.Data.Models;
@@ -582,9 +583,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int rejectedStatusId = Convert.ToInt32(rejectedStatusObj);
 
-            // 2. Query Change Requests excluding Rejected status
             const string sql = @"
-                SELECT DISTINCT
+                SELECT
                     cr.CRID,
                     cr.CRNumber,
                     cr.ChangeTitle,
@@ -600,9 +600,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     App.AssignedTo AS ApproverUserName,
                     cr.RequestedDate
                 FROM [CRManagementDB].[dbo].[ChangeRequest] AS cr
-                LEFT JOIN [CRManagementDB].[dbo].[Approval] AS App
-                    ON App.CRID = cr.CRID
-                    AND App.Active = 1
+                OUTER APPLY (
+                    SELECT TOP 1 a.AssignedTo
+                    FROM [CRManagementDB].[dbo].[Approval] AS a
+                    WHERE a.CRID = cr.CRID
+                      AND a.Active = 1
+                    ORDER BY a.ApprovalID DESC
+                ) AS App
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
                     ON ct.ChangeTypeID = cr.ChangeTypeID
                 LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
@@ -615,14 +619,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND cr.StatusID <> @RejectedStatusId
-                    AND (
-                        cr.RequesterUserName = @EmpNo 
-                        OR App.AssignedBy = @EmpNo 
-                        OR App.AssignedTo = @EmpNo
-                    )
+                    AND cr.RequesterUserName = @EmpNo
                 ORDER BY
                     cr.CRID DESC;";
-
             var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,
                 new

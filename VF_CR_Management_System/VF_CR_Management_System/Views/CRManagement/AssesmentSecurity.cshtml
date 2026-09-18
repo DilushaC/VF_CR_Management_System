@@ -199,7 +199,11 @@
 
                     <!-- Actions -->
                     <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <button type="button" class="btn btn-outline-danger">Cancel</button>
+                        <button type="button"
+                                class="btn btn-outline-danger"
+                                onclick="window.location.href='@Url.Action("SecurityTable")'">
+                            Cancel
+                        </button>
                         <div class="d-flex gap-2">
                             <button type="button" class="btn btn-danger">Save</button>
                             <button type="submit" class="btn btn-primary">Submit</button>
