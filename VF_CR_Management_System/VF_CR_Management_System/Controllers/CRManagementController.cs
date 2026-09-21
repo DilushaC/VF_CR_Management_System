@@ -156,7 +156,7 @@ namespace VF_CR_Management_System.Controllers
         {
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty; 
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.ApproveChangeRequestAsync(id, ApproverID, empNo);
 
                 if (!success)
@@ -370,11 +370,70 @@ namespace VF_CR_Management_System.Controllers
                 var users = await _userService.GetAllUsersAsync();
                 ViewBag.Users = users;
 
+                ViewBag.ChangeImpacts = await _changeRequestService.GetChangeImpactsAsync();
+
                 return View("AssesmentSecurity", changeRequest);
             }
             catch (Exception ex)
             {
                 return View("Error");
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> CreateSecurityAssessment(IFormCollection collection)
+        {
+            try
+            {
+                if (!int.TryParse(collection["id"], out int id))
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Invalid or missing ID in form payload."
+                    });
+                }
+
+                // Status flag posted by the button: 1 = Save (draft), 2 = Submit
+                // (required-field validation lives in the service and applies to Submit only)
+                bool isSubmit = collection["Status"].ToString() == "2";
+
+                var userName = HttpContext.Session.GetString("UserName");
+                var empNo = HttpContext.Session.GetString("EmpNo");
+
+                bool updated = await _changeRequestService.CreateAssessmentSecurityAsync(id, collection, userName, empNo);
+                if (updated)
+                {
+                    return Json(new
+                    {
+                        success = true,
+                        message = isSubmit
+                            ? "Security assessment submitted successfully"
+                            : "Security assessment saved successfully",
+                        redirectUrl = Url.Action("SecurityTable", "CRManagement")
+                    });
+                }
+                else
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Failed to update Change Request"
+                    });
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                // Validation messages from the service are shown as-is
+                return Json(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = $"Error: {ex.Message}"
+                });
             }
         }
 
@@ -597,8 +656,13 @@ namespace VF_CR_Management_System.Controllers
 
                 ViewBag.ApproverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id.Value);
 
+                var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id.Value);
+                ViewBag.Attachments = attachments;
+
                 var users = await _userService.GetAllUsersAsync();
                 ViewBag.Users = users;
+
+                ViewBag.ChangeImpacts = await _changeRequestService.GetChangeImpactsAsync();
 
                 return View("AssesmentSecurity", changeRequest);
             }

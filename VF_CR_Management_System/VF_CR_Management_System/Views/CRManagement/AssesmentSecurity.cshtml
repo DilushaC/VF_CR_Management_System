@@ -7,6 +7,9 @@
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
+
+    // Change impact options are loaded into the ChangeRequest model (ChangeImpactID / ChangeImpactName)
+    var changeImpacts = ViewBag.ChangeImpacts as IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>;
 }
 
 <div class="row">
@@ -80,6 +83,7 @@
                             </div>
                         </div>
                     </div>
+
                     <!-- Attachments -->
                     <div class="card border mb-4">
                         <div class="card-header bg-light-subtle">
@@ -165,10 +169,10 @@
                                     <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
                                 </div>
                             </div>
-
                             <div class="mb-3">
                                 <label class="form-label">Information Security Risk Assessment</label>
-                                <textarea name="SecurityRiskAssessment" id="securityRiskAssessment" class="form-control" rows="6" placeholder="Write the explanation here..."></textarea>
+                                <textarea name="RiskAssessment" id="securityRiskAssessment" class="form-control" rows="6"
+                                          placeholder="Write the explanation here...">@Model.RiskAssessment</textarea>
                             </div>
                         </div>
 
@@ -179,18 +183,30 @@
                                     <h6 class="fs-15 mb-0">Change Impact</h6>
                                 </div>
                                 <div class="card-body">
-                                    <div class="form-check form-check-inline form-radio-secondary mb-0">
-                                        <input type="radio" id="customRadio9" name="ChangeImpact" value="Minor" class="form-check-input">
-                                        <label class="form-check-label" for="customRadio9">Minor</label>
-                                    </div>
-                                    <div class="form-check form-check-inline form-radio-warning mb-0">
-                                        <input type="radio" id="customRadio10" name="ChangeImpact" value="Standard" class="form-check-input">
-                                        <label class="form-check-label" for="customRadio10">Standard</label>
-                                    </div>
-                                    <div class="form-check form-check-inline form-radio-danger mb-0">
-                                        <input type="radio" id="customRadio11" name="ChangeImpact" value="Major" class="form-check-input">
-                                        <label class="form-check-label" for="customRadio11">Major</label>
-                                    </div>
+                                    @if (changeImpacts != null && changeImpacts.Any())
+                                    {
+                                        foreach (var impact in changeImpacts)
+                                        {
+                                            var radioClass = impact.ChangeImpactName switch
+                                            {
+                                                "Minor" => "form-radio-secondary",
+                                                "Standard" => "form-radio-warning",
+                                                "Major" => "form-radio-danger",
+                                                _ => "form-radio-primary"
+                                            };
+                                            var radioId = "changeImpact_" + impact.ChangeImpactID;
+
+                                            <div class="form-check form-check-inline @radioClass mb-0">
+                                                <input type="radio" id="@radioId" name="ChangeImpactID" value="@impact.ChangeImpactID"
+                                                       class="form-check-input" checked="@(Model.ChangeImpactID == impact.ChangeImpactID)">
+                                                <label class="form-check-label" for="@radioId">@impact.ChangeImpactName</label>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted mb-0">No change impact options available.</p>
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -205,8 +221,18 @@
                             Cancel
                         </button>
                         <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-danger">Save</button>
-                            <button type="submit" class="btn btn-primary">Submit</button>
+                            <button type="button"
+                                    id="btn-save"
+                                    class="btn btn-danger"
+                                    data-status="1">
+                                Save
+                            </button>
+                            <button type="submit"
+                                    id="submitBtn"
+                                    class="btn btn-primary"
+                                    data-status="2">
+                                Submit
+                            </button>
                         </div>
                     </div>
                 </form>
@@ -244,6 +270,8 @@
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+
+            // ---- Image attachment preview modal ----
             var imagePreviewModalEl = document.getElementById('imagePreviewModal');
             var imagePreviewModal = new bootstrap.Modal(imagePreviewModalEl);
             var $modalImg = $('#modalPreviewImage');
@@ -274,6 +302,149 @@
                     };
                     img.src = previewUrl;
                 });
+            });
+
+            // ---- Save / Submit security assessment ----
+            var saveBtn = document.getElementById('btn-save');
+            var submitBtn = document.getElementById('submitBtn');
+
+            function handleSecuritySubmission(btnElement, isSubmit) {
+                var crId = document.getElementById('crIdField').value;
+
+                if (!crId) {
+                    Swal.fire({
+                        title: 'Could not submit',
+                        text: 'Missing Change Request ID. Cannot submit the assessment.',
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                    return;
+                }
+
+                // Client-side validation only on Submit; Save allows a partial draft.
+                if (isSubmit) {
+                    var risk = document.getElementById('securityRiskAssessment').value.trim();
+                    var impact = document.querySelector('input[name="ChangeImpactID"]:checked');
+
+                    if (!risk) {
+                        Swal.fire({
+                            title: 'Missing information',
+                            text: 'Please enter the Information Security Risk Assessment.',
+                            icon: 'warning',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                        return;
+                    }
+
+                    if (!impact) {
+                        Swal.fire({
+                            title: 'Missing information',
+                            text: 'Please select a Change Impact.',
+                            icon: 'warning',
+                            customClass: { confirmButton: 'btn btn-primary' },
+                            buttonsStyling: false
+                        });
+                        return;
+                    }
+                }
+
+                function performSubmission() {
+                    var form = document.getElementById('securityAssessmentForm');
+                    var formData = new FormData(form);
+                    var statusValue = btnElement.getAttribute('data-status');
+                    if (statusValue) {
+                        formData.append('Status', statusValue);
+                    }
+
+                    btnElement.disabled = true;
+                    var originalText = btnElement.textContent;
+                    btnElement.textContent = 'Processing...';
+
+                    $.ajax({
+                        url: '@Url.Action("CreateSecurityAssessment", "CRManagement")',
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        headers: {
+                            "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        success: function (data) {
+                            if (!data.success) {
+                                Swal.fire({
+                                    title: 'Could not save',
+                                    text: data.message || 'Failed to update the security assessment.',
+                                    icon: 'error',
+                                    customClass: { confirmButton: 'btn btn-primary' },
+                                    buttonsStyling: false
+                                });
+                                return;
+                            }
+
+                            Swal.fire({
+                                title: isSubmit ? 'Submitted!' : 'Saved!',
+                                text: data.message || (isSubmit
+                                    ? 'Security assessment submitted successfully.'
+                                    : 'Security assessment saved successfully.'),
+                                icon: 'success',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            }).then(function () {
+                                if (data.redirectUrl) {
+                                    window.location.href = data.redirectUrl;
+                                }
+                            });
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
+                                      'Failed to update the assessment. Please try again.';
+
+                            Swal.fire({
+                                title: 'Error',
+                                text: msg,
+                                icon: 'error',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            });
+                        },
+                        complete: function () {
+                            btnElement.disabled = false;
+                            btnElement.textContent = originalText;
+                        }
+                    });
+                }
+
+                if (isSubmit) {
+                    Swal.fire({
+                        title: 'Submit this assessment?',
+                        text: 'Once submitted, the Change Request will move to the next stage.',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, submit',
+                        cancelButtonText: 'Cancel',
+                        customClass: { confirmButton: 'btn btn-primary me-2', cancelButton: 'btn btn-outline-secondary' },
+                        buttonsStyling: false
+                    }).then(function (result) {
+                        if (result.isConfirmed) {
+                            performSubmission();
+                        }
+                    });
+                } else {
+                    performSubmission();
+                }
+            }
+
+            // preventDefault stops the native form post that <button type="submit"> would trigger
+            submitBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                handleSecuritySubmission(submitBtn, true);
+            });
+
+            saveBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                handleSecuritySubmission(saveBtn, false);
             });
         });
     </script>

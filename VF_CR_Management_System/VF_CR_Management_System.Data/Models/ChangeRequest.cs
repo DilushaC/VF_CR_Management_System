@@ -35,7 +35,8 @@ namespace VF_CR_Management_System.Data.Models
         public bool Active { get; set; }
         public int VendorID { get; set; }
         public int EmpID { get; set; }
-
+        public int ChangeImpactID { get; set; }
+        public string ChangeImpactName { get; set; }
         // Display-only properties, populated via joined lookup tables in list queries.
         public string ChangeType { get; set; }
         public string Priority { get; set; }
@@ -44,10 +45,10 @@ namespace VF_CR_Management_System.Data.Models
         public string Status { get; set; }
         public string RequestedBy { get; set; }
         public string Vendor { get; set; }   // NEW: populated via Vendor join
-
+        public string RiskAssessment { get; set; }   // NEW: populated via Vendor join
+        public string ChangeImpact { get; set; }   // NEW: populated via Vendor join
         public string? ApproverUserName { get; set; }
         public string? ISOfficerUserName { get; set; }
-
         // NEW: populated separately after the main query, not part of the SQL projection
         public List<Attachment> Attachments { get; set; } = new();
     }

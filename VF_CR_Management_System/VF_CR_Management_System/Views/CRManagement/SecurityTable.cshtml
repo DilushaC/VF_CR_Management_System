@@ -111,7 +111,7 @@
                                 <th>Status</th>
                                 <th>Requested By</th>
                                 <th>Requested Date</th>
-                                <th>Action</th>
+                                <th>View | Edit</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -193,7 +193,7 @@
                                                         <i class="ri-shield-check-line"></i>
                                                     </a>
                                                 }
-                                                @if (cr.Status == "AssessmentDraft")
+                                                @if (cr.Status == "SecurityDraft")
                                                 {
                                                     <div class="d-flex gap-1">
                                                         <a href="@Url.Action("EditSecurity", "CRManagement", new { id = cr.CRID })"

@@ -159,6 +159,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
 
+            // FIX: RiskAssessment and ChangeImpactID are now selected so the
+            // Security Assessment view can restore a saved draft.
             const string sql = @"
                 SELECT
                     cr.CRID,
@@ -171,6 +173,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.FixedAssets,
                     cr.VendorID,
                     cr.ProposalNumber,
+                    cr.RiskAssessment,
+                    cr.ChangeImpactID,
                     ct.ChangeTypeName AS ChangeType,
                     cr.PriorityID,
                     p.PriorityName    AS Priority,
@@ -890,136 +894,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequests;
         }
-        //public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo)
-        //{
-        //    1.Fetch Assessment StepID dynamically from WorkflowStep
-        //    const string getAssessmentStepSql = @"
-        //        SELECT TOP 1 StepID 
-        //        FROM [CRManagementDB].[dbo].[WorkflowStep] 
-        //        WHERE StepName LIKE '%Assessment%' AND Active = 1
-        //        ORDER BY StepOrder ASC";
 
-        //    var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepSql);
-
-        //    if (stepIdObj == null || stepIdObj == DBNull.Value)
-        //    {
-        //        throw new InvalidOperationException("Workflow step for 'Assessment' was not found or is inactive.");
-        //    }
-
-        //    int assessmentStepId = Convert.ToInt32(stepIdObj);
-
-        //    2.Fetch StatusIDs dynamically for 'Approved' and 'Assessmentdraft' from CRStatus
-        //    const string getStatusIdsSql = @"
-        //        SELECT StatusID 
-        //        FROM [CRManagementDB].[dbo].[CRStatus] 
-        //        WHERE (StatusName LIKE '%Approved%' OR StatusName LIKE '%AssessmentDraft%' OR StatusName LIKE '%Assessment%') 
-        //          AND Active = 1";
-
-        //    var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
-        //    var statusIds = statusTable.AsEnumerable()
-        //        .Select(r => r.Field<int>("StatusID"))
-        //        .ToList();
-
-        //    if (!statusIds.Any())
-        //    {
-        //        return Enumerable.Empty<ChangeRequest>();
-        //    }
-
-        //    3.Query Change Requests joined with Approval
-        //    const string sql = @"
-        //        SELECT
-        //            cr.CRID,
-        //            cr.CRNumber,
-        //            cr.ChangeTitle,
-        //            cr.Summary,
-        //            cr.ActivitiesTasks,
-        //            cr.FixedAssets,
-        //            ct.ChangeTypeName AS ChangeType,
-        //            p.PriorityName AS Priority,
-        //            cr.DivisionID,
-        //            d.DivisionName AS Division,
-        //            cr.ModuleID,
-        //            m.ModuleName AS Module,
-        //            s.StatusName AS Status,
-        //            cr.RequesterUserName AS RequestedBy,
-        //            App.AssignedTo AS ApproverUserName,
-        //            cr.RequestedDate
-        //        FROM [dbo].[Approval] AS App
-        //        INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
-        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
-        //        LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
-        //        LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
-        //        WHERE cr.Active = 1
-        //            AND App.Active = 1
-        //            AND App.StepID = @StepID
-        //            AND App.AssignedTo = @EmpNo
-        //            AND cr.StatusID IN @StatusIDs
-        //        ORDER BY
-        //            cr.CRID DESC;";
-
-        //    var changeRequests = _connectionService.Query<ChangeRequest>(
-        //        sql,
-        //        new
-        //        {
-        //            EmpNo = empNo,
-        //            StepID = assessmentStepId,
-        //            StatusIDs = statusIds
-        //        }).ToList();
-
-        //    if (!changeRequests.Any())
-        //        return changeRequests;
-
-        //    4.Resolve Full Names for Requesters and Approvers
-
-        //   var userNames = changeRequests
-        //       .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
-        //       .Where(u => !string.IsNullOrWhiteSpace(u))
-        //       .Distinct()
-        //       .ToList();
-
-        //    if (userNames.Any())
-        //        {
-        //            const string usersQuery = @"
-        //            SELECT UserName, FirstName, LastName
-        //            FROM Users
-        //            WHERE UserName IN @UserNames";
-
-        //            var userParams = new DynamicParameters();
-        //            userParams.Add("@UserNames", userNames);
-
-        //            var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
-
-        //            var nameLookup = usersTable.AsEnumerable()
-        //                .ToDictionary(
-        //                    r => r.Field<string>("UserName"),
-        //                    r =>
-        //                    {
-        //                        var uName = r.Field<string>("UserName");
-        //                        var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
-        //                        return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
-        //                    },
-        //                    StringComparer.OrdinalIgnoreCase);
-
-        //            foreach (var cr in changeRequests)
-        //            {
-        //                if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
-        //                    nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
-        //                {
-        //                    cr.RequestedBy = requesterFormattedName;
-        //                }
-
-        //                if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
-        //                    nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
-        //                {
-        //                    cr.ApproverUserName = approverFormattedName;
-        //                }
-        //            }
-        //        }
-
-        //    return changeRequests;
-        //}
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo)
         {
             // 1. Fetch Assessment StepID dynamically from WorkflowStep
@@ -1517,16 +1392,16 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             }
 
             const string updateCrSql = @"
-        UPDATE ChangeRequest
-        SET 
-            ActivitiesTasks = @ActivitiesTasks,
-            FixedAssets  = @FixedAssets,
-            DueDate = @DueDate,
-            VendorID = @VendorID,
-            ProposalNumber = @ProposalNumber,
-            StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = @TargetStatusName)
-        WHERE CRID = @CRID
-          AND Active = 1";
+                UPDATE ChangeRequest
+                SET 
+                    ActivitiesTasks = @ActivitiesTasks,
+                    FixedAssets  = @FixedAssets,
+                    DueDate = @DueDate,
+                    VendorID = @VendorID,
+                    ProposalNumber = @ProposalNumber,
+                    StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = @TargetStatusName)
+                WHERE CRID = @CRID
+                  AND Active = 1";
 
             var crParameters = new DynamicParameters();
             crParameters.Add("@ActivitiesTasks", activitiesTasks);
@@ -1674,6 +1549,143 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             }
 
             return true;
+        }
+
+
+        // =====================================================================
+        // SECURITY ASSESSMENT (IS Officer)
+        // =====================================================================
+
+        public async Task<bool> CreateAssessmentSecurityAsync(int crId, IFormCollection collection, string userName, string empId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            // "1" = Save (btn-save, data-status="1")  -> keep as SecurityDraft
+            // "2" = Submit (submitBtn, data-status="2") -> move on + close the Security approval step
+            var statusValue = collection["Status"].ToString();
+            bool isSubmit = statusValue == "2";
+
+            // FIX: was "Assessment" / "AssessmentDraft" (implementer stage names).
+            // These must match StatusName values in CRStatus. "SecurityDraft" is the name
+            // GetAllChangeRequestsSecurityAsync already filters on; confirm the submit
+            // status name ("Security") matches your CRStatus table.
+            var targetStatusName = isSubmit ? "Security" : "SecurityDraft";
+
+            var riskAssessment = collection["RiskAssessment"].ToString().Trim();
+
+            // FIX: parse to int? instead of passing a raw string to an int column
+            int? changeImpactId = int.TryParse(collection["ChangeImpactID"], out var parsedImpactId)
+                ? parsedImpactId
+                : (int?)null;
+
+            // FIX: required-field checks apply on Submit only, so Save works as a draft.
+            // (Previously the risk assessment was required on Save too, and the
+            // message text said "Activities & Tasks".)
+            if (isSubmit)
+            {
+                if (string.IsNullOrWhiteSpace(riskAssessment))
+                    throw new ArgumentException("Please fill out the Information Security Risk Assessment.");
+
+                if (changeImpactId == null)
+                    throw new ArgumentException("Please select a Change Impact.");
+            }
+
+            // FIX: resolve the StatusID up front so a wrong status name fails loudly
+            // instead of silently setting StatusID = NULL.
+            const string getStatusIdSql = @"
+                SELECT TOP 1 StatusID
+                FROM [CRManagementDB].[dbo].[CRStatus]
+                WHERE StatusName = @StatusName AND Active = 1";
+
+            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = targetStatusName });
+
+            if (statusIdObj == null || statusIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException($"Status '{targetStatusName}' was not found or is inactive in CRStatus table.");
+            }
+
+            int targetStatusId = Convert.ToInt32(statusIdObj);
+
+            const string updateCrSql = @"
+                UPDATE ChangeRequest
+                SET 
+                    RiskAssessment = @RiskAssessment,
+                    ChangeImpactID = @ChangeImpactID,
+                    StatusID       = @StatusID
+                WHERE CRID = @CRID
+                  AND Active = 1";
+
+            var crParameters = new DynamicParameters();
+            crParameters.Add("@RiskAssessment", riskAssessment);
+            crParameters.Add("@ChangeImpactID", changeImpactId, DbType.Int32);
+            crParameters.Add("@StatusID", targetStatusId);
+            crParameters.Add("@CRID", crId);
+
+            int rowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
+
+            if (rowsAffected <= 0)
+                return false;
+
+            if (isSubmit)
+            {
+                await UpdateSecurityApprovalStepAsync(crId, empId);
+            }
+
+            return true;
+        }
+
+        // Lookup used to build the Change Impact radio buttons.
+        // Rows are read into the ChangeRequest model, so the table columns (ImpactID / ImpactName)
+        // are aliased to the model's property names (ChangeImpactID / ChangeImpactName).
+        // Without the aliases Dapper can't map them and the labels come back empty.
+        public Task<IEnumerable<ChangeRequest>> GetChangeImpactsAsync()
+        {
+            const string sql = @"
+                SELECT ImpactID   AS ChangeImpactID,
+                       ImpactName AS ChangeImpactName
+                FROM [CRManagementDB].[dbo].[ChangeImpact]
+                WHERE Active = 1
+                ORDER BY ImpactID";
+
+            var result = _connectionService.Query<ChangeRequest>(sql, new { })
+                            ?? Enumerable.Empty<ChangeRequest>();
+
+            return Task.FromResult(result);
+        }
+
+        private async Task UpdateSecurityApprovalStepAsync(int crId, string empId)
+        {
+            const string getStepIdSql = @"
+                SELECT TOP 1 StepID
+                FROM [CRManagementDB].[dbo].[WorkflowStep]
+                WHERE StepName = @StepName
+                  AND Active = 1
+                ORDER BY StepOrder ASC";
+
+            var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Security" });
+
+            if (stepIdObj == null || stepIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Workflow step 'Security' was not found or is inactive.");
+            }
+
+            int securityStepId = Convert.ToInt32(stepIdObj);
+
+            const string updateApprovalSql = @"
+                UPDATE Approval
+                SET IsApproved = 1,
+                    ApprovalDate = @ApprovalDate
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1";
+
+            var updateApprovalParameters = new DynamicParameters();
+            updateApprovalParameters.Add("@CRID", crId);
+            updateApprovalParameters.Add("@StepID", securityStepId);
+            updateApprovalParameters.Add("@ApprovalDate", DateTime.Now);
+
+            await Task.Run(() => _connectionService.ExecuteWithPara(updateApprovalSql, updateApprovalParameters));
         }
 
 
