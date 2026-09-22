@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -16,11 +17,14 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
     public class ChangeRequestService : IChangeRequestService
     {
         private readonly _ConnectionService _connectionService;
-        private const string AttachmentRootFolder = @"H:\CRMS Attachment";
+        private readonly string _attachmentRootFolder;
 
-        public ChangeRequestService(_ConnectionService connectionService)
+        public ChangeRequestService(_ConnectionService connectionService, IConfiguration configuration)
         {
             _connectionService = connectionService;
+            _attachmentRootFolder = configuration["AttachmentSettings:RootFolder"]
+                ?? throw new InvalidOperationException("AttachmentSettings:RootFolder is not configured.");
+
         }
         public async Task<int> CreateChangeRequestAsync(IFormCollection collection, string empId)
         {
@@ -1474,7 +1478,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (string.IsNullOrWhiteSpace(uploadedBy))
                 throw new ArgumentException("Session expired. Please log in again before uploading attachments.");
 
-            var rootPath = Path.Combine(AttachmentRootFolder, crId.ToString());
+            var rootPath = Path.Combine(_attachmentRootFolder, crId.ToString());
 
             if (!Directory.Exists(rootPath))
                 Directory.CreateDirectory(rootPath);
@@ -1552,36 +1556,22 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         }
 
 
-        // =====================================================================
-        // SECURITY ASSESSMENT (IS Officer)
-        // =====================================================================
-
         public async Task<bool> CreateAssessmentSecurityAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
 
-            // "1" = Save (btn-save, data-status="1")  -> keep as SecurityDraft
-            // "2" = Submit (submitBtn, data-status="2") -> move on + close the Security approval step
             var statusValue = collection["Status"].ToString();
             bool isSubmit = statusValue == "2";
 
-            // FIX: was "Assessment" / "AssessmentDraft" (implementer stage names).
-            // These must match StatusName values in CRStatus. "SecurityDraft" is the name
-            // GetAllChangeRequestsSecurityAsync already filters on; confirm the submit
-            // status name ("Security") matches your CRStatus table.
             var targetStatusName = isSubmit ? "Security" : "SecurityDraft";
 
             var riskAssessment = collection["RiskAssessment"].ToString().Trim();
 
-            // FIX: parse to int? instead of passing a raw string to an int column
             int? changeImpactId = int.TryParse(collection["ChangeImpactID"], out var parsedImpactId)
                 ? parsedImpactId
                 : (int?)null;
 
-            // FIX: required-field checks apply on Submit only, so Save works as a draft.
-            // (Previously the risk assessment was required on Save too, and the
-            // message text said "Activities & Tasks".)
             if (isSubmit)
             {
                 if (string.IsNullOrWhiteSpace(riskAssessment))
@@ -1591,8 +1581,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     throw new ArgumentException("Please select a Change Impact.");
             }
 
-            // FIX: resolve the StatusID up front so a wrong status name fails loudly
-            // instead of silently setting StatusID = NULL.
             const string getStatusIdSql = @"
                 SELECT TOP 1 StatusID
                 FROM [CRManagementDB].[dbo].[CRStatus]
@@ -1635,10 +1623,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return true;
         }
 
-        // Lookup used to build the Change Impact radio buttons.
-        // Rows are read into the ChangeRequest model, so the table columns (ImpactID / ImpactName)
-        // are aliased to the model's property names (ChangeImpactID / ChangeImpactName).
-        // Without the aliases Dapper can't map them and the labels come back empty.
         public Task<IEnumerable<ChangeRequest>> GetChangeImpactsAsync()
         {
             const string sql = @"
