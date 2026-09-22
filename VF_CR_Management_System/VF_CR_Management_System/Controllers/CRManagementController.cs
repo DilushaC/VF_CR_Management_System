@@ -508,6 +508,14 @@ namespace VF_CR_Management_System.Controllers
             return View(crs);
         }
 
+        public async Task<IActionResult> TestingQueueTable()
+        {
+            var empNo = HttpContext.Session.GetString("EmpNo");
+            ViewBag.CurrentEmpNo = empNo;
+            var crs = await _changeRequestService.GetAllChangeRequestsTestingQueueAsync(empNo);
+            return View(crs);
+        }
+
 
         [HttpGet]
         public async Task<IActionResult> EditAssessment(int? id)
@@ -679,6 +687,29 @@ namespace VF_CR_Management_System.Controllers
             catch (Exception ex)
             {
                 return View("Error");
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> AssignTester(int id, int testerID)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.AssignTesterAsync(id, testerID, empNo);
+
+                if (!success)
+                    return BadRequest(new { message = "Failed to approve the Change Request." });
+
+                return Ok(new { message = "Change Request approved successfully." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred while approving the CR." });
             }
         }
     }

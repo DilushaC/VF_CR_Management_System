@@ -17,10 +17,12 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo);
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSecurityAsync(string empNo);
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingAssignAsync(string empNo);
+        Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingQueueAsync(string empNo);
         Task<ChangeRequest> GetChangeRequestByIdAsync(int crId);
         Task<string> GetAssignedApproverUserNameAsync(int crId);
         Task<bool> UpdateChangeRequestAsync(int crId, IFormCollection collection, string userName, string empNo);
         Task<bool> ApproveChangeRequestAsync(int crId, int approverId, string approvedByEmpId);
+        Task<bool> AssignTesterAsync(int crId, int testerId, string approvedByEmpId);
         Task<bool> RejectChangeRequestAsync(int crId, string rejectReason, string rejectedByEmpId);
         Task<bool> SubmitChangeRequestAsync(int crId, string submittedByEmpId);
         Task<bool> DeleteChangeRequestAsync(int crId, string requestedByEmpId);
