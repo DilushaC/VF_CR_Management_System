@@ -48,6 +48,7 @@ namespace VF_CR_Management_System.Data.Models
         public string RiskAssessment { get; set; }   // NEW: populated via Vendor join
         public string ChangeImpact { get; set; }   // NEW: populated via Vendor join
         public string? ApproverUserName { get; set; }
+        public string? ImplementerUserName { get; set; }
         public string? ISOfficerUserName { get; set; }
         // NEW: populated separately after the main query, not part of the SQL projection
         public List<Attachment> Attachments { get; set; } = new();

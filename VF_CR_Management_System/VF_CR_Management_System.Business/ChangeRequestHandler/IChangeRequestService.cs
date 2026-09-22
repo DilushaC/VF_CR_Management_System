@@ -16,6 +16,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsRejectionsAsync(string empNo);
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo);
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSecurityAsync(string empNo);
+        Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingAssignAsync(string empNo);
         Task<ChangeRequest> GetChangeRequestByIdAsync(int crId);
         Task<string> GetAssignedApproverUserNameAsync(int crId);
         Task<bool> UpdateChangeRequestAsync(int crId, IFormCollection collection, string userName, string empNo);

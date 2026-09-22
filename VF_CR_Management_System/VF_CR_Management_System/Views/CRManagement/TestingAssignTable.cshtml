@@ -1,0 +1,698 @@
+﻿@model IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>
+@{
+    ViewData["Title"] = "CR Management";
+    var currentEmpNo = ViewBag.CurrentEmpNo as string ?? string.Empty;
+}
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <h4 class="header-title mb-0">Tester Assignment Requests</h4>
+                </div>
+
+                <style>
+                    #basic-datatable {
+                        border-collapse: separate;
+                        border-spacing: 0;
+                    }
+
+                        #basic-datatable > thead > tr > th:last-child,
+                        #basic-datatable > tbody > tr > td:last-child {
+                            position: sticky;
+                            right: 0;
+                            z-index: 2;
+                        }
+
+                        #basic-datatable > thead > tr > th:last-child {
+                            z-index: 3;
+                            background-color: #fff;
+                        }
+
+                        #basic-datatable > tbody > tr > td:last-child {
+                            background-color: #fff;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd) > td:last-child {
+                            background-color: #f2f2f2;
+                        }
+
+                        #basic-datatable > tbody > tr:hover > td:last-child {
+                            background-color: #ededed;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd):hover > td:last-child {
+                            background-color: #e0e0e0;
+                        }
+
+                        #basic-datatable > thead > tr > th:last-child::before,
+                        #basic-datatable > tbody > tr > td:last-child::before {
+                            content: "";
+                            position: absolute;
+                            top: 0;
+                            bottom: 0;
+                            left: 0;
+                            width: 8px;
+                            box-shadow: inset 6px 0 6px -6px rgba(0, 0, 0, 0.25);
+                            pointer-events: none;
+                        }
+
+                    #crDetailsModal .swal2-container {
+                        position: fixed !important;
+                        z-index: 1080 !important;
+                    }
+
+                    #basic-datatable td.title-cell {
+                        max-width: 220px;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                    }
+
+                    #modal-attachments li {
+                        margin-bottom: 4px;
+                    }
+
+                        #modal-attachments li a {
+                            text-decoration: none;
+                            cursor: pointer;
+                        }
+
+                            #modal-attachments li a:hover {
+                                text-decoration: underline;
+                            }
+
+                    /* Stacked modal fix: image preview modal must sit above crDetailsModal */
+                    #imagePreviewModal {
+                        z-index: 1070;
+                    }
+
+                    .modal-backdrop + .modal-backdrop {
+                        z-index: 1065;
+                    }
+
+                    #imagePreviewImg {
+                        max-width: 100%;
+                        max-height: 70vh;
+                    }
+                </style>
+
+                <div class="table-responsive">
+                    <table id="basic-datatable" class="table table-striped nowrap w-100">
+                        <thead>
+                            <tr>
+                                <th>CR Number</th>
+                                <th>Title</th>
+                                <th>Change Type</th>
+                                <th>Division</th>
+                                <th>Module</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Requested By</th>
+                                <th>Requested Date</th>
+                                <th>View</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model != null)
+                            {
+                                @foreach (var cr in Model)
+                                {
+                                    <tr>
+                                        <td title="@cr.CRNumber">@cr.CRNumber</td>
+                                        <td class="title-cell" title="@cr.ChangeTitle">@cr.ChangeTitle</td>
+                                        <td>@cr.ChangeType</td>
+                                        <td>@(string.IsNullOrEmpty(cr.Division) ? "—" : cr.Division)</td>
+                                        <td>@cr.Module</td>
+                                        <td>
+                                            @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger">@cr.Priority</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Priority
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (string.Equals(cr.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger"><i class="ri-close-line"></i> @cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-success">@cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-warning">Draft</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Status
+                                            }
+                                        </td>
+                                        <td>@cr.RequestedBy</td>
+                                        <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
+                                        <td>
+                                            <div class="d-flex gap-1">
+                                                <button type="button"
+                                                        class="btn btn-sm btn-info btn-view"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#crDetailsModal"
+                                                        data-bs-crid="@cr.CRID"
+                                                        data-bs-crnumber="@cr.CRNumber"
+                                                        data-bs-title="@cr.ChangeTitle"
+                                                        data-bs-summary="@cr.Summary"
+                                                        data-bs-changetype="@cr.ChangeType"
+                                                        data-bs-division="@cr.Division"
+                                                        data-bs-module="@cr.Module"
+                                                        data-bs-priority="@cr.Priority"
+                                                        data-bs-status="@cr.Status"
+                                                        data-bs-requestedby="@cr.RequestedBy"
+                                                        data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                        data-bs-currentapprover="@cr.ApproverUserName"
+                                                        data-bs-activities="@cr.ActivitiesTasks"
+                                                        data-bs-fixedAssets="@cr.FixedAssets"
+                                                        data-bs-riskAssessment="@cr.RiskAssessment"
+                                                        data-bs-changeImpact="@cr.ChangeImpact"
+                                                        data-bs-vendor="@cr.Vendor"
+                                                        data-bs-proposalnumber="@cr.ProposalNumber"
+                                                        data-bs-attachments="@System.Text.Json.JsonSerializer.Serialize(cr.Attachments)"
+                                                        title="View">
+                                                    <i class="ri-eye-line"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CR Details Modal (read-only view, populated via event.relatedTarget) -->
+<div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="crDetailsModalLabel">Change Request Details</h5>
+                <div class="ms-auto d-flex align-items-center">
+                    <label class="col-form-label fw-semibold me-2">CR Number:</label>
+                    <span id="modal-crnumber" class="fw-bold"></span>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Title:</label>
+                        <span id="modal-title"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Status:</label>
+                        <span id="modal-status"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
+                        <span id="modal-changetype"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Priority:</label>
+                        <span id="modal-priority"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Division:</label>
+                        <span id="modal-division"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Module:</label>
+                        <span id="modal-module"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Vendor:</label>
+                        <span id="modal-vendor"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Proposal Number:</label>
+                        <span id="modal-proposalnumber"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
+                        <span id="modal-requestedby"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Approver:</label>
+                        <span id="modal-currentapprover"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Implemented By:</label>
+                        <span id="modal-implementer"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
+                        <span id="modal-requesteddate"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold text-dark d-block mb-1">Change Impact</label>
+                        <span id="modal-changeImpact"></span>
+                    </div>
+                    @*                     <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Estimated Due Date:</label>
+                        <span id="modal-duedate"></span>
+                    </div> *@
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
+                        <span id="modal-summary"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Activities & Tasks</label>
+                        <span id="modal-activities"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Fixed Assets</label>
+                        <span id="modal-fixedAssets"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold text-dark d-block mb-1">Risk Assessment</label>
+                        <span id="modal-riskAssessment"></span>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="fw-bold text-dark d-block mb-1">Attachments:</label>
+                        <ul id="modal-attachments" class="list-unstyled mb-0"></ul>
+                    </div>
+
+                    <!-- Tester source list: kept hidden in the DOM purely so the Approve button can read its
+                         <option> values/text to build the SweetAlert tester picker. Not shown to the user here. -->
+                    <select id="modal-approver" class="d-none">
+                        @if (ViewBag.Users != null)
+                        {
+                            @foreach (var user in ViewBag.Users)
+                            {
+                                <option value="@user.UserName">@user.FirstName @user.LastName - @user.UserName</option>
+                            }
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" id="modal-reject-btn" class="btn btn-danger d-none">Reject</button>
+                <button type="button" id="modal-approve-btn" class="btn btn-success d-none">Approve</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Image Preview Modal (stacked on top of crDetailsModal) -->
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="imagePreviewSpinner" class="py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <img id="imagePreviewImg" src="" alt="Attachment preview" class="img-fluid d-none" />
+            </div>
+            <div class="modal-footer">
+                <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
+                    <i class="ri-download-2-line me-1"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        var currentEmpNo = '@currentEmpNo';
+
+        $(document).ready(function () {
+            $('#basic-datatable').DataTable({
+                responsive: false,
+                paging: true,
+                pageLength: 10,
+                lengthChange: true,
+                order: [[8, 'desc']],
+                columnDefs: [
+                    { orderable: false, targets: 9 },
+                    { orderable: false, targets: 1 }
+                ]
+            });
+        });
+
+        var crDetailsModal = document.getElementById('crDetailsModal');
+        var $approveBtn = $('#modal-approve-btn');
+        var $rejectBtn = $('#modal-reject-btn');
+        var $assessmentBtn = $('#modal-assessment-btn');
+
+        var assessmentUrlBase = '@Url.Action("Assessment", "CRManagement")';
+        var previewUrlBase = '@Url.Action("PreviewAttachment", "CRManagement")';
+        var downloadUrlBase = '@Url.Action("DownloadAttachment", "CRManagement")';
+        var imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+        var pdfExtension = '.pdf';
+
+        // Single source of truth for the currently-open CR's id — a plain JS
+        // variable, not jQuery's .data() cache and not a DOM attribute, so
+        // there's no ambiguity about where it lives or how it's read.
+        var currentCrId = null;
+
+        function normalize(value) {
+            return (value || '').trim().toLowerCase();
+        }
+
+        // ApproverUserName / RequestedBy come from the backend formatted as
+        // "empNo - FirstName LastName" for display. For equality checks we
+        // only care about the empNo part, so strip everything from the
+        // first " - " onward before comparing.
+        function normalizeEmpNo(value) {
+            var v = (value || '').trim();
+            var dashIdx = v.indexOf(' - ');
+            if (dashIdx !== -1) {
+                v = v.substring(0, dashIdx);
+            }
+            return v.toLowerCase();
+        }
+
+        function escapeHtml(str) {
+            return $('<div>').text(str || '').html();
+        }
+
+        function getExtension(fileName) {
+            var idx = (fileName || '').lastIndexOf('.');
+            return idx >= 0 ? fileName.substring(idx).toLowerCase() : '';
+        }
+
+        // --- Image preview modal wiring ---
+        var imagePreviewModalEl = document.getElementById('imagePreviewModal');
+        var imagePreviewModal = new bootstrap.Modal(imagePreviewModalEl);
+        var $imagePreviewImg = $('#imagePreviewImg');
+        var $imagePreviewSpinner = $('#imagePreviewSpinner');
+        var $imagePreviewDownloadBtn = $('#imagePreviewDownloadBtn');
+
+        // Delegated click handler: attachments list is rebuilt each time the details modal opens,
+        // so binding on the static parent avoids needing to re-wire handlers after each render.
+        $('#modal-attachments').on('click', 'a[data-preview-type="image"]', function (e) {
+            e.preventDefault();
+
+            var attachmentId = $(this).data('attachment-id');
+            var fileName = $(this).data('file-name');
+            var previewUrl = previewUrlBase + '?id=' + encodeURIComponent(attachmentId);
+            var downloadUrl = downloadUrlBase + '?id=' + encodeURIComponent(attachmentId);
+
+            $imagePreviewImg.addClass('d-none').attr('src', '');
+            $imagePreviewSpinner.removeClass('d-none');
+            $imagePreviewDownloadBtn.attr('href', downloadUrl).attr('download', fileName);
+            $('#imagePreviewModalLabel').text(fileName || 'Attachment Preview');
+
+            imagePreviewModal.show();
+
+            var img = new Image();
+            img.onload = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.attr('src', previewUrl).removeClass('d-none');
+            };
+            img.onerror = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.removeClass('d-none').attr('alt', 'Failed to load image');
+            };
+            img.src = previewUrl;
+        });
+
+        // Keep crDetailsModal's backdrop visible when the nested image modal closes
+        imagePreviewModalEl.addEventListener('hidden.bs.modal', function () {
+            if (crDetailsModal.classList.contains('show')) {
+                document.body.classList.add('modal-open');
+            }
+        });
+
+        crDetailsModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+
+            if (!button) {
+                console.error('crDetailsModal opened without a relatedTarget button — cannot determine CRID.');
+                currentCrId = null;
+                return;
+            }
+
+            var rawCrid = button.getAttribute('data-bs-crid');
+
+            if (!rawCrid || rawCrid === '0') {
+                console.warn('[crDetailsModal] Button has invalid data-bs-crid:', JSON.stringify(rawCrid), button);
+            }
+
+            currentCrId = parseInt(rawCrid, 10);
+            if (isNaN(currentCrId) || currentCrId <= 0) {
+                currentCrId = null;
+            }
+
+            var crnumber = button.getAttribute('data-bs-crnumber');
+            var title = button.getAttribute('data-bs-title');
+            var summary = button.getAttribute('data-bs-summary');
+            var changetype = button.getAttribute('data-bs-changetype');
+            var priority = button.getAttribute('data-bs-priority');
+            var division = button.getAttribute('data-bs-division');
+            var module = button.getAttribute('data-bs-module');
+            var status = button.getAttribute('data-bs-status');
+            var requestedby = button.getAttribute('data-bs-requestedby');
+            var requesteddate = button.getAttribute('data-bs-requesteddate');
+            var currentApprover = button.getAttribute('data-bs-currentapprover');
+            var activities = button.getAttribute('data-bs-activities');
+            var fixedAssets = button.getAttribute('data-bs-fixedAssets');
+            var riskAssessment = button.getAttribute('data-bs-riskAssessment');
+            var changeImpact = button.getAttribute('data-bs-changeImpact');
+            var vendor = button.getAttribute('data-bs-vendor');
+            var proposalNumber = button.getAttribute('data-bs-proposalnumber');
+            var attachmentsRaw = button.getAttribute('data-bs-attachments');
+
+            crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
+            crDetailsModal.querySelector('#modal-title').textContent = title || '';
+            crDetailsModal.querySelector('#modal-status').textContent = status || '';
+            crDetailsModal.querySelector('#modal-changetype').textContent = changetype || '';
+            crDetailsModal.querySelector('#modal-priority').textContent = priority || '';
+            crDetailsModal.querySelector('#modal-division').textContent = division || '';
+            crDetailsModal.querySelector('#modal-module').textContent = module || '';
+            crDetailsModal.querySelector('#modal-vendor').textContent = vendor || '—';
+            crDetailsModal.querySelector('#modal-proposalnumber').textContent = proposalNumber || '—';
+            crDetailsModal.querySelector('#modal-requestedby').textContent = requestedby || '';
+            crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
+            crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
+            crDetailsModal.querySelector('#modal-currentapprover').textContent = currentApprover || '';
+            crDetailsModal.querySelector('#modal-activities').textContent = activities || '';
+            crDetailsModal.querySelector('#modal-fixedAssets').textContent = fixedAssets || '';
+            crDetailsModal.querySelector('#modal-riskAssessment').textContent = riskAssessment || '';
+            crDetailsModal.querySelector('#modal-changeImpact').textContent = changeImpact || '';
+
+            // Populate attachments: images open in a preview modal, PDFs open in a new tab, others download
+            var $attachmentsList = $('#modal-attachments').empty();
+            try {
+                var attachments = attachmentsRaw ? JSON.parse(attachmentsRaw) : [];
+                if (!attachments || attachments.length === 0) {
+                    $attachmentsList.append('<li class="text-muted">No attachments</li>');
+                } else {
+                    attachments.forEach(function (a) {
+                        var attachmentId = a.attachmentID || a.AttachmentID;
+                        var rawFileName = a.fileName || a.FileName;
+                        var fileName = escapeHtml(rawFileName);
+                        var uploadedBy = escapeHtml(a.uploadedBy || a.UploadedBy || '');
+                        var uploadedDate = a.uploadedDate || a.UploadedDate;
+                        var dateStr = uploadedDate ? new Date(uploadedDate).toLocaleDateString() : '';
+
+                        var meta = (uploadedBy || dateStr)
+                            ? ' <small class="text-muted">(' + [uploadedBy, dateStr].filter(Boolean).join(' — ') + ')</small>'
+                            : '';
+
+                        var ext = getExtension(rawFileName);
+                        var isImage = imageExtensions.indexOf(ext) !== -1;
+                        var isPdf = ext === pdfExtension;
+
+                        var $li = $('<li></li>');
+                        var $link = $('<a href="#"></a>')
+                            .attr('data-attachment-id', attachmentId)
+                            .attr('data-file-name', rawFileName);
+
+                        if (isImage) {
+                            $link.attr('data-preview-type', 'image');
+                            $link.html('<i class="ri-image-line me-1"></i>' + fileName);
+                        } else if (isPdf) {
+                            $link.attr('href', previewUrlBase + '?id=' + encodeURIComponent(attachmentId));
+                            $link.attr('target', '_blank');
+                            $link.attr('rel', 'noopener');
+                            $link.html('<i class="ri-file-pdf-line me-1"></i>' + fileName);
+                        } else {
+                            $link.attr('href', downloadUrlBase + '?id=' + encodeURIComponent(attachmentId));
+                            $link.attr('download', '');
+                            $link.html('<i class="ri-download-2-line me-1"></i>' + fileName);
+                        }
+
+                        $li.append($link).append(meta);
+                        $attachmentsList.append($li);
+                    });
+                }
+            } catch (e) {
+                $attachmentsList.append('<li class="text-muted">No attachments</li>');
+            }
+
+            var normalizedStatus = normalize(status);
+
+            // Only show Approve/Reject + the tester dropdown when the CR is in the
+            // 'Security' status AND the logged-in user is the assigned approver on it.
+            var canAct = normalizedStatus === 'security' &&
+                normalizeEmpNo(currentApprover) !== '' &&
+                normalizeEmpNo(currentEmpNo) !== '' &&
+                normalizeEmpNo(currentApprover) === normalizeEmpNo(currentEmpNo);
+
+            if (canAct) {
+                $approveBtn.removeClass('d-none');
+                $rejectBtn.removeClass('d-none');
+            } else {
+                $approveBtn.addClass('d-none');
+                $rejectBtn.addClass('d-none');
+            }
+
+            if (normalizedStatus === 'approved') {
+                $assessmentBtn
+                    .attr('href', assessmentUrlBase + '?id=' + encodeURIComponent(crid || ''))
+                    .removeClass('d-none');
+            } else {
+                $assessmentBtn.addClass('d-none');
+            }
+
+        });
+
+        // Clear the id once the modal is fully hidden, so a stale id from a
+        // previous open can never leak into a later click if show.bs.modal
+        // somehow didn't fire correctly.
+        $(crDetailsModal).on('hidden.bs.modal', function () {
+            currentCrId = null;
+        });
+
+        // --- Approve: pick a tester inside the confirmation popup, then assign ---
+        $approveBtn.on('click', function () {
+            if (!currentCrId) {
+                Swal.fire({
+                    target: crDetailsModal,
+                    title: 'Could not approve',
+                    text: 'No valid Change Request ID was found. Please close this dialog and try again.',
+                    icon: 'error'
+                });
+                return;
+            }
+
+            // Build the tester options from the same list rendered into
+            // #modal-approver, so there's a single source of truth for users.
+            var inputOptions = {};
+            $('#modal-approver option').each(function () {
+                var val = $(this).val();
+                if (val) {
+                    inputOptions[val] = $(this).text();
+                }
+            });
+
+            if ($.isEmptyObject(inputOptions)) {
+                Swal.fire({
+                    target: crDetailsModal,
+                    title: 'No testers available',
+                    text: 'There are no users available to assign as tester.',
+                    icon: 'error'
+                });
+                return;
+            }
+
+            Swal.fire({
+                target: crDetailsModal,
+                title: 'Proceed to Testing ?',
+                icon: 'warning',
+                html:
+                    '<select id="swal-tester-select" class="form-control" style="width:100%"></select>',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, approve it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#0acf97',
+                cancelButtonColor: '#6c757d',
+                didOpen: function () {
+                    var $swalSelect = $('#swal-tester-select');
+                    $swalSelect.append('<option value="" selected disabled hidden>Select Tester</option>');
+                    $.each(inputOptions, function (val, text) {
+                        $swalSelect.append($('<option></option>').attr('value', val).text(text));
+                    });
+
+                    // Attach the select2 dropdown to the Swal popup itself, otherwise
+                    // it renders behind the modal / with broken positioning.
+                    $swalSelect.select2({
+                        dropdownParent: $(Swal.getPopup()),
+                        width: '100%'
+                    });
+                },
+                willClose: function () {
+                    var $swalSelect = $('#swal-tester-select');
+                    if ($swalSelect.hasClass('select2-hidden-accessible')) {
+                        $swalSelect.select2('destroy');
+                    }
+                },
+                preConfirm: function () {
+                    var testerId = $('#swal-tester-select').val();
+                    if (!testerId) {
+                        Swal.showValidationMessage('Please select a tester.');
+                        return false;
+                    }
+                    return testerId;
+                }
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                var testerId = result.value;
+
+                $.ajax({
+                    url: '@Url.Action("AssignTester", "CRManagement")',
+                    type: 'POST',
+                    data: { id: currentCrId, TesterID: testerId },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Approved!',
+                            text: 'The tester has been assigned to this Change Request.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to approve the CR. Please try again.';
+                        Swal.fire({
+                            target: crDetailsModal,
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+        });
+
+        // --- Reject: UI only for now, functionality to be implemented later ---
+        $rejectBtn.on('click', function () {
+            Swal.fire({
+                target: crDetailsModal,
+                title: 'Coming soon',
+                text: 'Reject functionality for tester assignment will be implemented later.',
+                icon: 'info'
+            });
+        });
+    </script>
+}

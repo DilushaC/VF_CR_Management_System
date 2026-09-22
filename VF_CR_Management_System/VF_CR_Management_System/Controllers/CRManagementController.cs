@@ -498,6 +498,16 @@ namespace VF_CR_Management_System.Controllers
             return View(crs);
         }
 
+        public async Task<IActionResult> TestingAssignTable()
+        {
+            var empNo = HttpContext.Session.GetString("EmpNo");
+            ViewBag.CurrentEmpNo = empNo;
+            var users = await _userService.GetAllUsersAsync();
+            ViewBag.Users = users;
+            var crs = await _changeRequestService.GetAllChangeRequestsTestingAssignAsync(empNo);
+            return View(crs);
+        }
+
 
         [HttpGet]
         public async Task<IActionResult> EditAssessment(int? id)
