@@ -1256,13 +1256,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getTestingStatusIdSql = @"
                 SELECT TOP 1 StatusID 
                 FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE StatusName = 'Testing' AND Active = 1";
+                WHERE StatusName = 'Security' AND Active = 1";
 
             var statusIdObj = _connectionService.ExecuteScalar(getTestingStatusIdSql);
 
             if (statusIdObj == null || statusIdObj == DBNull.Value)
             {
-                throw new InvalidOperationException("CR status 'Testing' was not found or is inactive.");
+                throw new InvalidOperationException("CR status 'Security' was not found or is inactive.");
             }
 
             int testingStatusId = Convert.ToInt32(statusIdObj);
@@ -2084,6 +2084,73 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return nextStepRowsAffected > 0;
         }
 
+
+        public async Task<bool> CreateTestingAsync(int crId, IFormCollection collection, string userName, string empId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            var statusValue = collection["Status"].ToString();
+            bool isSubmit = statusValue == "2";
+
+            var targetStatusName = isSubmit ? "Testing" : "TestingDraft";
+
+            var riskAssessment = collection["RiskAssessment"].ToString().Trim();
+
+            int? changeImpactId = int.TryParse(collection["ChangeImpactID"], out var parsedImpactId)
+                ? parsedImpactId
+                : (int?)null;
+
+            if (isSubmit)
+            {
+                if (string.IsNullOrWhiteSpace(riskAssessment))
+                    throw new ArgumentException("Please fill out the Information Security Risk Assessment.");
+
+                if (changeImpactId == null)
+                    throw new ArgumentException("Please select a Change Impact.");
+            }
+
+            const string getStatusIdSql = @"
+                SELECT TOP 1 StatusID
+                FROM [CRManagementDB].[dbo].[CRStatus]
+                WHERE StatusName = @StatusName AND Active = 1";
+
+            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = targetStatusName });
+
+            if (statusIdObj == null || statusIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException($"Status '{targetStatusName}' was not found or is inactive in CRStatus table.");
+            }
+
+            int targetStatusId = Convert.ToInt32(statusIdObj);
+
+            const string updateCrSql = @"
+                UPDATE ChangeRequest
+                SET 
+                    RiskAssessment = @RiskAssessment,
+                    ChangeImpactID = @ChangeImpactID,
+                    StatusID       = @StatusID
+                WHERE CRID = @CRID
+                  AND Active = 1";
+
+            var crParameters = new DynamicParameters();
+            crParameters.Add("@RiskAssessment", riskAssessment);
+            crParameters.Add("@ChangeImpactID", changeImpactId, DbType.Int32);
+            crParameters.Add("@StatusID", targetStatusId);
+            crParameters.Add("@CRID", crId);
+
+            int rowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
+
+            if (rowsAffected <= 0)
+                return false;
+
+            if (isSubmit)
+            {
+                await UpdateSecurityApprovalStepAsync(crId, empId);
+            }
+
+            return true;
+        }
 
 
     }

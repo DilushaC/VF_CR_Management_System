@@ -304,6 +304,8 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" id="modal-reject-btn" class="btn btn-danger d-none">Reject</button>
                 <button type="button" id="modal-approve-btn" class="btn btn-success d-none">Handover to Tester</button>
+                <a id="modal-assessment-btn" class="btn btn-primary d-none" role="button">Proceed to Assessment</a>
+                <a id="modal-qatest-btn" class="btn btn-primary d-none" role="button">Proceed to QA Test</a>
             </div>
         </div>
     </div>
@@ -359,8 +361,10 @@
         var $approveBtn = $('#modal-approve-btn');
         var $rejectBtn = $('#modal-reject-btn');
         var $assessmentBtn = $('#modal-assessment-btn');
+        var $qaTestBtn = $('#modal-qatest-btn');
 
         var assessmentUrlBase = '@Url.Action("Assessment", "CRManagement")';
+        var testingUrlBase = '@Url.Action("Testing", "CRManagement")';
         var previewUrlBase = '@Url.Action("PreviewAttachment", "CRManagement")';
         var downloadUrlBase = '@Url.Action("DownloadAttachment", "CRManagement")';
         var imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
@@ -566,10 +570,21 @@
 
             if (normalizedStatus === 'approved') {
                 $assessmentBtn
-                    .attr('href', assessmentUrlBase + '?id=' + encodeURIComponent(crid || ''))
+                    .attr('href', assessmentUrlBase + '?id=' + encodeURIComponent(currentCrId || ''))
                     .removeClass('d-none');
             } else {
                 $assessmentBtn.addClass('d-none');
+            }
+
+            // Show "Proceed to QA Test" when the CR is sitting in Testing
+            // or TestingDraft status — adjust these string values if your
+            // CRStatus.StatusName values differ.
+            if (normalizedStatus === 'testing' || normalizedStatus === 'testingdraft') {
+                $qaTestBtn
+                    .attr('href', testingUrlBase + '?id=' + encodeURIComponent(currentCrId || ''))
+                    .removeClass('d-none');
+            } else {
+                $qaTestBtn.addClass('d-none');
             }
 
         });

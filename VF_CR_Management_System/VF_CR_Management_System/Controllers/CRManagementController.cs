@@ -438,12 +438,6 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpGet]
-        public IActionResult Testing()
-        {
-            return View();
-        }
-
-        [HttpGet]
         public IActionResult ReleaseDeployment()
         {
             return View();
@@ -712,5 +706,100 @@ namespace VF_CR_Management_System.Controllers
                 return StatusCode(500, new { message = "An unexpected error occurred while approving the CR." });
             }
         }
+
+        [HttpGet]
+        public async Task<IActionResult> Testing(int? id)
+        {
+            if (id == null)
+            {
+                return RedirectToAction("Index");
+            }
+
+            try
+            {
+                var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
+                if (changeRequest == null)
+                {
+                    return NotFound();
+                }
+
+                double effortEstimateDays = 0;
+                if (changeRequest.DueDate.HasValue)
+                {
+                    effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
+                }
+                ViewBag.EffortEstimateDays = effortEstimateDays;
+
+                var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id.Value);
+                ViewBag.Attachments = attachments;
+
+                var users = await _userService.GetAllUsersAsync();
+                ViewBag.Users = users;
+
+                ViewBag.ChangeImpacts = await _changeRequestService.GetChangeImpactsAsync();
+
+                return View("Testing", changeRequest);
+            }
+            catch (Exception ex)
+            {
+                return View("Error");
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> CreateTesting(IFormCollection collection)
+        {
+            try
+            {
+                if (!int.TryParse(collection["id"], out int id))
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Invalid or missing ID in form payload."
+                    });
+                }
+
+                bool isSubmit = collection["Status"].ToString() == "2";
+
+                var userName = HttpContext.Session.GetString("UserName");
+                var empNo = HttpContext.Session.GetString("EmpNo");
+
+                bool updated = await _changeRequestService.CreateTestingAsync(id, collection, userName, empNo);
+                if (updated)
+                {
+                    return Json(new
+                    {
+                        success = true,
+                        message = isSubmit
+                            ? "QA test results submitted successfully"
+                            : "QA test saved as draft successfully",
+                        redirectUrl = Url.Action("TestingTable", "CRManagement")
+                    });
+                }
+                else
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Failed to update Change Request"
+                    });
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                // Validation messages from the service are shown as-is
+                return Json(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = $"Error: {ex.Message}"
+                });
+            }
+        }
+
     }
 }
