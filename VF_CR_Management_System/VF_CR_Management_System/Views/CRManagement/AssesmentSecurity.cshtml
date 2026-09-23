@@ -32,47 +32,47 @@
                         </div>
                         <div class="card-body">
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">CR Number:</label>
                                     <span>@Model.CRNumber</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Title:</label>
                                     <span>@Model.ChangeTitle</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
                                     <span>@Model.ChangeType</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Priority:</label>
                                     <span>@Model.Priority</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Division:</label>
                                     <span>@(string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division)</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Module:</label>
                                     <span>@Model.Module</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Status:</label>
                                     <span>@Model.Status</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
                                     <span>@Model.RequestedBy</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
                                     <span>@Model.RequestedDate.ToString("yyyy/MM/dd")</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Approver:</label>
                                     <span>@Model.ApproverUserName</span>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="fw-bold text-dark d-block mb-1">Estimated Due Date:</label>
                                     <span>@(Model.DueDate.HasValue? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—")</span>
                                 </div>

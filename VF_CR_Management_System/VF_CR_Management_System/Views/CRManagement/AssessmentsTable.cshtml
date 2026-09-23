@@ -153,7 +153,44 @@
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
                                             <div class="d-flex gap-1">
-                                                @if (cr.Status == "Approved" || cr.Status == "Assessment")
+                                                @if (cr.Status == "Approved")
+                                                {
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-info btn-view"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#crDetailsModal"
+                                                            data-bs-crid="@cr.CRID"
+                                                            data-bs-crnumber="@cr.CRNumber"
+                                                            data-bs-title="@cr.ChangeTitle"
+                                                            data-bs-summary="@cr.Summary"
+                                                            data-bs-changetype="@cr.ChangeType"
+                                                            data-bs-division="@cr.Division"
+                                                            data-bs-module="@cr.Module"
+                                                            data-bs-priority="@cr.Priority"
+                                                            data-bs-status="@cr.Status"
+                                                            data-bs-requestedby="@cr.RequestedBy"
+                                                            data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                            data-bs-currentapprover="@cr.ApproverUserName"
+                                                            data-bs-activities="@cr.ActivitiesTasks"
+                                                            data-bs-fixedAssets="@cr.FixedAssets"
+                                                            data-bs-vendor="@cr.Vendor"
+                                                            data-bs-proposalnumber="@cr.ProposalNumber"
+                                                            data-bs-attachments="@System.Text.Json.JsonSerializer.Serialize(cr.Attachments)"
+                                                            title="Proceed">
+                                                        <i class="ri-login-box-line"></i>
+                                                    </button>
+                                                }
+                                                else if (cr.Status == "AssessmentDraft")
+                                                {
+                                                    <div class="d-flex gap-1">
+                                                        <a href="@Url.Action("EditAssessment", "CRManagement", new { id = cr.CRID })"
+                                                           class="btn btn-sm btn-outline-primary"
+                                                           title="Edit">
+                                                            <i class="ri-edit-line"></i>
+                                                        </a>
+                                                    </div>
+                                                }
+                                                else
                                                 {
                                                     <button type="button"
                                                             class="btn btn-sm btn-info btn-view"
@@ -177,18 +214,8 @@
                                                             data-bs-proposalnumber="@cr.ProposalNumber"
                                                             data-bs-attachments="@System.Text.Json.JsonSerializer.Serialize(cr.Attachments)"
                                                             title="View">
-                                                        <i class="ri-login-box-line"></i>
+                                                        <i class="ri-eye-line"></i>
                                                     </button>
-                                                }
-                                                @if (cr.Status == "AssessmentDraft")
-                                                {
-                                                    <div class="d-flex gap-1">
-                                                        <a href="@Url.Action("EditAssessment", "CRManagement", new { id = cr.CRID })"
-                                                           class="btn btn-sm btn-outline-primary"
-                                                           title="Edit">
-                                                            <i class="ri-edit-line"></i>
-                                                        </a>
-                                                    </div>
                                                 }
                                             </div>
                                         </td>

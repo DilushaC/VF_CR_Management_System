@@ -920,7 +920,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getStatusIdsSql = @"
                 SELECT StatusID 
                 FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE (StatusName LIKE '%Approved%' OR StatusName LIKE '%AssessmentDraft%' OR StatusName LIKE '%Assessment%') 
+                WHERE StatusName NOT LIKE '%Draft%'
+                  AND StatusName NOT LIKE '%Submitted%'
                   AND Active = 1";
 
             var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
@@ -1088,7 +1089,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getStatusIdsSql = @"
                 SELECT StatusID 
                 FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE (StatusName LIKE '%Assessment%' OR StatusName LIKE '%SecurityDraft%') 
+                WHERE StatusName NOT LIKE '%Draft%'
+                  AND StatusName NOT LIKE '%Submitted%'
+                  AND StatusName NOT LIKE '%Approved%'
                   AND Active = 1";
 
             var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);

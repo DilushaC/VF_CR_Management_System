@@ -193,7 +193,7 @@
                                                         <i class="ri-shield-check-line"></i>
                                                     </a>
                                                 }
-                                                @if (cr.Status == "SecurityDraft")
+                                                else if (cr.Status == "SecurityDraft")
                                                 {
                                                     <div class="d-flex gap-1">
                                                         <a href="@Url.Action("EditSecurity", "CRManagement", new { id = cr.CRID })"
@@ -202,6 +202,33 @@
                                                             <i class="ri-edit-line"></i>
                                                         </a>
                                                     </div>
+                                                }
+                                                else
+                                                {
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-info btn-view"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#crDetailsModal"
+                                                            data-bs-crid="@cr.CRID"
+                                                            data-bs-crnumber="@cr.CRNumber"
+                                                            data-bs-title="@cr.ChangeTitle"
+                                                            data-bs-summary="@cr.Summary"
+                                                            data-bs-changetype="@cr.ChangeType"
+                                                            data-bs-division="@cr.Division"
+                                                            data-bs-module="@cr.Module"
+                                                            data-bs-priority="@cr.Priority"
+                                                            data-bs-status="@cr.Status"
+                                                            data-bs-requestedby="@cr.RequestedBy"
+                                                            data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                            data-bs-currentapprover="@cr.ApproverUserName"
+                                                            data-bs-activities="@cr.ActivitiesTasks"
+                                                            data-bs-fixedAssets="@cr.FixedAssets"
+                                                            data-bs-vendor="@cr.Vendor"
+                                                            data-bs-proposalnumber="@cr.ProposalNumber"
+                                                            data-bs-attachments="@System.Text.Json.JsonSerializer.Serialize(cr.Attachments)"
+                                                            title="View">
+                                                        <i class="ri-eye-line"></i>
+                                                    </button>
                                                 }
                                             </div>
                                         </td>
