@@ -689,11 +689,43 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequests;
         }
-        public Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
+        public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
-            const int draftStatusId = 2;
+            // 1. Fetch "Department Head Approval" StepID dynamically from WorkflowStep
+            const string getStepSql = @"
+                SELECT TOP 1 StepID 
+                FROM [CRManagementDB].[dbo].[WorkflowStep] 
+                WHERE StepName LIKE '%Department Head Approval%' AND Active = 1
+                ORDER BY StepOrder ASC";
 
-            var sql = @"
+            var stepIdObj = _connectionService.ExecuteScalar(getStepSql);
+
+            if (stepIdObj == null || stepIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Workflow step for 'Department Head Approval' was not found or is inactive.");
+            }
+
+            int departmentHeadStepId = Convert.ToInt32(stepIdObj);
+
+            // 2. Fetch all non-Draft StatusIDs
+            const string getStatusIdsSql = @"
+                SELECT StatusID 
+                FROM [CRManagementDB].[dbo].[CRStatus] 
+                WHERE StatusName != 'Draft'
+                AND Active = 1";
+
+            var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
+            var statusIds = statusTable.AsEnumerable()
+                .Select(r => r.Field<int>("StatusID"))
+                .ToList();
+
+            if (!statusIds.Any())
+            {
+                return Enumerable.Empty<ChangeRequest>();
+            }
+
+            // 3. Query Change Requests joined with Approval
+            const string sql = @"
                 SELECT
                     cr.CRID,
                     cr.CRNumber,
@@ -711,24 +743,16 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.RequestedDate
                 FROM [dbo].[Approval] AS App
                 INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct
-                    ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p
-                    ON p.PriorityID = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d
-                    ON d.DivisionID = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m
-                    ON m.ModuleID = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
-                    ON s.StatusID = cr.StatusID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
-                    AND App.StepID = (
-                        SELECT TOP 1 StepID 
-                        FROM [CRManagementDB].[dbo].[WorkflowStep] 
-                        WHERE StepName LIKE '%Department Head%' AND Active = 1
-                    )
-                    AND cr.StatusID != 7
+                    AND App.Active = 1
+                    AND App.StepID = @StepID
                     AND App.AssignedTo = @EmpNo
+                    AND cr.StatusID IN @StatusIDs
                 ORDER BY
                     cr.CRID DESC;";
 
@@ -737,14 +761,16 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 new
                 {
                     EmpNo = empNo,
-                    DraftStatusId = draftStatusId
+                    StepID = departmentHeadStepId,
+                    StatusIDs = statusIds
                 }).ToList();
 
             if (!changeRequests.Any())
-                return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
+                return changeRequests;
 
+            // 4. Resolve Full Names for Requesters and Approvers
             var userNames = changeRequests
-                .Select(cr => cr.RequestedBy)
+                .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
                 .Where(u => !string.IsNullOrWhiteSpace(u))
                 .Distinct()
                 .ToList();
@@ -788,7 +814,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 }
             }
 
-            return Task.FromResult<IEnumerable<ChangeRequest>>(changeRequests);
+            return changeRequests;
         }
 
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsRejectionsAsync(string empNo)
