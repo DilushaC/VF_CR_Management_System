@@ -246,9 +246,32 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 }
             }
 
+            // Fetch Testing records for this CR
+            const string testingQuery = @"
+                SELECT TestID, CRID, TestCycleNumber, TestResult, UATComment, TestingDate, Active
+                FROM [CRManagementDB].[dbo].[Testing]
+                WHERE CRID = @CRID AND Active = 1
+                ORDER BY TestCycleNumber DESC";
+
+            var testingParams = new DynamicParameters();
+            testingParams.Add("@CRID", crId);
+
+            var testingTable = _connectionService.ReturnWithPara(testingQuery, testingParams);
+
+            changeRequest.Tests = testingTable.AsEnumerable()
+                .Select(r => new Testing
+                {
+                    TestID = r.Field<int>("TestID"),
+                    CRID = r.Field<int>("CRID"),
+                    TestCycleNumber = r.Field<int>("TestCycleNumber"),
+                    TestResult = r.Field<string>("TestResult"),
+                    UATComment = r.Field<string>("UATComment"),
+                    TestingDate = r.Field<DateTime>("TestingDate"),
+                    Active = r.Field<bool>("Active")
+                }).ToList();
+
             return changeRequest;
         }
-
         public Task<IEnumerable<Attachment>> GetAttachmentsByCrIdAsync(int crId)
         {
             if (crId <= 0)
@@ -754,7 +777,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     AND App.AssignedTo = @EmpNo
                     AND cr.StatusID IN @StatusIDs
                 ORDER BY
-                    cr.CRID DESC;";
+                    cr.CRNumber DESC;";
 
             var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,
@@ -2132,21 +2155,25 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var targetStatusName = isSubmit ? "Testing" : "TestingDraft";
 
-            var riskAssessment = collection["RiskAssessment"].ToString().Trim();
+            // Fields from the Testing view
+            int.TryParse(collection["TestID"], out int testId);
+            int.TryParse(collection["TestCycleNumber"], out int testCycleNumber);
+            var testResult = collection["Test"].ToString().Trim();
+            var uatComment = collection["UatComments"].ToString().Trim();
 
-            int? changeImpactId = int.TryParse(collection["ChangeImpactID"], out var parsedImpactId)
-                ? parsedImpactId
-                : (int?)null;
+            if (testCycleNumber <= 0)
+                testCycleNumber = 1;
 
             if (isSubmit)
             {
-                if (string.IsNullOrWhiteSpace(riskAssessment))
-                    throw new ArgumentException("Please fill out the Information Security Risk Assessment.");
+                if (string.IsNullOrWhiteSpace(testResult))
+                    throw new ArgumentException("Please enter the Test Plan and Test Results.");
 
-                if (changeImpactId == null)
-                    throw new ArgumentException("Please select a Change Impact.");
+                if (string.IsNullOrWhiteSpace(uatComment))
+                    throw new ArgumentException("Please enter the UAT Confirmation & Comments.");
             }
 
+            // 1. Resolve target CRStatus
             const string getStatusIdSql = @"
                 SELECT TOP 1 StatusID
                 FROM [CRManagementDB].[dbo].[CRStatus]
@@ -2161,18 +2188,53 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int targetStatusId = Convert.ToInt32(statusIdObj);
 
+            // 2. Insert or update the Testing record
+            if (testId > 0)
+            {
+                const string updateTestingSql = @"
+                    UPDATE [CRManagementDB].[dbo].[Testing]
+                    SET TestResult      = @TestResult,
+                        UATComment      = @UATComment,
+                        TestCycleNumber = @TestCycleNumber,
+                        TestingDate     = @TestingDate
+                    WHERE TestID = @TestID
+                      AND Active = 1";
+
+                var updateParams = new DynamicParameters();
+                updateParams.Add("@TestResult", testResult);
+                updateParams.Add("@UATComment", uatComment);
+                updateParams.Add("@TestCycleNumber", testCycleNumber);
+                updateParams.Add("@TestingDate", DateTime.Now);
+                updateParams.Add("@TestID", testId);
+
+                _connectionService.ExecuteWithPara(updateTestingSql, updateParams);
+            }
+            else
+            {
+                const string insertTestingSql = @"
+                    INSERT INTO [CRManagementDB].[dbo].[Testing]
+                        (CRID, TestCycleNumber, TestResult, UATComment, TestingDate, Active)
+                    VALUES
+                        (@CRID, @TestCycleNumber, @TestResult, @UATComment, @TestingDate, 1)";
+
+                var insertParams = new DynamicParameters();
+                insertParams.Add("@CRID", crId);
+                insertParams.Add("@TestCycleNumber", testCycleNumber);
+                insertParams.Add("@TestResult", testResult);
+                insertParams.Add("@UATComment", uatComment);
+                insertParams.Add("@TestingDate", DateTime.Now);
+
+                _connectionService.ExecuteWithPara(insertTestingSql, insertParams);
+            }
+
+            // 3. Update the ChangeRequest's status
             const string updateCrSql = @"
                 UPDATE ChangeRequest
-                SET 
-                    RiskAssessment = @RiskAssessment,
-                    ChangeImpactID = @ChangeImpactID,
-                    StatusID       = @StatusID
+                SET StatusID = @StatusID
                 WHERE CRID = @CRID
-                  AND Active = 1";
+                    AND Active = 1";
 
             var crParameters = new DynamicParameters();
-            crParameters.Add("@RiskAssessment", riskAssessment);
-            crParameters.Add("@ChangeImpactID", changeImpactId, DbType.Int32);
             crParameters.Add("@StatusID", targetStatusId);
             crParameters.Add("@CRID", crId);
 
@@ -2181,14 +2243,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (rowsAffected <= 0)
                 return false;
 
-            if (isSubmit)
-            {
-                await UpdateSecurityApprovalStepAsync(crId, empId);
-            }
-
             return true;
         }
-
 
     }
 }

@@ -52,5 +52,6 @@ namespace VF_CR_Management_System.Data.Models
         public string? ISOfficerUserName { get; set; }
         // NEW: populated separately after the main query, not part of the SQL projection
         public List<Attachment> Attachments { get; set; } = new();
+        public List<Testing> Tests { get; set; } = new();
     }
 }

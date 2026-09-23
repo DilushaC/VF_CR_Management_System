@@ -723,13 +723,6 @@ namespace VF_CR_Management_System.Controllers
                     return NotFound();
                 }
 
-                double effortEstimateDays = 0;
-                if (changeRequest.DueDate.HasValue)
-                {
-                    effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
-                }
-                ViewBag.EffortEstimateDays = effortEstimateDays;
-
                 var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id.Value);
                 ViewBag.Attachments = attachments;
 
@@ -751,7 +744,7 @@ namespace VF_CR_Management_System.Controllers
         {
             try
             {
-                if (!int.TryParse(collection["id"], out int id))
+                if (!int.TryParse(collection["Id"], out int id))
                 {
                     return Json(new
                     {
@@ -765,7 +758,17 @@ namespace VF_CR_Management_System.Controllers
                 var userName = HttpContext.Session.GetString("UserName");
                 var empNo = HttpContext.Session.GetString("EmpNo");
 
+                if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(empNo))
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Session expired. Please log in again."
+                    });
+                }
+
                 bool updated = await _changeRequestService.CreateTestingAsync(id, collection, userName, empNo);
+
                 if (updated)
                 {
                     return Json(new
@@ -774,7 +777,7 @@ namespace VF_CR_Management_System.Controllers
                         message = isSubmit
                             ? "QA test results submitted successfully"
                             : "QA test saved as draft successfully",
-                        redirectUrl = Url.Action("TestingTable", "CRManagement")
+                        redirectUrl = Url.Action("TestingQueueTable", "CRManagement")
                     });
                 }
                 else
@@ -788,7 +791,6 @@ namespace VF_CR_Management_System.Controllers
             }
             catch (ArgumentException ex)
             {
-                // Validation messages from the service are shown as-is
                 return Json(new { success = false, message = ex.Message });
             }
             catch (Exception ex)

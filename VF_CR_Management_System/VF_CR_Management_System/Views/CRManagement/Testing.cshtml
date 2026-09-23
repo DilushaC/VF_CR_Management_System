@@ -7,6 +7,13 @@
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
+
+    var latestTest = Model.Tests?
+        .Where(t => t.Active)
+        .OrderByDescending(t => t.TestCycleNumber)
+        .FirstOrDefault();
+
+    var nextCycleNumber = (latestTest?.TestCycleNumber ?? 0) + 1;
 }
 
 <div class="row">
@@ -21,6 +28,8 @@
                 <form id="testingForm">
 
                     <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
+                    <input type="hidden" name="TestID" id="testIdField" value="@(latestTest?.TestID ?? 0)" />
+                    <input type="hidden" name="TestCycleNumber" id="testCycleField" value="@nextCycleNumber" />
 
                     <!-- Change Request details, bound directly from the model (same as Security Assessment view) -->
                     <div class="card border mb-4">
@@ -179,14 +188,15 @@
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6">
                                     <label class="form-label">Acceptance Date</label>
-                                    <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
+                                    <input type="text" class="form-control"
+                                           value="@(latestTest != null ? latestTest.TestingDate.ToString("dd/MM/yyyy") : DateTime.Now.ToString("dd/MM/yyyy"))" disabled>
                                 </div>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label">Test Plan and Test Results</label>
-                                <textarea name="TestPlanResults" id="testPlanResults" class="form-control" rows="6"
-                                          placeholder="The test plan and results shall be attached to this form:"></textarea>
+                                <textarea name="Test" id="testPlanResults" class="form-control" rows="6"
+                                          placeholder="The test plan and results shall be attached to this form:">@(latestTest?.TestResult)</textarea>
                             </div>
                         </div>
 
@@ -200,7 +210,7 @@
                                     <div class="mb-3">
                                         <label class="form-label">UAT Confirmation &amp; Comments</label>
                                         <textarea name="UatComments" id="uatComments" class="form-control" rows="12"
-                                                  placeholder="Write the explanation here..."></textarea>
+                                                  placeholder="Write the explanation here...">@(latestTest?.UATComment)</textarea>
                                     </div>
                                 </div>
                             </div>
