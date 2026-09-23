@@ -944,11 +944,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             int assessmentStepId = Convert.ToInt32(stepIdObj);
 
             const string getStatusIdsSql = @"
-                SELECT StatusID 
-                FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE StatusName NOT LIKE '%Draft%'
-                  AND StatusName NOT LIKE '%Submitted%'
-                  AND Active = 1";
+                SELECT StatusID
+                FROM[CRManagementDB].[dbo].[CRStatus]
+                WHERE StatusName != 'Draft' AND StatusName != 'Submitted'
+                AND Active = 1";
 
             var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
             var statusIds = statusTable.AsEnumerable()
@@ -1100,7 +1099,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getAssessmentStepSql = @"
                 SELECT TOP 1 StepID 
                 FROM [CRManagementDB].[dbo].[WorkflowStep] 
-                WHERE StepName LIKE '%Security%' AND Active = 1
+                WHERE StepName = 'Security' AND Active = 1
                 ORDER BY StepOrder ASC";
 
             var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepSql);
@@ -1115,9 +1114,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getStatusIdsSql = @"
                 SELECT StatusID 
                 FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE StatusName NOT LIKE '%Draft%'
-                  AND StatusName NOT LIKE '%Submitted%'
-                  AND StatusName NOT LIKE '%Approved%'
+                WHERE StatusName != 'Draft'
+                  AND StatusName != 'Submitted'
+                  AND StatusName != 'Approved'
                   AND Active = 1";
 
             var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
@@ -1282,19 +1281,25 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int deptHeadStepId = Convert.ToInt32(stepIdObj);
 
-            const string getTestingStatusIdSql = @"
-                SELECT TOP 1 StatusID 
+            // Get all StatusIDs NOT in the excluded set (Draft, Submitted, Approved, Assessment)
+            const string getTestingStatusIdsSql = @"
+                SELECT StatusID 
                 FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE StatusName = 'Security' AND Active = 1";
+                WHERE StatusName != 'Draft'
+                  AND StatusName != 'Submitted'
+                  AND StatusName != 'Approved'
+                  AND StatusName != 'Assessment'
+                  AND Active = 1";
 
-            var statusIdObj = _connectionService.ExecuteScalar(getTestingStatusIdSql);
+            var statusTable = _connectionService.ReturnWithPara(getTestingStatusIdsSql, null);
+            var statusIds = statusTable.AsEnumerable()
+                .Select(r => r.Field<int>("StatusID"))
+                .ToList();
 
-            if (statusIdObj == null || statusIdObj == DBNull.Value)
+            if (!statusIds.Any())
             {
-                throw new InvalidOperationException("CR status 'Security' was not found or is inactive.");
+                return Enumerable.Empty<ChangeRequest>();
             }
-
-            int testingStatusId = Convert.ToInt32(statusIdObj);
 
             const string sql = @"
                 SELECT
@@ -1332,7 +1337,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     AND App.IsApproved = 1
                     AND App.StepID = @StepID
                     AND App.AssignedTo = @EmpNo
-                    AND cr.StatusID = @StatusID
+                    AND cr.StatusID IN @StatusIDs
                 ORDER BY
                     cr.CRID DESC;";
 
@@ -1342,7 +1347,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 {
                     EmpNo = empNo,
                     StepID = deptHeadStepId,
-                    StatusID = testingStatusId
+                    StatusIDs = statusIds
                 }).ToList();
 
             if (!changeRequests.Any())
@@ -1432,7 +1437,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequests;
         }
-
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingQueueAsync(string empNo)
         {
             // 1. Fetch Assessment StepID dynamically from WorkflowStep
@@ -1454,7 +1458,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getStatusIdsSql = @"
                 SELECT StatusID 
                 FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE (StatusName LIKE '%Testing%' OR StatusName LIKE '%TestingDraft%') 
+                WHERE StatusName != 'Draft'
+                  AND StatusName != 'Submitted'
+                  AND StatusName != 'Approved'
+                  AND StatusName != 'Assessment'
+                  AND StatusName != 'Security'
                   AND Active = 1";
 
             var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
