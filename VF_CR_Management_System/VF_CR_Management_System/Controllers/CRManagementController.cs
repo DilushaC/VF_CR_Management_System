@@ -514,6 +514,8 @@ namespace VF_CR_Management_System.Controllers
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
             ViewBag.CurrentEmpNo = empNo;
+            var users = await _userService.GetAllUsersAsync();
+            ViewBag.Users = users;
             var crs = await _changeRequestService.GetAllChangeRequestsTestingApprovalsAsync(empNo);
             return View(crs);
         }
@@ -808,6 +810,29 @@ namespace VF_CR_Management_System.Controllers
                     success = false,
                     message = $"Error: {ex.Message}"
                 });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> AssignFinalApprover(int id, int finalApproverId)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.AssignFinalApproverAsync(id, finalApproverId, empNo);
+
+                if (!success)
+                    return BadRequest(new { message = "Failed to approve the Change Request." });
+
+                return Ok(new { message = "Change Request approved successfully." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred while approving the CR." });
             }
         }
 

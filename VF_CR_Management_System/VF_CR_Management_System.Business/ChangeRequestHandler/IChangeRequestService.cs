@@ -24,6 +24,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<bool> UpdateChangeRequestAsync(int crId, IFormCollection collection, string userName, string empNo);
         Task<bool> ApproveChangeRequestAsync(int crId, int approverId, string approvedByEmpId);
         Task<bool> AssignTesterAsync(int crId, int testerId, string approvedByEmpId);
+        Task<bool> AssignFinalApproverAsync(int crId, int finalApproverId, string approvedByEmpId);
         Task<bool> RejectChangeRequestAsync(int crId, string rejectReason, string rejectedByEmpId);
         Task<bool> SubmitChangeRequestAsync(int crId, string submittedByEmpId);
         Task<bool> DeleteChangeRequestAsync(int crId, string requestedByEmpId);

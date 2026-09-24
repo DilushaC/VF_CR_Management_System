@@ -9,7 +9,7 @@
         <div class="card">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <h4 class="header-title mb-0">Assigned CRs for Testing</h4>
+                    <h4 class="header-title mb-0">Tester Assignment Requests</h4>
                 </div>
 
                 <style>
@@ -157,43 +157,32 @@
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
                                             <div class="d-flex gap-1">
-                                                @if (cr.Status == "TestingDraft")
-                                                {
-                                                    <div class="d-flex gap-1">
-                                                        <a href="@Url.Action("Testing", "CRManagement", new { id = cr.CRID })"
-                                                           class="btn btn-sm btn-outline-primary"
-                                                           title="Edit">
-                                                            <i class="ri-edit-line"></i>
-                                                        </a>
-                                                    </div>
-                                                }
-                                                else
-                                                {
-                                                    <button type="button"
-                                                            class="btn btn-sm btn-info btn-view"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#crDetailsModal"
-                                                            data-bs-crid="@cr.CRID"
-                                                            data-bs-crnumber="@cr.CRNumber"
-                                                            data-bs-title="@cr.ChangeTitle"
-                                                            data-bs-summary="@cr.Summary"
-                                                            data-bs-changetype="@cr.ChangeType"
-                                                            data-bs-division="@cr.Division"
-                                                            data-bs-module="@cr.Module"
-                                                            data-bs-priority="@cr.Priority"
-                                                            data-bs-status="@cr.Status"
-                                                            data-bs-requestedby="@cr.RequestedBy"
-                                                            data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
-                                                            data-bs-currentapprover="@cr.ApproverUserName"
-                                                            data-bs-activities="@cr.ActivitiesTasks"
-                                                            data-bs-fixedAssets="@cr.FixedAssets"
-                                                            data-bs-vendor="@cr.Vendor"
-                                                            data-bs-proposalnumber="@cr.ProposalNumber"
-                                                            data-bs-attachments="@System.Text.Json.JsonSerializer.Serialize(cr.Attachments)"
-                                                            title="View">
-                                                        <i class="ri-eye-line"></i>
-                                                    </button>
-                                                }
+                                                <button type="button"
+                                                        class="btn btn-sm btn-info btn-view"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#crDetailsModal"
+                                                        data-bs-crid="@cr.CRID"
+                                                        data-bs-crnumber="@cr.CRNumber"
+                                                        data-bs-title="@cr.ChangeTitle"
+                                                        data-bs-summary="@cr.Summary"
+                                                        data-bs-changetype="@cr.ChangeType"
+                                                        data-bs-division="@cr.Division"
+                                                        data-bs-module="@cr.Module"
+                                                        data-bs-priority="@cr.Priority"
+                                                        data-bs-status="@cr.Status"
+                                                        data-bs-requestedby="@cr.RequestedBy"
+                                                        data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
+                                                        data-bs-currentapprover="@cr.ApproverUserName"
+                                                        data-bs-activities="@cr.ActivitiesTasks"
+                                                        data-bs-fixedAssets="@cr.FixedAssets"
+                                                        data-bs-riskAssessment="@cr.RiskAssessment"
+                                                        data-bs-changeImpact="@cr.ChangeImpact"
+                                                        data-bs-vendor="@cr.Vendor"
+                                                        data-bs-proposalnumber="@cr.ProposalNumber"
+                                                        data-bs-attachments="@System.Text.Json.JsonSerializer.Serialize(cr.Attachments)"
+                                                        title="View">
+                                                    <i class="ri-eye-line"></i>
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -221,11 +210,11 @@
             </div>
             <div class="modal-body">
                 <div class="row g-3">
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Title:</label>
                         <span id="modal-title"></span>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <label class="fw-bold text-dark d-block mb-1">Status:</label>
                         <span id="modal-status"></span>
                     </div>
@@ -298,8 +287,9 @@
                         <ul id="modal-attachments" class="list-unstyled mb-0"></ul>
                     </div>
 
-                    <!-- Tester source list: kept hidden in the DOM purely so the Approve button can read its
-                         <option> values/text to build the SweetAlert tester picker. Not shown to the user here. -->
+                    <!-- Tester/approver source list: kept hidden in the DOM purely so the Approve button can read
+                         its <option> values/text to build the SweetAlert picker (used for both the tester and
+                         final-approver handover flows). Not shown to the user here. -->
                     <select id="modal-approver" class="d-none">
                         @if (ViewBag.Users != null)
                         {
@@ -313,7 +303,8 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <a id="modal-qatest-btn" class="btn btn-primary d-none" role="button">Proceed to QA Test</a>
+                <button type="button" id="modal-reject-btn" class="btn btn-danger d-none">Reject</button>
+                <button type="button" id="modal-approve-btn" class="btn btn-success d-none">Handover to Tester</button>
             </div>
         </div>
     </div>
@@ -369,24 +360,35 @@
         var $approveBtn = $('#modal-approve-btn');
         var $rejectBtn = $('#modal-reject-btn');
         var $assessmentBtn = $('#modal-assessment-btn');
-        var $qaTestBtn = $('#modal-qatest-btn');
 
         var assessmentUrlBase = '@Url.Action("Assessment", "CRManagement")';
-        var testingUrlBase = '@Url.Action("Testing", "CRManagement")';
         var previewUrlBase = '@Url.Action("PreviewAttachment", "CRManagement")';
         var downloadUrlBase = '@Url.Action("DownloadAttachment", "CRManagement")';
         var imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
         var pdfExtension = '.pdf';
 
+        // Statuses for which Approve/Reject + the picker should be shown.
+        // 'security'  -> Handover to Tester (live, calls AssignTester)
+        // 'testing'   -> Handover to Final Approver (UI only for now, no backend call yet)
+        var actionableStatuses = ['security', 'testing'];
 
-        var qaEligibleStatuses = ['securityapproved', 'testingdraft'];
-
+        // Single source of truth for the currently-open CR's id — a plain JS
+        // variable, not jQuery's .data() cache and not a DOM attribute, so
+        // there's no ambiguity about where it lives or how it's read.
         var currentCrId = null;
+
+        // The (normalized) status the modal was opened for, e.g. 'security' or
+        // 'testing'. Used by the approve/reject handlers to pick the right flow.
+        var currentCrStatus = null;
 
         function normalize(value) {
             return (value || '').trim().toLowerCase();
         }
 
+        // ApproverUserName / RequestedBy come from the backend formatted as
+        // "empNo - FirstName LastName" for display. For equality checks we
+        // only care about the empNo part, so strip everything from the
+        // first " - " onward before comparing.
         function normalizeEmpNo(value) {
             var v = (value || '').trim();
             var dashIdx = v.indexOf(' - ');
@@ -454,6 +456,7 @@
             if (!button) {
                 console.error('crDetailsModal opened without a relatedTarget button — cannot determine CRID.');
                 currentCrId = null;
+                currentCrStatus = null;
                 return;
             }
 
@@ -556,41 +559,62 @@
             }
 
             var normalizedStatus = normalize(status);
+            currentCrStatus = normalizedStatus;
 
-            // Show "Proceed to QA Test" for Testing / TestingDraft statuses, and
-            // point it at the correct CR. Hidden (and its href cleared) otherwise.
-            var isQaEligible = qaEligibleStatuses.indexOf(normalizedStatus) !== -1;
+            // Show Approve/Reject + the picker for both the 'Security' status (handover
+            // to tester) and the 'Testing' status (handover to final approver), as long
+            // as the logged-in user is the assigned approver on the CR.
+            var canAct = actionableStatuses.indexOf(normalizedStatus) !== -1 &&
+                normalizeEmpNo(currentApprover) !== '' &&
+                normalizeEmpNo(currentEmpNo) !== '' &&
+                normalizeEmpNo(currentApprover) === normalizeEmpNo(currentEmpNo);
 
-            if (isQaEligible && currentCrId) {
-                $qaTestBtn
-                    .attr('href', testingUrlBase + '?id=' + encodeURIComponent(currentCrId))
+            if (canAct) {
+                $approveBtn
+                    .text(normalizedStatus === 'testing' ? 'Handover to Final Approver' : 'Handover to Tester')
+                    .removeClass('d-none');
+                $rejectBtn.removeClass('d-none');
+            } else {
+                $approveBtn.addClass('d-none');
+                $rejectBtn.addClass('d-none');
+            }
+
+            if (normalizedStatus === 'approved') {
+                $assessmentBtn
+                    .attr('href', assessmentUrlBase + '?id=' + encodeURIComponent(currentCrId || ''))
                     .removeClass('d-none');
             } else {
-                $qaTestBtn.addClass('d-none').removeAttr('href');
+                $assessmentBtn.addClass('d-none');
             }
 
         });
 
-        // Clear the id once the modal is fully hidden, so a stale id from a
+        // Clear the id/status once the modal is fully hidden, so stale values from a
         // previous open can never leak into a later click if show.bs.modal
         // somehow didn't fire correctly.
         $(crDetailsModal).on('hidden.bs.modal', function () {
             currentCrId = null;
+            currentCrStatus = null;
         });
 
-        // --- Approve: pick a tester inside the confirmation popup, then assign ---
+        // --- Approve: pick someone in the confirmation popup, then act ---
+        // For 'security' status: hands the CR to a tester (live, calls AssignTester).
+        // For 'testing' status: hands the CR to a final approver (UI only for now —
+        // no backend endpoint wired up yet).
         $approveBtn.on('click', function () {
             if (!currentCrId) {
                 Swal.fire({
                     target: crDetailsModal,
-                    title: 'Could not approve',
+                    title: 'Could not proceed',
                     text: 'No valid Change Request ID was found. Please close this dialog and try again.',
                     icon: 'error'
                 });
                 return;
             }
 
-            // Build the tester options from the same list rendered into
+            var isFinalApproverHandover = currentCrStatus === 'testing';
+
+            // Build the picker options from the same list rendered into
             // #modal-approver, so there's a single source of truth for users.
             var inputOptions = {};
             $('#modal-approver option').each(function () {
@@ -603,8 +627,10 @@
             if ($.isEmptyObject(inputOptions)) {
                 Swal.fire({
                     target: crDetailsModal,
-                    title: 'No testers available',
-                    text: 'There are no users available to assign as tester.',
+                    title: 'No users available',
+                    text: isFinalApproverHandover
+                        ? 'There are no users available to assign as final approver.'
+                        : 'There are no users available to assign as tester.',
                     icon: 'error'
                 });
                 return;
@@ -612,18 +638,22 @@
 
             Swal.fire({
                 target: crDetailsModal,
-                title: 'Proceed to Testing ?',
+                title: isFinalApproverHandover ? 'Hand over to Final Approver?' : 'Proceed to Testing ?',
                 icon: 'warning',
                 html:
                     '<select id="swal-tester-select" class="form-control" style="width:100%"></select>',
                 showCancelButton: true,
-                confirmButtonText: 'Yes, approve it',
+                confirmButtonText: isFinalApproverHandover ? 'Yes, hand over' : 'Yes, approve it',
                 cancelButtonText: 'Cancel',
                 confirmButtonColor: '#0acf97',
                 cancelButtonColor: '#6c757d',
                 didOpen: function () {
                     var $swalSelect = $('#swal-tester-select');
-                    $swalSelect.append('<option value="" selected disabled hidden>Select Tester</option>');
+                    $swalSelect.append(
+                        '<option value="" selected disabled hidden>' +
+                        (isFinalApproverHandover ? 'Select Final Approver' : 'Select Tester') +
+                        '</option>'
+                    );
                     $.each(inputOptions, function (val, text) {
                         $swalSelect.append($('<option></option>').attr('value', val).text(text));
                     });
@@ -642,44 +672,79 @@
                     }
                 },
                 preConfirm: function () {
-                    var testerId = $('#swal-tester-select').val();
-                    if (!testerId) {
-                        Swal.showValidationMessage('Please select a tester.');
+                    var selectedId = $('#swal-tester-select').val();
+                    if (!selectedId) {
+                        Swal.showValidationMessage(
+                            isFinalApproverHandover ? 'Please select a final approver.' : 'Please select a tester.'
+                        );
                         return false;
                     }
-                    return testerId;
+                    return selectedId;
                 }
-            }).then(function (result) {
-                if (!result.isConfirmed) return;
+                }).then(function (result) {
+                    if (!result.isConfirmed) return;
 
-                var testerId = result.value;
+                    var selectedId = result.value;
 
-                $.ajax({
-                    url: '@Url.Action("AssignTester", "CRManagement")',
-                    type: 'POST',
-                    data: { id: currentCrId, TesterID: testerId },
-                    headers: {
-                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                    },
-                    success: function () {
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Approved!',
-                            text: 'The tester has been assigned to this Change Request.',
-                            icon: 'success'
-                        }).then(function () { location.reload(); });
-                    },
-                    error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to approve the CR. Please try again.';
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Error',
-                            text: msg,
-                            icon: 'error'
+                    if (isFinalApproverHandover) {
+                        // Testing status -> hand over to the picked Final Approver.
+                        $.ajax({
+                            url: '@Url.Action("AssignFinalApprover", "CRManagement")',
+                            type: 'POST',
+                            data: { id: currentCrId, finalApproverId: selectedId },
+                            headers: {
+                                "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                            },
+                            success: function () {
+                                Swal.fire({
+                                    target: crDetailsModal,
+                                    title: 'Approved!',
+                                    text: 'The Final Approver has been assigned to this Change Request.',
+                                    icon: 'success'
+                                }).then(function () { location.reload(); });
+                            },
+                            error: function (xhr) {
+                                var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to hand over the CR. Please try again.';
+                                Swal.fire({
+                                    target: crDetailsModal,
+                                    title: 'Error',
+                                    text: msg,
+                                    icon: 'error'
+                                });
+                            }
                         });
+                        return;
                     }
+
+                    // Security status -> hand over to the picked Tester.
+                    var testerId = selectedId;
+
+                    $.ajax({
+                        url: '@Url.Action("AssignTester", "CRManagement")',
+                        type: 'POST',
+                        data: { id: currentCrId, TesterID: testerId },
+                        headers: {
+                            "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        success: function () {
+                            Swal.fire({
+                                target: crDetailsModal,
+                                title: 'Approved!',
+                                text: 'The tester has been assigned to this Change Request.',
+                                icon: 'success'
+                            }).then(function () { location.reload(); });
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to approve the CR. Please try again.';
+                            Swal.fire({
+                                target: crDetailsModal,
+                                title: 'Error',
+                                text: msg,
+                                icon: 'error'
+                            });
+                        }
+                    });
                 });
-            });
         });
 
         // --- Reject: UI only for now, functionality to be implemented later ---
@@ -687,7 +752,7 @@
             Swal.fire({
                 target: crDetailsModal,
                 title: 'Coming soon',
-                text: 'Reject functionality for tester assignment will be implemented later.',
+                text: 'Reject functionality will be implemented later.',
                 icon: 'info'
             });
         });
