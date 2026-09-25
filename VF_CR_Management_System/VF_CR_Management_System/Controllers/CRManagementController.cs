@@ -2,6 +2,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net.Mail;
 using System.Threading.Tasks;
 using VF_CR_Management_System.Business.ChangeRequestHandler;
@@ -9,6 +12,8 @@ using VF_CR_Management_System.Business.DivisionHandler;
 using VF_CR_Management_System.Business.ModuleHandler;
 using VF_CR_Management_System.Business.UserHandler;
 using VF_CR_Management_System.Business.VendorHandler;
+using VF_CR_Management_System.Data.Models;
+using Attachment = VF_CR_Management_System.Data.Models.Attachment;
 
 namespace VF_CR_Management_System.Controllers
 {
@@ -842,6 +847,24 @@ namespace VF_CR_Management_System.Controllers
             {
                 return StatusCode(500, new { message = "An unexpected error occurred while approving the CR." });
             }
+        }
+
+
+        [HttpGet]
+        public async Task<IActionResult> CRDetailsPartial(int id)
+        {
+            var cr = await _changeRequestService.GetChangeRequestByIdAsync(id);
+            if (cr == null)
+                return NotFound();
+
+
+            var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id);
+            cr.Attachments = attachments?.ToList() ?? new List<Attachment>();
+
+            ViewBag.CurrentEmpNo = HttpContext.Session.GetString("EmpNo");
+            ViewBag.Users = await _userService.GetAllUsersAsync();
+
+            return PartialView("_CRDetailsPartial", cr);
         }
 
     }

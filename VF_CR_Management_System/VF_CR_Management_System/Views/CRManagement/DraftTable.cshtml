@@ -63,6 +63,20 @@
                             overflow: hidden;
                             text-overflow: ellipsis;
                         }
+
+                    /* Stacked modal fix: image preview modal must sit above crDetailsModal */
+                    #imagePreviewModal {
+                        z-index: 1070;
+                    }
+
+                    .modal-backdrop + .modal-backdrop {
+                        z-index: 1065;
+                    }
+
+                    #imagePreviewImg {
+                        max-width: 100%;
+                        max-height: 70vh;
+                    }
                 </style>
 
                 <div class="table-responsive">
@@ -128,7 +142,7 @@
                                         </td>
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
-                                            @if(cr.Status == "Draft")
+                                            @if (cr.Status == "Draft")
                                             {
                                                 <div class="d-flex gap-1">
                                                     <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
@@ -152,23 +166,11 @@
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#crDetailsModal"
                                                             data-bs-crid="@cr.CRID"
-                                                            data-bs-crnumber="@cr.CRNumber"
-                                                            data-bs-title="@cr.ChangeTitle"
-                                                            data-bs-summary="@cr.Summary"
-                                                            data-bs-changetype="@cr.ChangeType"
-                                                            data-bs-division="@cr.Division"
-                                                            data-bs-module="@cr.Module"
-                                                            data-bs-priority="@cr.Priority"
-                                                            data-bs-status="@cr.Status"
-                                                            data-bs-requestedby="@cr.RequestedBy"
-                                                            data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
-                                                            data-bs-currentapprover="@cr.ApproverUserName"
                                                             title="View">
                                                         <i class="ri-eye-line"></i>
                                                     </button>
                                                 </div>
                                             }
-
                                         </td>
                                     </tr>
                                 }
@@ -181,63 +183,35 @@
     </div>
 </div>
 
-<!-- CR Details Modal (read-only view, populated via event.relatedTarget) -->
+<!-- CR Details Modal shell — content is loaded from the shared partial via AJAX -->
 <div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" id="crDetailsModalContent">
+            <!-- populated by AJAX -->
+        </div>
+    </div>
+</div>
+
+<!-- Image Preview Modal (stacked on top of crDetailsModal) -->
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="crDetailsModalLabel">Change Request Details</h5>
-                <div class="ms-auto d-flex align-items-center">
-                    <label class="col-form-label fw-semibold me-2">CR Number:</label>
-                    <span id="modal-crnumber" class="fw-bold"></span>
-                </div>
+                <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Title:</label>
-                        <span id="modal-title"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Status:</label>
-                        <span id="modal-status"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
-                        <span id="modal-changetype"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Priority:</label>
-                        <span id="modal-priority"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Division:</label>
-                        <span id="modal-division"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Module:</label>
-                        <span id="modal-module"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
-                        <span id="modal-requestedby"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Approver:</label>
-                        <span id="modal-currentapprover"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
-                        <span id="modal-requesteddate"></span>
-                    </div>
-                    <div class="col-md-12">
-                        <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
-                        <span id="modal-summary"></span>
+            <div class="modal-body text-center">
+                <div id="imagePreviewSpinner" class="py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
                 </div>
+                <img id="imagePreviewImg" src="" alt="Attachment preview" class="img-fluid d-none" />
             </div>
             <div class="modal-footer">
+                <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
+                    <i class="ri-download-2-line me-1"></i> Download
+                </a>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -262,24 +236,105 @@
             });
         });
 
-        document.getElementById('crDetailsModal').addEventListener('show.bs.modal', function (event) {
-            var button = event.relatedTarget; // button that triggered the modal
-            if (!button) return;
+        var crDetailsModal = document.getElementById('crDetailsModal');
+        var $modalContent = $('#crDetailsModalContent');
+        var partialUrlBase = '@Url.Action("CRDetailsPartial", "CRManagement")';
+        var previewUrlBase = '@Url.Action("PreviewAttachment", "CRManagement")';
+        var downloadUrlBase = '@Url.Action("DownloadAttachment", "CRManagement")';
 
-            console.log('Approver attr:', button.getAttribute('data-bs-currentapprover')); // ADD THIS
-            console.log('All dataset:', button.dataset);
+        // Single source of truth for the currently-open CR's id.
+        var currentCrId = null;
 
-            document.getElementById('modal-crnumber').textContent = button.getAttribute('data-bs-crnumber') || '';
-            document.getElementById('modal-title').textContent = button.getAttribute('data-bs-title') || '';
-            document.getElementById('modal-status').textContent = button.getAttribute('data-bs-status') || '';
-            document.getElementById('modal-changetype').textContent = button.getAttribute('data-bs-changetype') || '';
-            document.getElementById('modal-priority').textContent = button.getAttribute('data-bs-priority') || '';
-            document.getElementById('modal-division').textContent = button.getAttribute('data-bs-division') || '';
-            document.getElementById('modal-module').textContent = button.getAttribute('data-bs-module') || '';
-            document.getElementById('modal-requestedby').textContent = button.getAttribute('data-bs-requestedby') || '';
-            document.getElementById('modal-currentapprover').textContent = button.getAttribute('data-bs-currentapprover') || '';
-            document.getElementById('modal-requesteddate').textContent = button.getAttribute('data-bs-requesteddate') || '';
-            document.getElementById('modal-summary').textContent = button.getAttribute('data-bs-summary') || '';
+        // --- Image preview modal wiring ---
+        var imagePreviewModalEl = document.getElementById('imagePreviewModal');
+        var imagePreviewModal = new bootstrap.Modal(imagePreviewModalEl);
+        var $imagePreviewImg = $('#imagePreviewImg');
+        var $imagePreviewSpinner = $('#imagePreviewSpinner');
+        var $imagePreviewDownloadBtn = $('#imagePreviewDownloadBtn');
+
+        // Delegated click handler: attachments list is injected fresh each time the
+        // details modal opens, so binding on the static container avoids needing to
+        // re-wire handlers after every AJAX load.
+        $modalContent.on('click', 'a.preview-image-link', function (e) {
+            e.preventDefault();
+
+            var attachmentId = $(this).data('attachment-id');
+            var fileName = $(this).data('file-name');
+            var previewUrl = previewUrlBase + '?id=' + encodeURIComponent(attachmentId);
+            var downloadUrl = downloadUrlBase + '?id=' + encodeURIComponent(attachmentId);
+
+            $imagePreviewImg.addClass('d-none').attr('src', '');
+            $imagePreviewSpinner.removeClass('d-none');
+            $imagePreviewDownloadBtn.attr('href', downloadUrl).attr('download', fileName);
+            $('#imagePreviewModalLabel').text(fileName || 'Attachment Preview');
+
+            imagePreviewModal.show();
+
+            var img = new Image();
+            img.onload = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.attr('src', previewUrl).removeClass('d-none');
+            };
+            img.onerror = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.removeClass('d-none').attr('alt', 'Failed to load image');
+            };
+            img.src = previewUrl;
+        });
+
+        // Keep crDetailsModal's backdrop visible when the nested image modal closes
+        imagePreviewModalEl.addEventListener('hidden.bs.modal', function () {
+            if (crDetailsModal.classList.contains('show')) {
+                document.body.classList.add('modal-open');
+            }
+        });
+
+        // Load the partial fresh every time the modal opens.
+        crDetailsModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            if (!button) {
+                console.error('crDetailsModal opened without a relatedTarget button.');
+                return;
+            }
+
+            var rawCrid = button.getAttribute('data-bs-crid');
+            currentCrId = parseInt(rawCrid, 10);
+            if (isNaN(currentCrId) || currentCrId <= 0) {
+                currentCrId = null;
+            }
+
+            $modalContent.html(
+                '<div class="modal-body text-center py-5">' +
+                '<div class="spinner-border text-primary" role="status"></div></div>'
+            );
+
+            if (!currentCrId) {
+                $modalContent.html('<div class="modal-body text-danger">Invalid Change Request.</div>');
+                return;
+            }
+
+            $.get(partialUrlBase, { id: currentCrId })
+                .done(function (html) {
+                    $modalContent.html(html);
+
+                    // select2 only exists in the DOM when the partial renders the
+                    // approver dropdown (status === Submitted), so guard for it.
+                    var $approver = $('#modal-approver');
+                    if ($approver.length) {
+                        $approver.select2({
+                            dropdownParent: $(crDetailsModal),
+                            width: '100%'
+                        });
+                    }
+                })
+                .fail(function () {
+                    $modalContent.html('<div class="modal-body text-danger">Failed to load Change Request details.</div>');
+                });
+        });
+
+        $(crDetailsModal).on('hidden.bs.modal', function () {
+            currentCrId = null;
+            $modalContent.empty();
         });
 
         $('#basic-datatable').on('click', '.btn-submit-cr', function () {

@@ -1,0 +1,223 @@
+﻿@model VF_CR_Management_System.Data.Models.ChangeRequest
+@{
+    var currentEmpNo = ViewBag.CurrentEmpNo as string ?? string.Empty;
+    var isSubmitted = string.Equals(Model.Status, "Submitted", StringComparison.OrdinalIgnoreCase);
+    var isApproved = string.Equals(Model.Status, "Approved", StringComparison.OrdinalIgnoreCase);
+    var isAssessment = string.Equals(Model.Status, "Assessment", StringComparison.OrdinalIgnoreCase);
+    var imageExt = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+}
+
+<style>
+    .cr-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 1rem 1.5rem;
+        align-items: start;
+    }
+
+        .cr-detail-grid .cr-field-wide {
+            grid-column: 1 / -1; /* spans full row width — for long text fields */
+        }
+
+        .cr-detail-grid .cr-field-half {
+            grid-column: span 2; /* roughly col-md-6 width — spans two grid cells */
+        }
+
+        .cr-detail-grid label {
+            margin-bottom: 0.15rem;
+        }
+
+        .cr-detail-grid span {
+            word-break: break-word;
+        }
+</style>
+
+@{
+    // Renders a label + value block, but only when value isn't null/empty/whitespace.
+    // Keeps every field's visibility rule in one place instead of an @if per field.
+    // "wide" spans the field across the full grid row (for long text fields).
+    void DetailField(string label, string? value, bool wide = false)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            <div class="@(wide ? "cr-field-wide" : "")">
+                <label class="fw-bold text-dark d-block mb-1">@label:</label>
+                <span>@value</span>
+            </div>
+        }
+    }
+}
+
+<div class="modal-header">
+    <h5 class="modal-title">Change Request Details</h5>
+    <div class="ms-auto d-flex align-items-center">
+        <label class="col-form-label fw-semibold me-2">CR Number:</label>
+        <span class="fw-bold">@Model.CRNumber</span>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body">
+    <div class="cr-detail-grid">
+
+        @{
+            DetailField("Title", Model.ChangeTitle, wide: true);
+        }
+        @{
+            DetailField("Status", Model.Status);
+        }
+        @{
+            DetailField("Change Type", Model.ChangeType);
+        }
+        @{
+            DetailField("Other Change Type", Model.OtherChangeType);
+        }
+        @{
+            DetailField("Priority", Model.Priority);
+        }
+        @{
+            DetailField("Division", Model.Division);
+        }
+        @{
+            DetailField("Module", Model.Module);
+        }
+        @{
+            DetailField("Change Impact", Model.ChangeImpact);
+        }
+        @{
+            DetailField("Vendor", Model.Vendor);
+        }
+        @{
+            DetailField("Proposal Number", Model.ProposalNumber);
+        }
+        @{
+            DetailField("Requested By", Model.RequestedBy);
+        }
+        @{
+            DetailField("Requested Date", Model.RequestedDate.ToString("yyyy/MM/dd"));
+        }
+        @{
+            DetailField("Due Date", Model.DueDate?.ToString("yyyy/MM/dd"));
+        }
+        @{
+            DetailField("Completed Date", Model.CompletedDate?.ToString("yyyy/MM/dd"));
+        }
+        @{
+            DetailField("Approver", Model.ApproverUserName);
+        }
+        @{
+            DetailField("Implementer", Model.ImplementerUserName);
+        }
+        @{
+            DetailField("IS Officer", Model.ISOfficerUserName);
+        }
+
+        @{
+            DetailField("Summary & Business Justification", Model.Summary, wide: true);
+        }
+        @{
+            DetailField("Business Impact", Model.BusinessImpact, wide: true);
+        }
+        @{
+            DetailField("Reason", Model.Reason, wide: true);
+        }
+        @{
+            DetailField("Expected Benefit", Model.ExpectedBenefit, wide: true);
+        }
+        @{
+            DetailField("Rollback Plan", Model.RollbackPlan, wide: true);
+        }
+        @{
+            DetailField("Risk Assessment", Model.RiskAssessment, wide: true);
+        }
+        @{
+            DetailField("Activities & Tasks", Model.ActivitiesTasks, wide: true);
+        }
+        @{
+            DetailField("Fixed Assets", Model.FixedAssets, wide: true);
+        }
+
+        @if (Model.Attachments != null && Model.Attachments.Any())
+        {
+            <div class="cr-field-wide">
+                <label class="fw-bold text-dark d-block mb-1">Attachments:</label>
+                <ul class="list-unstyled mb-0">
+                    @foreach (var a in Model.Attachments)
+                    {
+                        var ext = System.IO.Path.GetExtension(a.FileName)?.ToLowerInvariant() ?? "";
+                        var isImage = imageExt.Contains(ext);
+                        var isPdf = ext == ".pdf";
+                        <li class="mb-1">
+                            @if (isImage)
+                            {
+                                <a href="#" class="preview-image-link"
+                                   data-attachment-id="@a.AttachmentID"
+                                   data-file-name="@a.FileName">
+                                    <i class="ri-image-line me-1"></i>@a.FileName
+                                </a>
+                            }
+                            else if (isPdf)
+                            {
+                                <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = a.AttachmentID })"
+                                   target="_blank" rel="noopener">
+                                    <i class="ri-file-pdf-line me-1"></i>@a.FileName
+                                </a>
+                            }
+                            else
+                            {
+                                <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = a.AttachmentID })" download>
+                                    <i class="ri-download-2-line me-1"></i>@a.FileName
+                                </a>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(a.UploadedBy) || a.UploadedDate != default)
+                            {
+                                <small class="text-muted">
+                                    (@a.UploadedBy — @a.UploadedDate.ToString("yyyy/MM/dd"))
+                                </small>
+                            }
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+
+        @if (isSubmitted)
+        {
+            <div class="cr-field-half" id="modal-approver-wrapper">
+                <div class="card-body p-0">
+                    <label class="form-label" for="modal-approver">Select Implementer</label>
+                    <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
+                        <option value="" selected disabled hidden>Select User</option>
+                        @if (ViewBag.Users != null)
+                        {
+                            @foreach (var user in ViewBag.Users)
+                            {
+                                <option value="@user.UserName">@user.FirstName @user.LastName - @user.UserName</option>
+                            }
+                        }
+                    </select>
+                    <span id="modal-approver-error" class="text-danger d-none">Please select an user.</span>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="modal-footer">
+    @if (isSubmitted)
+    {
+        <button type="button" id="modal-approve-btn" class="btn btn-success" data-id="@Model.CRID">Approve</button>
+        <button type="button" id="modal-reject-btn" class="btn btn-danger" data-id="@Model.CRID">Reject</button>
+    }
+    @if (isApproved)
+    {
+        <a href="@Url.Action("Assessment", "CRManagement", new { id = Model.CRID })" class="btn btn-warning">Go to Assessment</a>
+    }
+    @if (isAssessment)
+    {
+        <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = Model.CRID })" class="btn btn-info">
+            <i class="ri-shield-check-line me-1"></i>Proceed to Security Assessment
+        </a>
+    }
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+</div>

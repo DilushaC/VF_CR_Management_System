@@ -1,8 +1,6 @@
 ﻿@model IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>
 @{
     ViewData["Title"] = "CR Management";
-    var currentEmpNo = ViewBag.CurrentEmpNo as string ?? string.Empty;
-    var userName = ViewBag.UserName as string ?? string.Empty;
 }
 
 <div class="row">
@@ -114,6 +112,10 @@
                                             {
                                                 <span class="badge bg-success">@cr.Status</span>
                                             }
+                                            else if (string.Equals(cr.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger">@cr.Status</span>
+                                            }
                                             else
                                             {
                                                 <span class="badge bg-info">@cr.Status</span>
@@ -128,17 +130,6 @@
                                                         data-bs-toggle="modal"
                                                         data-bs-target="#crDetailsModal"
                                                         data-bs-crid="@cr.CRID"
-                                                        data-bs-crnumber="@cr.CRNumber"
-                                                        data-bs-title="@cr.ChangeTitle"
-                                                        data-bs-summary="@cr.Summary"
-                                                        data-bs-changetype="@cr.ChangeType"
-                                                        data-bs-division="@cr.Division"
-                                                        data-bs-module="@cr.Module"
-                                                        data-bs-priority="@cr.Priority"
-                                                        data-bs-status="@cr.Status"
-                                                        data-bs-requestedby="@cr.RequestedBy"
-                                                        data-bs-requesteddate="@cr.RequestedDate.ToString("yyyy/MM/dd")"
-                                                        data-bs-currentapprover="@cr.ApproverUserName"
                                                         title="View">
                                                     <i class="ri-eye-line"></i>
                                                 </button>
@@ -155,79 +146,11 @@
     </div>
 </div>
 
-<!-- CR Details Modal (read-only view, populated via event.relatedTarget) -->
+<!-- CR Details Modal shell — content is loaded from the partial via AJAX -->
 <div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="crDetailsModalLabel">Change Request Details</h5>
-                <div class="ms-auto d-flex align-items-center">
-                    <label class="col-form-label fw-semibold me-2">CR Number:</label>
-                    <span id="modal-crnumber" class="fw-bold"></span>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Title:</label>
-                        <span id="modal-title"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Status:</label>
-                        <span id="modal-status"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
-                        <span id="modal-changetype"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Priority:</label>
-                        <span id="modal-priority"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Division:</label>
-                        <span id="modal-division"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Module:</label>
-                        <span id="modal-module"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
-                        <span id="modal-requestedby"></span>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
-                        <span id="modal-requesteddate"></span>
-                    </div>
-                    <div class="col-md-12">
-                        <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
-                        <span id="modal-summary"></span>
-                    </div>
-                    <div class="col-md-6" id="modal-approver-wrapper">
-                        <div class="card-body">
-                            <label class="form-label" for="modal-approver">Select Implementer</label>
-                            <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
-                                <option value="" selected disabled hidden>Select User</option>
-                                @if (ViewBag.Users != null)
-                                {
-                                    @foreach (var user in ViewBag.Users)
-                                    {
-                                        <option value="@user.UserName">@user.FirstName @user.LastName - @user.UserName</option>
-                                    }
-                                }
-                            </select>
-                            <span id="modal-approver-error" class="text-danger d-none">Please select an user.</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" id="modal-approve-btn" class="btn btn-success">Approve</button>
-                <button type="button" id="modal-reject-btn" class="btn btn-danger">Reject</button>
-            </div>
+        <div class="modal-content" id="crDetailsModalContent">
+            <!-- populated by AJAX -->
         </div>
     </div>
 </div>
@@ -236,9 +159,6 @@
     <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
     <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
     <script>
-        // Logged-in user's EmpNo, rendered server-side so it can be compared client-side.
-        var currentEmpNo = '@currentEmpNo';
-
         $(document).ready(function () {
             $('#basic-datatable').DataTable({
                 responsive: false,
@@ -253,108 +173,70 @@
             });
         });
 
-        // Populate the CR Details modal from the button that triggered it
         var crDetailsModal = document.getElementById('crDetailsModal');
-        var $approveBtn = $('#modal-approve-btn');
-        var $rejectBtn = $('#modal-reject-btn');
-        var $approverWrapper = $('#modal-approver-wrapper');
+        var $modalContent = $('#crDetailsModalContent');
+        var partialUrlBase = '@Url.Action("CRDetailsPartial", "CRManagement")';
 
-        // Single source of truth for the currently-open CR's id — a plain JS
-        // variable, not jQuery's .data() cache and not a DOM attribute, so
-        // there's no ambiguity about where it lives or how it's read.
+        // Single source of truth for the currently-open CR's id.
         var currentCrId = null;
 
-        function normalize(value) {
-            return (value || '').trim().toLowerCase();
-        }
-
+        // Load the partial fresh every time the modal opens.
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
-
             if (!button) {
-                console.error('crDetailsModal opened without a relatedTarget button — cannot determine CRID.');
-                currentCrId = null;
+                console.error('crDetailsModal opened without a relatedTarget button.');
                 return;
             }
 
             var rawCrid = button.getAttribute('data-bs-crid');
-
-            if (!rawCrid || rawCrid === '0') {
-                console.warn('[crDetailsModal] Button has invalid data-bs-crid:', JSON.stringify(rawCrid), button);
-            }
-
             currentCrId = parseInt(rawCrid, 10);
             if (isNaN(currentCrId) || currentCrId <= 0) {
                 currentCrId = null;
             }
 
-            var crnumber = button.getAttribute('data-bs-crnumber');
-            var title = button.getAttribute('data-bs-title');
-            var summary = button.getAttribute('data-bs-summary');
-            var changetype = button.getAttribute('data-bs-changetype');
-            var priority = button.getAttribute('data-bs-priority');
-            var division = button.getAttribute('data-bs-division');
-            var module = button.getAttribute('data-bs-module');
-            var status = button.getAttribute('data-bs-status');
-            var requestedby = button.getAttribute('data-bs-requestedby');
-            var requesteddate = button.getAttribute('data-bs-requesteddate');
-            var currentApprover = button.getAttribute('data-bs-currentapprover');
+            $modalContent.html(
+                '<div class="modal-body text-center py-5">' +
+                '<div class="spinner-border text-primary" role="status"></div></div>'
+            );
 
-            crDetailsModal.querySelector('#modal-crnumber').textContent = crnumber || '';
-            crDetailsModal.querySelector('#modal-title').textContent = title || '';
-            crDetailsModal.querySelector('#modal-status').textContent = status || '';
-            crDetailsModal.querySelector('#modal-changetype').textContent = changetype || '';
-            crDetailsModal.querySelector('#modal-priority').textContent = priority || '';
-            crDetailsModal.querySelector('#modal-division').textContent = division || '';
-            crDetailsModal.querySelector('#modal-module').textContent = module || '';
-            crDetailsModal.querySelector('#modal-requestedby').textContent = requestedby || '';
-            crDetailsModal.querySelector('#modal-requesteddate').textContent = requesteddate || '';
-            crDetailsModal.querySelector('#modal-summary').textContent = summary || '';
-
-            var normalizedStatus = normalize(status);
-
-            var isSubmitted = normalizedStatus === 'submitted';
-
-            if (isSubmitted) {
-                $approveBtn.removeClass('d-none');
-                $rejectBtn.removeClass('d-none');
-                $approverWrapper.removeClass('d-none');
-            } else {
-                $approveBtn.addClass('d-none');
-                $rejectBtn.addClass('d-none');
-                $approverWrapper.addClass('d-none');
+            if (!currentCrId) {
+                $modalContent.html('<div class="modal-body text-danger">Invalid Change Request.</div>');
+                return;
             }
 
-            $('#modal-approver').val('').trigger('change');
-            $('#modal-approver-error').addClass('d-none');
+            $.get(partialUrlBase, { id: currentCrId })
+                .done(function (html) {
+                    $modalContent.html(html);
+
+                    // Initialize select2 here, now that the dropdown actually exists in the DOM.
+                    var $approver = $('#modal-approver');
+                    if ($approver.length) {
+                        $approver.select2({
+                            dropdownParent: $(crDetailsModal),
+                            width: '100%'
+                        });
+                    }
+                })
+                .fail(function () {
+                    $modalContent.html('<div class="modal-body text-danger">Failed to load Change Request details.</div>');
+                });
         });
 
-        // Clear the id once the modal is fully hidden, so a stale id from a
-        // previous open can never leak into a later click if show.bs.modal
-        // somehow didn't fire correctly.
         $(crDetailsModal).on('hidden.bs.modal', function () {
             currentCrId = null;
+            $modalContent.empty();
         });
 
-        $(crDetailsModal).on('shown.bs.modal', function () {
-            $('#modal-approver').select2({
-                dropdownParent: $(crDetailsModal)
-            });
-        });
 
-        $approveBtn.on('click', function () {
+        // Approve/Reject buttons are injected dynamically by the partial, so bind
+        // via delegation on the static modal container rather than on the buttons directly.
+        $modalContent.on('click', '#modal-approve-btn', function () {
             if (!currentCrId) {
-                Swal.fire({
-                    target: crDetailsModal,
-                    title: 'Could not approve',
-                    text: 'No valid Change Request ID was found. Please close this dialog and try again.',
-                    icon: 'error'
-                });
+                Swal.fire({ target: crDetailsModal, title: 'Could not approve', text: 'No valid Change Request ID was found. Please close this dialog and try again.', icon: 'error' });
                 return;
             }
 
             var approverId = $('#modal-approver').val();
-
             if (!approverId) {
                 $('#modal-approver-error').removeClass('d-none');
                 return;
@@ -378,38 +260,22 @@
                     url: '@Url.Action("Approve", "CRManagement")',
                     type: 'POST',
                     data: { id: currentCrId, ApproverID: approverId },
-                    headers: {
-                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                    },
+                    headers: { "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val() },
                     success: function () {
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Approved!',
-                            text: 'The Change Request has been approved.',
-                            icon: 'success'
-                        }).then(function () { location.reload(); });
+                        Swal.fire({ target: crDetailsModal, title: 'Approved!', text: 'The Change Request has been approved.', icon: 'success' })
+                            .then(function () { location.reload(); });
                     },
                     error: function (xhr) {
                         var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to approve the CR. Please try again.';
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Error',
-                            text: msg,
-                            icon: 'error'
-                        });
+                        Swal.fire({ target: crDetailsModal, title: 'Error', text: msg, icon: 'error' });
                     }
                 });
             });
         });
 
-        $rejectBtn.on('click', function () {
+        $modalContent.on('click', '#modal-reject-btn', function () {
             if (!currentCrId) {
-                Swal.fire({
-                    target: crDetailsModal,
-                    title: 'Could not reject',
-                    text: 'No valid Change Request ID was found. Please close this dialog and try again.',
-                    icon: 'error'
-                });
+                Swal.fire({ target: crDetailsModal, title: 'Could not reject', text: 'No valid Change Request ID was found. Please close this dialog and try again.', icon: 'error' });
                 return;
             }
 
@@ -425,37 +291,23 @@
                 confirmButtonColor: '#fa5c7c',
                 cancelButtonColor: '#6c757d',
                 inputValidator: function (value) {
-                    if (!value || !value.trim()) {
-                        return 'Please provide a reason for rejection.';
-                    }
+                    if (!value || !value.trim()) return 'Please provide a reason for rejection.';
                 }
             }).then(function (result) {
                 if (!result.isConfirmed) return;
-                var reason = result.value;
 
                 $.ajax({
                     url: '@Url.Action("Reject", "CRManagement")',
                     type: 'POST',
-                    data: { id: currentCrId, RejectReason: reason },
-                    headers: {
-                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                    },
+                    data: { id: currentCrId, RejectReason: result.value },
+                    headers: { "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val() },
                     success: function () {
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Rejected',
-                            text: 'The Change Request has been rejected.',
-                            icon: 'success'
-                        }).then(function () { location.reload(); });
+                        Swal.fire({ target: crDetailsModal, title: 'Rejected', text: 'The Change Request has been rejected.', icon: 'success' })
+                            .then(function () { location.reload(); });
                     },
                     error: function (xhr) {
                         var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to reject the CR. Please try again.';
-                        Swal.fire({
-                            target: crDetailsModal,
-                            title: 'Error',
-                            text: msg,
-                            icon: 'error'
-                        });
+                        Swal.fire({ target: crDetailsModal, title: 'Error', text: msg, icon: 'error' });
                     }
                 });
             });
