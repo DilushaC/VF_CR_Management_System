@@ -1,10 +1,66 @@
-﻿@model VF_CR_Management_System.Data.Models.ChangeRequest
+﻿@using VF_CR_Management_System.Data.Models
+@model VF_CR_Management_System.Data.Models.ChangeRequest
 @{
     var currentEmpNo = ViewBag.CurrentEmpNo as string ?? string.Empty;
-    var isSubmitted = string.Equals(Model.Status, "Submitted", StringComparison.OrdinalIgnoreCase);
     var isApproved = string.Equals(Model.Status, "Approved", StringComparison.OrdinalIgnoreCase);
     var isAssessment = string.Equals(Model.Status, "Assessment", StringComparison.OrdinalIgnoreCase);
+    var isSecurityStatus = string.Equals(Model.Status, "Security", StringComparison.OrdinalIgnoreCase);
     var imageExt = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+
+    var hasAssignedUsers = new[]
+    {
+        Model.ApproverUserName,
+        Model.AssessmentUserName,
+        Model.SecurityUserName,
+        Model.TestingUserName,
+        Model.FinalApproverUserName,
+        Model.TesterUserName,
+        Model.TestingApproverUserName
+    }.Any(u => !string.IsNullOrWhiteSpace(u));
+
+    // Strips a DOMAIN\ prefix and whitespace so both sides compare cleanly.
+    string Normalize(string? u)
+    {
+        u = (u ?? string.Empty).Trim();
+        var slash = u.LastIndexOf('\\');
+        return slash >= 0 ? u.Substring(slash + 1) : u;
+    }
+
+    // Identifiers that may identify the logged-in user in Approval.AssignedTo
+    var currentIds = new[]
+    {
+        Normalize(ViewBag.CurrentEmpNo as string),
+        Normalize(ViewBag.CurrentUserName as string),
+        Normalize(User.Identity?.Name)
+    }
+    .Where(x => x.Length > 0)
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToList();
+
+    // Compares against the RAW value in StepAssignments[..].AssignedTo
+    bool IsAssignedTo(int stepId)
+    {
+        var assignee = Normalize(Model.StepAssignments?
+            .FirstOrDefault(s => s.StepID == stepId)?.AssignedTo);
+
+        return assignee.Length > 0
+            && currentIds.Any(id => string.Equals(id, assignee, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // A step is pending while it is not approved and has no real decision
+    // (a default "Pending" value in Decision counts as no decision)
+    bool IsPending(WorkflowStepAssignment? step) =>
+        step != null
+        && step.IsApproved != true
+        && (string.IsNullOrWhiteSpace(step.Decision)
+            || string.Equals(step.Decision.Trim(), "Pending", StringComparison.OrdinalIgnoreCase));
+
+    var deptHeadStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 1); // Department Head Approval
+    var securityStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 3); // Security
+
+    var canApprove = IsAssignedTo(1) && IsPending(deptHeadStep);
+    var canGoAssessment = isApproved && IsAssignedTo(2);
+    var canGoSecurity = (isAssessment || isSecurityStatus) && IsAssignedTo(3) && IsPending(securityStep);
 }
 
 <style>
@@ -16,11 +72,11 @@
     }
 
         .cr-detail-grid .cr-field-wide {
-            grid-column: 1 / -1; /* spans full row width — for long text fields */
+            grid-column: 1 / -1;
         }
 
         .cr-detail-grid .cr-field-half {
-            grid-column: span 2; /* roughly col-md-6 width — spans two grid cells */
+            grid-column: span 2;
         }
 
         .cr-detail-grid label {
@@ -30,12 +86,17 @@
         .cr-detail-grid span {
             word-break: break-word;
         }
+
+        .cr-detail-grid .cr-section-title {
+            grid-column: 1 / -1;
+            border-top: 1px solid #dee2e6;
+            padding-top: 0.75rem;
+            margin-top: 0.25rem;
+            font-weight: 700;
+        }
 </style>
 
 @{
-    // Renders a label + value block, but only when value isn't null/empty/whitespace.
-    // Keeps every field's visibility rule in one place instead of an @if per field.
-    // "wide" spans the field across the full grid row (for long text fields).
     void DetailField(string label, string? value, bool wide = false)
     {
         if (!string.IsNullOrWhiteSpace(value))
@@ -58,6 +119,7 @@
 </div>
 
 <div class="modal-body">
+
     <div class="cr-detail-grid">
 
         @{
@@ -101,15 +163,6 @@
         }
         @{
             DetailField("Completed Date", Model.CompletedDate?.ToString("yyyy/MM/dd"));
-        }
-        @{
-            DetailField("Approver", Model.ApproverUserName);
-        }
-        @{
-            DetailField("Implementer", Model.ImplementerUserName);
-        }
-        @{
-            DetailField("IS Officer", Model.ISOfficerUserName);
         }
 
         @{
@@ -181,11 +234,28 @@
             </div>
         }
 
-        @if (isSubmitted)
+        @* ===== Assigned users (workflow steps) ===== *@
+        @if (hasAssignedUsers)
         {
+            <div class="cr-section-title">Assigned Users</div>
+
+            DetailField("CR Approver", Model.ApproverUserName);
+            DetailField("Developed By", Model.AssessmentUserName);
+            DetailField("InfoSec Officer", Model.SecurityUserName);
+            DetailField("QA Done By", Model.TestingUserName);
+            DetailField("QA Assigned By", Model.TesterUserName);
+            DetailField("QA Approved By", Model.TestingApproverUserName);
+            DetailField("Final Approver", Model.FinalApproverUserName);
+        }
+
+        @* Implementer picker: below Assigned Users, only for the Department Head assigned to this CR *@
+        @if (canApprove)
+        {
+            <div class="cr-section-title">Select Implementer</div>
+
             <div class="cr-field-half" id="modal-approver-wrapper">
                 <div class="card-body p-0">
-                    <label class="form-label" for="modal-approver">Select Implementer</label>
+                    <label class="form-label" for="modal-approver">Implementer</label>
                     <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
                         <option value="" selected disabled hidden>Select User</option>
                         @if (ViewBag.Users != null)
@@ -204,16 +274,16 @@
 </div>
 
 <div class="modal-footer">
-    @if (isSubmitted)
+    @if (canApprove)
     {
         <button type="button" id="modal-approve-btn" class="btn btn-success" data-id="@Model.CRID">Approve</button>
         <button type="button" id="modal-reject-btn" class="btn btn-danger" data-id="@Model.CRID">Reject</button>
     }
-    @if (isApproved)
+    @if (canGoAssessment)
     {
         <a href="@Url.Action("Assessment", "CRManagement", new { id = Model.CRID })" class="btn btn-warning">Go to Assessment</a>
     }
-    @if (isAssessment)
+    @if (canGoSecurity)
     {
         <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = Model.CRID })" class="btn btn-info">
             <i class="ri-shield-check-line me-1"></i>Proceed to Security Assessment

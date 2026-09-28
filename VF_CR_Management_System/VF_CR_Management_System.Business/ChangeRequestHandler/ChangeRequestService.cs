@@ -163,8 +163,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
 
-            // FIX: RiskAssessment and ChangeImpactID are now selected so the
-            // Security Assessment view can restore a saved draft.
             const string sql = @"
                 SELECT
                     cr.CRID,
@@ -188,17 +186,16 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     m.ModuleName      AS Module,
                     cr.StatusID,
                     s.StatusName      AS Status,
+                    cr.WorkflowID,
                     cr.RequesterUserName AS RequestedBy,
-                    App.AssignedTo    AS ApproverUserName,
                     cr.RequestedDate,
                     cr.DueDate
                 FROM [CRManagementDB].[dbo].[ChangeRequest] cr
                 LEFT JOIN [CRManagementDB].[dbo].[ChangeType] ct ON ct.ChangeTypeID = cr.ChangeTypeID
                 LEFT JOIN [CRManagementDB].[dbo].[Priority]   p  ON p.PriorityID   = cr.PriorityID
                 LEFT JOIN [CRManagementDB].[dbo].[Division]   dv ON dv.DivisionID  = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID    = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID    = cr.StatusID
-                LEFT JOIN [dbo].[Approval] App                    ON App.CRID     = cr.CRID
+                LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID     = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID     = cr.StatusID
                 WHERE cr.Active = 1
                   AND cr.CRID = @CRID";
 
@@ -208,9 +205,60 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (changeRequest == null)
                 return null;
 
-            var userNames = new[] { changeRequest.RequestedBy, changeRequest.ApproverUserName }
+            // ---------- Workflow step assignments (ordered by StepOrder) ----------
+            // A step is returned if it belongs to the CR's workflow OR the CR has an
+            // approval row for it, so a WorkflowID mismatch can no longer hide assignments.
+            const string stepsQuery = @"
+                SELECT
+                    ws.StepID,
+                    ws.StepOrder,
+                    ws.StepName,
+                    ws.ApprovalRequired,
+                    a.AssignedTo,
+                    a.AssignedDate,
+                    a.TargetDate,
+                    a.Decision,
+                    a.IsApproved
+                FROM [CRManagementDB].[dbo].[WorkflowStep] ws
+                LEFT JOIN (
+                    SELECT ap.StepID, ap.AssignedTo, ap.AssignedDate, ap.TargetDate,
+                           ap.Decision, ap.IsApproved,
+                           ROW_NUMBER() OVER (PARTITION BY ap.StepID
+                                              ORDER BY ap.ApprovalID DESC) AS rn
+                    FROM [CRManagementDB].[dbo].[Approval] ap
+                    WHERE ap.CRID = @CRID AND ap.Active = 1
+                ) a ON a.StepID = ws.StepID AND a.rn = 1
+                WHERE ws.Active = 1
+                  AND (ws.WorkflowID = @WorkflowID OR a.StepID IS NOT NULL)
+                ORDER BY ws.StepOrder";
+
+            var stepParams = new DynamicParameters();
+            stepParams.Add("@CRID", crId);
+            stepParams.Add("@WorkflowID", changeRequest.WorkflowID > 0 ? changeRequest.WorkflowID : 3);
+
+            var stepsTable = _connectionService.ReturnWithPara(stepsQuery, stepParams);
+
+            changeRequest.StepAssignments = stepsTable.AsEnumerable()
+                .Select(r => new WorkflowStepAssignment
+                {
+                    StepID = r.Field<int>("StepID"),
+                    StepOrder = r.Field<int>("StepOrder"),
+                    StepName = r.Field<string>("StepName"),
+                    ApprovalRequired = r.Field<bool>("ApprovalRequired"),
+                    AssignedTo = r.Field<string>("AssignedTo"),
+                    AssignedDate = r.Field<DateTime?>("AssignedDate"),
+                    TargetDate = r.Field<DateTime?>("TargetDate"),
+                    Decision = r.Field<string>("Decision"),
+                    IsApproved = r.Field<bool?>("IsApproved")
+                })
+                .ToList();
+
+            // ---------- Resolve full names (requester + every assigned user) ----------
+            var userNames = changeRequest.StepAssignments
+                .Select(x => x.AssignedTo)
+                .Append(changeRequest.RequestedBy)
                 .Where(u => !string.IsNullOrWhiteSpace(u))
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             if (userNames.Any())
@@ -226,27 +274,44 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
 
                 var nameLookup = usersTable.AsEnumerable()
+                    .GroupBy(r => r.Field<string>("UserName"), StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(
-                        r => r.Field<string>("UserName"),
-                        r => $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim(),
+                        g => g.Key,
+                        g =>
+                        {
+                            var r = g.First();
+                            return $"{r.Field<string>("FirstName")} {r.Field<string>("LastName")}".Trim();
+                        },
                         StringComparer.OrdinalIgnoreCase);
 
-                if (!string.IsNullOrWhiteSpace(changeRequest.RequestedBy) &&
-                    nameLookup.TryGetValue(changeRequest.RequestedBy, out var requesterFullName) &&
-                    !string.IsNullOrWhiteSpace(requesterFullName))
-                {
-                    changeRequest.RequestedBy = requesterFullName;
-                }
+                string ResolveName(string userName) =>
+                    !string.IsNullOrWhiteSpace(userName) &&
+                    nameLookup.TryGetValue(userName, out var full) &&
+                    !string.IsNullOrWhiteSpace(full)
+                        ? full
+                        : userName;
 
-                if (!string.IsNullOrWhiteSpace(changeRequest.ApproverUserName) &&
-                    nameLookup.TryGetValue(changeRequest.ApproverUserName, out var approverFullName) &&
-                    !string.IsNullOrWhiteSpace(approverFullName))
-                {
-                    changeRequest.ApproverUserName = approverFullName;
-                }
+                changeRequest.RequestedBy = ResolveName(changeRequest.RequestedBy);
+
+                foreach (var step in changeRequest.StepAssignments)
+                    step.AssignedToName = ResolveName(step.AssignedTo);
             }
 
-            // Fetch Testing records for this CR
+            // ---------- Map each workflow step to its named property (by StepID) ----------
+            string GetAssigneeByStep(int stepId) =>
+                changeRequest.StepAssignments
+                    .FirstOrDefault(s => s.StepID == stepId)
+                    ?.AssignedToName;
+
+            changeRequest.ApproverUserName = GetAssigneeByStep(1); // Department Head Approval
+            changeRequest.AssessmentUserName = GetAssigneeByStep(2); // Assessment
+            changeRequest.SecurityUserName = GetAssigneeByStep(3); // Security
+            changeRequest.TestingUserName = GetAssigneeByStep(4); // Testing
+            changeRequest.FinalApproverUserName = GetAssigneeByStep(5); // Final Approval
+            changeRequest.TesterUserName = GetAssigneeByStep(6); // TesterAssignment
+            changeRequest.TestingApproverUserName = GetAssigneeByStep(7); // TestingApproval
+
+            // ---------- Testing records ----------
             const string testingQuery = @"
                 SELECT TestID, CRID, TestCycleNumber, TestResult, UATComment, TestingDate, Active
                 FROM [CRManagementDB].[dbo].[Testing]
@@ -272,6 +337,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequest;
         }
+
         public Task<IEnumerable<Attachment>> GetAttachmentsByCrIdAsync(int crId)
         {
             if (crId <= 0)

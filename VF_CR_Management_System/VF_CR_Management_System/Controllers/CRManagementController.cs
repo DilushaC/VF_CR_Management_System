@@ -857,11 +857,17 @@ namespace VF_CR_Management_System.Controllers
             if (cr == null)
                 return NotFound();
 
-
             var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id);
             cr.Attachments = attachments?.ToList() ?? new List<Attachment>();
 
-            ViewBag.CurrentEmpNo = HttpContext.Session.GetString("EmpNo");
+            // Approval.AssignedTo stores the employee number (e.g. 4536),
+            // so EmpNo is the value used to match the logged-in user.
+            // The session "UserName" holds the display name (e.g. Kasun Perera) and can't be matched.
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
+            ViewBag.CurrentEmpNo = empNo;
+            ViewBag.CurrentUserName = empNo; // compared with Approval.AssignedTo in the view
+            ViewBag.CurrentDisplayName = HttpContext.Session.GetString("UserName") ?? string.Empty; // display only
             ViewBag.Users = await _userService.GetAllUsersAsync();
 
             return PartialView("_CRDetailsPartial", cr);
