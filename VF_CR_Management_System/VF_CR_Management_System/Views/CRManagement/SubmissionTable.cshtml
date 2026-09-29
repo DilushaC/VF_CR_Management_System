@@ -8,7 +8,7 @@
         <div class="card">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <h4 class="header-title mb-0">Pending Approvals & Approved</h4>
+                    <h4 class="header-title mb-0">Pending CR Approvals</h4>
                 </div>
 
                 <style>
@@ -57,16 +57,25 @@
                             pointer-events: none;
                         }
 
-                    #crDetailsModal .swal2-container {
-                        position: fixed !important;
-                        z-index: 1080 !important;
+                        #basic-datatable td.title-cell {
+                            max-width: 220px;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+
+                    /* Stacked modal fix: image preview modal must sit above crDetailsModal */
+                    #imagePreviewModal {
+                        z-index: 1070;
                     }
 
-                    #basic-datatable td.title-cell {
-                        max-width: 220px;
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
+                    .modal-backdrop + .modal-backdrop {
+                        z-index: 1065;
+                    }
+
+                    #imagePreviewImg {
+                        max-width: 100%;
+                        max-height: 70vh;
                     }
                 </style>
 
@@ -81,9 +90,8 @@
                                 <th>Module</th>
                                 <th>Priority</th>
                                 <th>Status</th>
-                                <th>Requested By</th>
                                 <th>Requested Date</th>
-                                <th>View</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -91,8 +99,11 @@
                             {
                                 @foreach (var cr in Model)
                                 {
+                                    var isDraft = cr.CRNumber != null &&
+                                    cr.CRNumber.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase);
+                                    var displayCrNumber = isDraft ? "WAITING" : cr.CRNumber;
                                     <tr>
-                                        <td title="@cr.CRNumber">@cr.CRNumber</td>
+                                        <td title="@cr.CRNumber">@displayCrNumber</td>
                                         <td class="title-cell" title="@cr.ChangeTitle">@cr.ChangeTitle</td>
                                         <td>@cr.ChangeType</td>
                                         <td>@(string.IsNullOrEmpty(cr.Division) ? "—" : cr.Division)</td>
@@ -108,32 +119,58 @@
                                             }
                                         </td>
                                         <td>
-                                            @if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                            @if (string.Equals(cr.Status, "Submitted", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-warning">@cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
                                             {
                                                 <span class="badge bg-success">@cr.Status</span>
                                             }
-                                            else if (string.Equals(cr.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+                                            else if (string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase))
                                             {
-                                                <span class="badge bg-danger">@cr.Status</span>
+                                                <span class="badge bg-info">Assessment Draft</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Development", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-secondary">Assessment Done</span>
                                             }
                                             else
                                             {
-                                                <span class="badge bg-info">@cr.Status</span>
+                                                @cr.Status
                                             }
                                         </td>
-                                        <td>@cr.RequestedBy</td>
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
-                                            <div class="d-flex gap-1">
-                                                <button type="button"
-                                                        class="btn btn-sm btn-info btn-view"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#crDetailsModal"
-                                                        data-bs-crid="@cr.CRID"
-                                                        title="View">
-                                                    <i class="ri-eye-line"></i>
-                                                </button>
-                                            </div>
+                                            @if (cr.Status == "Draft")
+                                            {
+                                                <div class="d-flex gap-1">
+                                                    <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
+                                                       class="btn btn-sm btn-outline-primary"
+                                                       title="Edit">
+                                                        <i class="ri-edit-line"></i>
+                                                    </a>
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-danger btn-delete-cr"
+                                                            data-id="@cr.CRID"
+                                                            title="Delete">
+                                                        <i class="ri-delete-bin-line"></i>
+                                                    </button>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="d-flex gap-1">
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-info btn-view"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#crDetailsModal"
+                                                            data-bs-crid="@cr.CRID"
+                                                            title="View">
+                                                        <i class="ri-eye-line"></i>
+                                                    </button>
+                                                </div>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -146,11 +183,37 @@
     </div>
 </div>
 
-<!-- CR Details Modal shell — content is loaded from the partial via AJAX -->
+<!-- CR Details Modal shell — content is loaded from the shared partial via AJAX -->
 <div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content" id="crDetailsModalContent">
             <!-- populated by AJAX -->
+        </div>
+    </div>
+</div>
+
+<!-- Image Preview Modal (stacked on top of crDetailsModal) -->
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="imagePreviewSpinner" class="py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <img id="imagePreviewImg" src="" alt="Attachment preview" class="img-fluid d-none" />
+            </div>
+            <div class="modal-footer">
+                <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
+                    <i class="ri-download-2-line me-1"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -165,9 +228,9 @@
                 paging: true,
                 pageLength: 10,
                 lengthChange: true,
-                order: [[8, 'desc']],
+                order: [[7, 'desc']],
                 columnDefs: [
-                    { orderable: false, targets: 9 },
+                    { orderable: false, targets: 8 },
                     { orderable: false, targets: 1 }
                 ]
             });
@@ -176,9 +239,55 @@
         var crDetailsModal = document.getElementById('crDetailsModal');
         var $modalContent = $('#crDetailsModalContent');
         var partialUrlBase = '@Url.Action("CRDetailsPartial", "CRManagement")';
+        var previewUrlBase = '@Url.Action("PreviewAttachment", "CRManagement")';
+        var downloadUrlBase = '@Url.Action("DownloadAttachment", "CRManagement")';
 
         // Single source of truth for the currently-open CR's id.
         var currentCrId = null;
+
+        // --- Image preview modal wiring ---
+        var imagePreviewModalEl = document.getElementById('imagePreviewModal');
+        var imagePreviewModal = new bootstrap.Modal(imagePreviewModalEl);
+        var $imagePreviewImg = $('#imagePreviewImg');
+        var $imagePreviewSpinner = $('#imagePreviewSpinner');
+        var $imagePreviewDownloadBtn = $('#imagePreviewDownloadBtn');
+
+        // Delegated click handler: attachments list is injected fresh each time the
+        // details modal opens, so binding on the static container avoids needing to
+        // re-wire handlers after every AJAX load.
+        $modalContent.on('click', 'a.preview-image-link', function (e) {
+            e.preventDefault();
+
+            var attachmentId = $(this).data('attachment-id');
+            var fileName = $(this).data('file-name');
+            var previewUrl = previewUrlBase + '?id=' + encodeURIComponent(attachmentId);
+            var downloadUrl = downloadUrlBase + '?id=' + encodeURIComponent(attachmentId);
+
+            $imagePreviewImg.addClass('d-none').attr('src', '');
+            $imagePreviewSpinner.removeClass('d-none');
+            $imagePreviewDownloadBtn.attr('href', downloadUrl).attr('download', fileName);
+            $('#imagePreviewModalLabel').text(fileName || 'Attachment Preview');
+
+            imagePreviewModal.show();
+
+            var img = new Image();
+            img.onload = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.attr('src', previewUrl).removeClass('d-none');
+            };
+            img.onerror = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.removeClass('d-none').attr('alt', 'Failed to load image');
+            };
+            img.src = previewUrl;
+        });
+
+        // Keep crDetailsModal's backdrop visible when the nested image modal closes
+        imagePreviewModalEl.addEventListener('hidden.bs.modal', function () {
+            if (crDetailsModal.classList.contains('show')) {
+                document.body.classList.add('modal-open');
+            }
+        });
 
         // Load the partial fresh every time the modal opens.
         crDetailsModal.addEventListener('show.bs.modal', function (event) {
@@ -208,7 +317,8 @@
                 .done(function (html) {
                     $modalContent.html(html);
 
-                    // Initialize select2 here, now that the dropdown actually exists in the DOM.
+                    // select2 only exists in the DOM when the partial renders the
+                    // approver dropdown (status === Submitted), so guard for it.
                     var $approver = $('#modal-approver');
                     if ($approver.length) {
                         $approver.select2({
@@ -227,87 +337,83 @@
             $modalContent.empty();
         });
 
-
-        // Approve/Reject buttons are injected dynamically by the partial, so bind
-        // via delegation on the static modal container rather than on the buttons directly.
-        $modalContent.on('click', '#modal-approve-btn', function () {
-            if (!currentCrId) {
-                Swal.fire({ target: crDetailsModal, title: 'Could not approve', text: 'No valid Change Request ID was found. Please close this dialog and try again.', icon: 'error' });
-                return;
-            }
-
-            var approverId = $('#modal-approver').val();
-            if (!approverId) {
-                $('#modal-approver-error').removeClass('d-none');
-                return;
-            }
-            $('#modal-approver-error').addClass('d-none');
+        $('#basic-datatable').on('click', '.btn-submit-cr', function () {
+            var crid = $(this).data('id');
 
             Swal.fire({
-                target: crDetailsModal,
-                title: 'Approve this Change Request?',
-                text: 'This action cannot be undone.',
-                icon: 'warning',
+                title: 'Submit this Change Request?',
+                text: 'This will send the draft CR forward for processing.',
+                icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Yes, approve it',
+                confirmButtonText: 'Yes, submit it',
                 cancelButtonText: 'Cancel',
-                confirmButtonColor: '#0acf97',
+                confirmButtonColor: '#0d6efd',
                 cancelButtonColor: '#6c757d'
             }).then(function (result) {
                 if (!result.isConfirmed) return;
 
                 $.ajax({
-                    url: '@Url.Action("Approve", "CRManagement")',
+                    url: '@Url.Action("Submit", "CRManagement")',
                     type: 'POST',
-                    data: { id: currentCrId, ApproverID: approverId },
-                    headers: { "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val() },
+                    data: { id: crid },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
                     success: function () {
-                        Swal.fire({ target: crDetailsModal, title: 'Approved!', text: 'The Change Request has been approved.', icon: 'success' })
-                            .then(function () { location.reload(); });
+                        Swal.fire({
+                            title: 'Submitted!',
+                            text: 'The Change Request has been submitted.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
                     },
                     error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to approve the CR. Please try again.';
-                        Swal.fire({ target: crDetailsModal, title: 'Error', text: msg, icon: 'error' });
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
                     }
                 });
             });
         });
 
-        $modalContent.on('click', '#modal-reject-btn', function () {
-            if (!currentCrId) {
-                Swal.fire({ target: crDetailsModal, title: 'Could not reject', text: 'No valid Change Request ID was found. Please close this dialog and try again.', icon: 'error' });
-                return;
-            }
+        $('#basic-datatable').on('click', '.btn-delete-cr', function () {
+            var crid = $(this).data('id');
 
             Swal.fire({
-                target: crDetailsModal,
-                title: 'Reject this Change Request?',
-                input: 'textarea',
-                inputPlaceholder: 'Enter reason for rejection...',
-                inputAttributes: { 'aria-label': 'Rejection reason' },
+                title: 'Delete this Change Request?',
+                text: 'This will permanently remove the draft CR. This action cannot be undone.',
+                icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Yes, reject it',
+                confirmButtonText: 'Yes, delete it',
                 cancelButtonText: 'Cancel',
                 confirmButtonColor: '#fa5c7c',
-                cancelButtonColor: '#6c757d',
-                inputValidator: function (value) {
-                    if (!value || !value.trim()) return 'Please provide a reason for rejection.';
-                }
+                cancelButtonColor: '#6c757d'
             }).then(function (result) {
                 if (!result.isConfirmed) return;
 
                 $.ajax({
-                    url: '@Url.Action("Reject", "CRManagement")',
+                    url: '@Url.Action("Delete", "CRManagement")',
                     type: 'POST',
-                    data: { id: currentCrId, RejectReason: result.value },
-                    headers: { "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val() },
+                    data: { id: crid },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
                     success: function () {
-                        Swal.fire({ target: crDetailsModal, title: 'Rejected', text: 'The Change Request has been rejected.', icon: 'success' })
-                            .then(function () { location.reload(); });
+                        Swal.fire({
+                            title: 'Deleted',
+                            text: 'The Change Request has been deleted.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
                     },
                     error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to reject the CR. Please try again.';
-                        Swal.fire({ target: crDetailsModal, title: 'Error', text: msg, icon: 'error' });
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete the CR. Please try again.';
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
                     }
                 });
             });

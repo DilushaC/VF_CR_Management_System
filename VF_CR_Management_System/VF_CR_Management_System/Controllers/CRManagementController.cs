@@ -165,17 +165,17 @@ namespace VF_CR_Management_System.Controllers
                 var success = await _changeRequestService.ApproveChangeRequestAsync(id, ApproverID, empNo);
 
                 if (!success)
-                    return BadRequest(new { message = "Failed to approve the Change Request." });
+                    return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
 
-                return Ok(new { message = "Change Request approved successfully." });
+                return Ok(new { success = true, message = "Change Request approved successfully." });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(new { success = false, message = ex.Message });
             }
             catch (Exception)
             {
-                return StatusCode(500, new { message = "An unexpected error occurred while approving the CR." });
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred while approving the CR." });
             }
         }
 
@@ -708,7 +708,7 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> AssignTester(int id, int testerID)
+        public async Task<IActionResult> AssignTester(int id, string testerID)
         {
             try
             {
@@ -716,17 +716,17 @@ namespace VF_CR_Management_System.Controllers
                 var success = await _changeRequestService.AssignTesterAsync(id, testerID, empNo);
 
                 if (!success)
-                    return BadRequest(new { message = "Failed to approve the Change Request." });
+                    return BadRequest(new { success = false, message = "Failed to assign the tester." });
 
-                return Ok(new { message = "Change Request approved successfully." });
+                return Ok(new { success = true, message = "Tester assigned successfully." });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(new { success = false, message = ex.Message });
             }
             catch (Exception)
             {
-                return StatusCode(500, new { message = "An unexpected error occurred while approving the CR." });
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred while assigning the tester." });
             }
         }
 
@@ -859,15 +859,11 @@ namespace VF_CR_Management_System.Controllers
 
             var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id);
             cr.Attachments = attachments?.ToList() ?? new List<Attachment>();
-
-            // Approval.AssignedTo stores the employee number (e.g. 4536),
-            // so EmpNo is the value used to match the logged-in user.
-            // The session "UserName" holds the display name (e.g. Kasun Perera) and can't be matched.
             var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
 
             ViewBag.CurrentEmpNo = empNo;
-            ViewBag.CurrentUserName = empNo; // compared with Approval.AssignedTo in the view
-            ViewBag.CurrentDisplayName = HttpContext.Session.GetString("UserName") ?? string.Empty; // display only
+            ViewBag.CurrentUserName = empNo; 
+            ViewBag.CurrentDisplayName = HttpContext.Session.GetString("UserName") ?? string.Empty; 
             ViewBag.Users = await _userService.GetAllUsersAsync();
 
             return PartialView("_CRDetailsPartial", cr);

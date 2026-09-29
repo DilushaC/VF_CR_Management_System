@@ -2538,11 +2538,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             await Task.Run(() => _connectionService.ExecuteWithPara(insertNextStepSql, insertParameters));
         }
-        public async Task<bool> AssignTesterAsync(int crId, int approverId, string approvedByEmpId)
+        public async Task<bool> AssignTesterAsync(int crId, string approverId, string approvedByEmpId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
-            if (approverId <= 0)
+
+            // Get the int from the string (e.g. "6407" -> 6407)
+            if (!int.TryParse(approverId?.Trim(), out int testerNo) || testerNo <= 0)
                 throw new ArgumentException("Please select a valid user to assign.");
 
             const string getStatusIdSql = @"
@@ -2601,7 +2603,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             insertParameters.Add("@CRID", crId);
             insertParameters.Add("@StepID", assessmentStepId);
             insertParameters.Add("@AssignedBy", approvedByEmpId);
-            insertParameters.Add("@AssignedTo", approverId);
+            insertParameters.Add("@AssignedTo", testerNo.ToString());
             insertParameters.Add("@AssignedDate", DateTime.Now);
             insertParameters.Add("@Active", true);
 

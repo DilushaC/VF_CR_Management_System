@@ -55,12 +55,76 @@
         && (string.IsNullOrWhiteSpace(step.Decision)
             || string.Equals(step.Decision.Trim(), "Pending", StringComparison.OrdinalIgnoreCase));
 
-    var deptHeadStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 1); // Department Head Approval
-    var securityStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 3); // Security
+    var deptHeadStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 1);
+    var securityStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 3);
+    var testingStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 4);
+
+    // Dynamic lookup for the TesterAssignment step
+    var testerAssignmentStep = Model.StepAssignments?
+        .FirstOrDefault(s => string.Equals(s.StepName, "TesterAssignment", StringComparison.OrdinalIgnoreCase));
+
+    var isTesterAssignmentAssigned = testerAssignmentStep != null
+        && !string.IsNullOrWhiteSpace(testerAssignmentStep.AssignedTo)
+        && currentIds.Any(id => string.Equals(id, Normalize(testerAssignmentStep.AssignedTo), StringComparison.OrdinalIgnoreCase));
+
+    // Once a tester has been assigned to the Testing step, the handover is done
+    var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
+
+    var canHandoverToTester = isTesterAssignmentAssigned
+        && IsPending(testerAssignmentStep)
+        && !testerAlreadyAssigned;
 
     var canApprove = IsAssignedTo(1) && IsPending(deptHeadStep);
     var canGoAssessment = isApproved && IsAssignedTo(2);
     var canGoSecurity = (isAssessment || isSecurityStatus) && IsAssignedTo(3) && IsPending(securityStep);
+    var isTestingStatus = string.Equals(Model.Status, "Testing", StringComparison.OrdinalIgnoreCase);
+    var canGoQA = !isTestingStatus && IsAssignedTo(4) && IsPending(testingStep);
+
+    // Security saved as draft: the InfoSec officer can go back and edit it
+    var isSecurityDraft = string.Equals(Model.Status, "SecurityDraft", StringComparison.OrdinalIgnoreCase);
+    var canEditSecurityDraft = isSecurityDraft && IsAssignedTo(3);
+
+    // "6407 - Uthpala Ekanayake" / "DOMAIN\\6407" -> "6407"
+    string EmpNoOf(string? v)
+    {
+        var x = Normalize(v);
+        var i = x.IndexOf(" - ", StringComparison.Ordinal);
+        return (i >= 0 ? x.Substring(0, i) : x).Trim();
+    }
+
+    bool IsCurrentUser(string? v)
+    {
+        var id = EmpNoOf(v);
+        return id.Length > 0 && currentIds.Any(c => string.Equals(EmpNoOf(c), id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Testing status: the assigned approver hands the CR over to the Final Approver
+    // Any still-pending step assigned to me (excluding the tester's own QA step and the tester handover)
+    var hasMyPendingStep = Model.StepAssignments != null && Model.StepAssignments.Any(s =>
+        s.StepID != 4
+        && !string.Equals(s.StepName, "TesterAssignment", StringComparison.OrdinalIgnoreCase)
+        && IsPending(s)
+        && IsCurrentUser(s.AssignedTo));
+
+    var dbgMe = string.Join(",", currentIds);
+    var dbgSteps = Model.StepAssignments == null
+        ? "none"
+        : string.Join(" | ", Model.StepAssignments.Select(x => $"{x.StepID}:{x.StepName}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
+
+    var canHandoverToFinalApprover = isTestingStatus
+        && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
+        && (hasMyPendingStep
+            || IsCurrentUser(Model.ApproverUserName)
+            || IsCurrentUser(Model.TestingApproverUserName));
+
+    // Status "TestingApproved" (also matches "Testing Approved"): the Final Approver can give final approval
+    var isTestingApprovedStatus = string.Equals(
+        (Model.Status ?? string.Empty).Replace(" ", string.Empty),
+        "TestingApproved",
+        StringComparison.OrdinalIgnoreCase);
+
+    var canFinalApprove = isTestingApprovedStatus
+        && (IsCurrentUser(Model.FinalApproverUserName) || hasMyPendingStep);
 }
 
 <style>
@@ -94,6 +158,11 @@
             margin-top: 0.25rem;
             font-weight: 700;
         }
+
+    /* Fix overlay layer ordering for Select2 inside Modals and SweetAlert */
+    .select2-container--open {
+        z-index: 20000 !important;
+    }
 </style>
 
 @{
@@ -109,6 +178,8 @@
     }
 }
 
+@* DEBUG (remove later): view in DevTools > Network > CRDetailsPartial > Response *@
+<!-- FINAL-HANDOVER DEBUG status=[@Model.Status] isTesting=[@isTestingStatus] finalApprover=[@Model.FinalApproverUserName] approver=[@Model.ApproverUserName] testingApprover=[@Model.TestingApproverUserName] me=[@dbgMe] hasMyPendingStep=[@hasMyPendingStep] canFinal=[@canHandoverToFinalApprover] steps=[@dbgSteps] -->
 <div class="modal-header">
     <h5 class="modal-title">Change Request Details</h5>
     <div class="ms-auto d-flex align-items-center">
@@ -247,29 +318,6 @@
             DetailField("QA Approved By", Model.TestingApproverUserName);
             DetailField("Final Approver", Model.FinalApproverUserName);
         }
-
-        @* Implementer picker: below Assigned Users, only for the Department Head assigned to this CR *@
-        @if (canApprove)
-        {
-            <div class="cr-section-title">Select Implementer</div>
-
-            <div class="cr-field-half" id="modal-approver-wrapper">
-                <div class="card-body p-0">
-                    <label class="form-label" for="modal-approver">Implementer</label>
-                    <select id="modal-approver" name="ApproverID" class="form-control select2" data-toggle="select2">
-                        <option value="" selected disabled hidden>Select User</option>
-                        @if (ViewBag.Users != null)
-                        {
-                            @foreach (var user in ViewBag.Users)
-                            {
-                                <option value="@user.UserName">@user.FirstName @user.LastName - @user.UserName</option>
-                            }
-                        }
-                    </select>
-                    <span id="modal-approver-error" class="text-danger d-none">Please select an user.</span>
-                </div>
-            </div>
-        }
     </div>
 </div>
 
@@ -289,5 +337,207 @@
             <i class="ri-shield-check-line me-1"></i>Proceed to Security Assessment
         </a>
     }
+    @if (canEditSecurityDraft)
+    {
+        <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = Model.CRID })"
+           class="btn btn-outline-info" title="Edit Security Assessment">
+            <i class="ri-pencil-line me-1"></i>Edit Security Assessment
+        </a>
+    }
+    @if (canHandoverToTester)
+    {
+        <button type="button" id="modal-handover-tester-btn" class="btn btn-primary" data-id="@Model.CRID">
+            <i class="ri-user-shared-line me-1"></i>Handover to Tester
+        </button>
+    }
+    @if (canHandoverToFinalApprover)
+    {
+        <button type="button" id="modal-handover-final-btn" class="btn btn-success" data-id="@Model.CRID">
+            <i class="ri-user-shared-line me-1"></i>Handover to Final Approver
+        </button>
+    }
+    @if (canFinalApprove)
+    {
+        <a href="@Url.Action("FinalApproval", "CRManagement", new { id = Model.CRID })" class="btn btn-success">
+            <i class="ri-check-double-line me-1"></i>Final Approval
+        </a>
+    }
+    @if (canGoQA)
+    {
+        <a href="@Url.Action("Testing", "CRManagement", new { id = Model.CRID })" class="btn btn-primary">
+            <i class="ri-test-tube-line me-1"></i>Proceed to QA Test
+        </a>
+    }
     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
 </div>
+
+<script>
+    $(document).ready(function () {
+
+        // User list built from the server. id = UserName (e.g. 6407)
+        var userOptions = [
+            @if (ViewBag.Users != null)
+            {
+                    foreach (var user in ViewBag.Users)
+                    {
+                            string uId = user.UserName;
+                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                            if (string.IsNullOrEmpty(uId)) { continue; }
+                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                    }
+            }
+        ];
+
+        // Stop Bootstrap's modal focus trap from stealing focus from SweetAlert / Select2
+        if (!window.__swalFocusFixApplied) {
+            window.__swalFocusFixApplied = true;
+            document.addEventListener('focusin', function (e) {
+                if (e.target.closest('.swal2-container, .select2-container, .select2-search__field')) {
+                    e.stopImmediatePropagation();
+                }
+            }, true);
+        }
+
+        // Shows the success message with an OK button. After OK: close the modal(s) and refresh the list
+        function successAndClose(message) {
+            Swal.fire({ icon: 'success', title: 'Success', text: message, confirmButtonText: 'OK' })
+                .then(() => {
+                    document.querySelectorAll('.modal.show').forEach(function (el) {
+                        var inst = window.bootstrap && bootstrap.Modal.getInstance(el);
+                        if (inst) { inst.hide(); } else { $(el).modal('hide'); }
+                    });
+                    $('.modal-backdrop').remove();
+                    $('body').removeClass('modal-open').css({ overflow: '', paddingRight: '' });
+                    location.reload();
+                });
+        }
+
+        // Reusable: SweetAlert with a searchable user dropdown. Resolves with the selected UserName.
+        function pickUser(title, labelText, confirmText, confirmColor) {
+            return Swal.fire({
+                title: title,
+                html: `
+                    <div class="text-start">
+                        <label for="swal-user-select" class="form-label fw-semibold">${labelText}</label>
+                        <select id="swal-user-select" class="form-select" style="width:100%;"></select>
+                        <span id="swal-user-error" class="text-danger d-none small">Please select a user before proceeding.</span>
+                    </div>`,
+                showCancelButton: true,
+                confirmButtonText: confirmText,
+                confirmButtonColor: confirmColor,
+                cancelButtonText: 'Cancel',
+                focusConfirm: false,
+                didOpen: () => {
+                    $('#swal-user-select').select2({
+                        dropdownParent: $('.swal2-popup'),
+                        placeholder: 'Select User',
+                        width: '100%',
+                        data: [{ id: '', text: '' }].concat(userOptions)
+                    });
+                },
+                preConfirm: () => {
+                    var selected = $('#swal-user-select').val();
+                    if (!selected) {
+                        $('#swal-user-error').removeClass('d-none');
+                        return false;
+                    }
+                    return selected;
+                }
+            });
+        }
+
+        // ===== APPROVE: pick the implementer inside the SweetAlert, then approve =====
+        $(document).off('click', '#modal-approve-btn')
+                   .on('click', '#modal-approve-btn', function () {
+
+            var crId = $(this).data('id');
+
+            pickUser('Approve Change Request', 'Select Implementer:', 'Approve', '#198754')
+                .then((result) => {
+                    if (!result.isConfirmed) return;
+
+                    $.ajax({
+                        url: '@Url.Action("Approve", "CRManagement")',
+                        type: 'POST',
+                        data: { id: crId, approverID: result.value },
+                        success: function (response) {
+                            if (response.success) {
+                                successAndClose(response.message || 'Change Request approved.');
+                            } else {
+                                Swal.fire('Error', response.message || 'Failed to approve.', 'error');
+                            }
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                                || 'An error occurred processing the server request.';
+                            Swal.fire('Error', msg, 'error');
+                        }
+                    });
+                });
+        });
+
+        // ===== HANDOVER TO TESTER =====
+        $(document).off('click', '#modal-handover-tester-btn')
+                   .on('click', '#modal-handover-tester-btn', function () {
+
+            var crId = $(this).data('id');
+
+            pickUser('Handover to Tester', 'Select Tester:', 'Confirm Handover', '#0d6efd')
+                .then((result) => {
+                    if (!result.isConfirmed) return;
+
+                    $.ajax({
+                        url: '@Url.Action("AssignTester", "CRManagement")',
+                        type: 'POST',
+                        data: { id: crId, testerID: result.value },
+                        success: function (response) {
+                            if (response.success) {
+                                successAndClose(response.message || 'Handover successfully created.');
+                            } else {
+                                Swal.fire('Error', response.message || 'Failed to assign tester.', 'error');
+                            }
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                                || 'An error occurred processing the server request.';
+                            Swal.fire('Error', msg, 'error');
+                        }
+                    });
+                });
+        });
+
+        // ===== HANDOVER TO FINAL APPROVER (Testing status) =====
+        $(document).off('click', '#modal-handover-final-btn')
+                   .on('click', '#modal-handover-final-btn', function () {
+
+            var crId = $(this).data('id');
+
+            pickUser('Hand over to Final Approver?', 'Select Final Approver:', 'Yes, hand over', '#0acf97')
+                .then((result) => {
+                    if (!result.isConfirmed) return;
+
+                    var token = $('input[name="__RequestVerificationToken"]').val();
+
+                    $.ajax({
+                        url: '@Url.Action("AssignFinalApprover", "CRManagement")',
+                        type: 'POST',
+                        data: { id: crId, finalApproverId: result.value },
+                        headers: token ? { "RequestVerificationToken": token } : {},
+                        success: function (response) {
+                            // Treat any 2xx as success unless the server says success:false
+                            if (response && response.success === false) {
+                                Swal.fire('Error', response.message || 'Failed to hand over the CR.', 'error');
+                            } else {
+                                successAndClose((response && response.message) || 'The Final Approver has been assigned to this Change Request.');
+                            }
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                                || 'Failed to hand over the CR. Please try again.';
+                            Swal.fire('Error', msg, 'error');
+                        }
+                    });
+                });
+        });
+    });
+</script>

@@ -8,7 +8,7 @@
         <div class="card">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                    <h4 class="header-title mb-0">Change Requests - Security</h4>
+                    <h4 class="header-title mb-0">Security Assessment Requests</h4>
                 </div>
 
                 <style>
@@ -57,30 +57,12 @@
                             pointer-events: none;
                         }
 
-                    #crDetailsModal .swal2-container {
-                        position: fixed !important;
-                        z-index: 1080 !important;
-                    }
-
-                    #basic-datatable td.title-cell {
-                        max-width: 220px;
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                    }
-
-                    #modal-attachments li {
-                        margin-bottom: 4px;
-                    }
-
-                        #modal-attachments li a {
-                            text-decoration: none;
-                            cursor: pointer;
+                        #basic-datatable td.title-cell {
+                            max-width: 220px;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
                         }
-
-                            #modal-attachments li a:hover {
-                                text-decoration: underline;
-                            }
 
                     /* Stacked modal fix: image preview modal must sit above crDetailsModal */
                     #imagePreviewModal {
@@ -108,9 +90,8 @@
                                 <th>Module</th>
                                 <th>Priority</th>
                                 <th>Status</th>
-                                <th>Requested By</th>
                                 <th>Requested Date</th>
-                                <th>View</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -118,8 +99,11 @@
                             {
                                 @foreach (var cr in Model)
                                 {
+                                    var isDraft = cr.CRNumber != null &&
+                                    cr.CRNumber.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase);
+                                    var displayCrNumber = isDraft ? "WAITING" : cr.CRNumber;
                                     <tr>
-                                        <td title="@cr.CRNumber">@cr.CRNumber</td>
+                                        <td title="@cr.CRNumber">@displayCrNumber</td>
                                         <td class="title-cell" title="@cr.ChangeTitle">@cr.ChangeTitle</td>
                                         <td>@cr.ChangeType</td>
                                         <td>@(string.IsNullOrEmpty(cr.Division) ? "—" : cr.Division)</td>
@@ -135,21 +119,42 @@
                                             }
                                         </td>
                                         <td>
-                                            @if (string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase))
+                                            @if (string.Equals(cr.Status, "Submitted", StringComparison.OrdinalIgnoreCase))
                                             {
-                                                <span class="badge bg-warning">Draft</span>
+                                                <span class="badge bg-warning">@cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-success">@cr.Status</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-info">Assessment Draft</span>
+                                            }
+                                            else if (string.Equals(cr.Status, "Development", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-secondary">Assessment Done</span>
                                             }
                                             else
                                             {
                                                 @cr.Status
                                             }
                                         </td>
-                                        <td>@cr.RequestedBy</td>
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
-                                            <div class="d-flex gap-1">
-                                                @if (cr.Status == "Assessment")
-                                                {
+                                            @if (cr.Status == "SecurityDraft")
+                                            {
+                                                <div class="d-flex gap-1">
+                                                    <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = cr.CRID })"
+                                                       class="btn btn-sm btn-outline-primary"
+                                                       title="Edit">
+                                                        <i class="ri-edit-line"></i>
+                                                    </a
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="d-flex gap-1">
                                                     <button type="button"
                                                             class="btn btn-sm btn-info btn-view"
                                                             data-bs-toggle="modal"
@@ -158,29 +163,8 @@
                                                             title="View">
                                                         <i class="ri-eye-line"></i>
                                                     </button>
-                                                }
-                                                else if (cr.Status == "SecurityDraft")
-                                                {
-                                                    <div class="d-flex gap-1">
-                                                        <a href="@Url.Action("EditSecurity", "CRManagement", new { id = cr.CRID })"
-                                                           class="btn btn-sm btn-outline-primary"
-                                                           title="Edit">
-                                                            <i class="ri-edit-line"></i>
-                                                        </a>
-                                                    </div>
-                                                }
-                                                else
-                                                {
-                                                    <button type="button"
-                                                            class="btn btn-sm btn-info btn-view"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#crDetailsModal"
-                                                            data-bs-crid="@cr.CRID"
-                                                            title="View">
-                                                        <i class="ri-eye-line"></i>
-                                                    </button>
-                                                }
-                                            </div>
+                                                </div>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -238,9 +222,9 @@
                 paging: true,
                 pageLength: 10,
                 lengthChange: true,
-                order: [[8, 'desc']],
+                order: [[7, 'desc']],
                 columnDefs: [
-                    { orderable: false, targets: 9 },
+                    { orderable: false, targets: 8 },
                     { orderable: false, targets: 1 }
                 ]
             });
@@ -345,6 +329,88 @@
         $(crDetailsModal).on('hidden.bs.modal', function () {
             currentCrId = null;
             $modalContent.empty();
+        });
+
+        $('#basic-datatable').on('click', '.btn-submit-cr', function () {
+            var crid = $(this).data('id');
+
+            Swal.fire({
+                title: 'Submit this Change Request?',
+                text: 'This will send the draft CR forward for processing.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, submit it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#0d6efd',
+                cancelButtonColor: '#6c757d'
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: '@Url.Action("Submit", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            title: 'Submitted!',
+                            text: 'The Change Request has been submitted.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+        });
+
+        $('#basic-datatable').on('click', '.btn-delete-cr', function () {
+            var crid = $(this).data('id');
+
+            Swal.fire({
+                title: 'Delete this Change Request?',
+                text: 'This will permanently remove the draft CR. This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, delete it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#fa5c7c',
+                cancelButtonColor: '#6c757d'
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: '@Url.Action("Delete", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            title: 'Deleted',
+                            text: 'The Change Request has been deleted.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete the CR. Please try again.';
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
         });
     </script>
 }
