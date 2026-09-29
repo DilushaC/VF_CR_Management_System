@@ -467,8 +467,6 @@ namespace VF_CR_Management_System.Controllers
             var userName = HttpContext.Session.GetString("UserName");
             ViewBag.CurrentEmpNo = empNo;
             ViewBag.UserName = userName;
-            var users = await _userService.GetAllUsersAsync();
-            ViewBag.Users = users;
             var crs = await _changeRequestService.GetAllChangeRequestsSubmissionsAsync(empNo);
             return View(crs);
         }
@@ -501,8 +499,6 @@ namespace VF_CR_Management_System.Controllers
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
             ViewBag.CurrentEmpNo = empNo;
-            var users = await _userService.GetAllUsersAsync();
-            ViewBag.Users = users;
             var crs = await _changeRequestService.GetAllChangeRequestsTestingAssignAsync(empNo);
             return View(crs);
         }
@@ -519,8 +515,6 @@ namespace VF_CR_Management_System.Controllers
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
             ViewBag.CurrentEmpNo = empNo;
-            var users = await _userService.GetAllUsersAsync();
-            ViewBag.Users = users;
             var crs = await _changeRequestService.GetAllChangeRequestsTestingApprovalsAsync(empNo);
             return View(crs);
         }

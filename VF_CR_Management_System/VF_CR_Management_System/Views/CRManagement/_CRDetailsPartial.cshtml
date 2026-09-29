@@ -84,11 +84,9 @@
         || statusKey.Equals("TestingApproved", StringComparison.OrdinalIgnoreCase);
     var canGoQA = !isPastQaStatus && IsAssignedTo(4) && IsPending(testingStep);
 
-    // Security saved as draft: the InfoSec officer can go back and edit it
     var isSecurityDraft = string.Equals(Model.Status, "SecurityDraft", StringComparison.OrdinalIgnoreCase);
     var canEditSecurityDraft = isSecurityDraft && IsAssignedTo(3);
 
-    // "6407 - Uthpala Ekanayake" / "DOMAIN\\6407" -> "6407"
     string EmpNoOf(string? v)
     {
         var x = Normalize(v);
@@ -100,6 +98,40 @@
     {
         var id = EmpNoOf(v);
         return id.Length > 0 && currentIds.Any(c => string.Equals(EmpNoOf(c), id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    var userLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    var nameLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (ViewBag.Users != null)
+    {
+        foreach (var u in ViewBag.Users)
+        {
+            string un = u.UserName;
+            if (string.IsNullOrWhiteSpace(un)) { continue; }
+            un = un.Trim();
+            string fullName = ((string)u.FirstName + " " + (string)u.LastName).Trim();
+            var display = fullName.Length > 0 ? $"{fullName} - {un}" : un;
+            userLookup[un] = display;
+            if (fullName.Length > 0) { nameLookup[fullName] = display; }
+        }
+    }
+
+    string DisplayUser(string? v)
+    {
+        if (string.IsNullOrWhiteSpace(v)) { return string.Empty; }
+        var raw = Normalize(v);
+
+        if (userLookup.TryGetValue(EmpNoOf(raw), out var d)) { return d; }
+
+        if (nameLookup.TryGetValue(raw, out d)) { return d; }
+
+        var i = raw.IndexOf(" - ", StringComparison.Ordinal);
+        if (i > 0 && raw.Substring(0, i).Trim().All(char.IsDigit))
+        {
+            return $"{raw.Substring(i + 3).Trim()} - {raw.Substring(0, i).Trim()}";
+        }
+
+        return raw;
     }
 
     // ===== Step-based permissions =====
@@ -329,13 +361,13 @@
         {
             <div class="cr-section-title">Assigned Users</div>
 
-            DetailField("CR Approver", Model.ApproverUserName);
-            DetailField("Developed By", Model.AssessmentUserName);
-            DetailField("InfoSec Officer", Model.SecurityUserName);
-            DetailField("QA Done By", Model.TestingUserName);
-            DetailField("QA Assigned By", Model.TesterUserName);
-            DetailField("QA Approved By", Model.TestingApproverUserName);
-            DetailField("Final Approver", Model.FinalApproverUserName);
+            DetailField("CR Approver", DisplayUser(Model.ApproverUserName));
+            DetailField("Developed By", DisplayUser(Model.AssessmentUserName));
+            DetailField("InfoSec Officer", DisplayUser(Model.SecurityUserName));
+            DetailField("QA Done By", DisplayUser(Model.TestingUserName));
+            DetailField("QA Assigned By", DisplayUser(Model.TesterUserName));
+            DetailField("QA Approved By", DisplayUser(Model.TestingApproverUserName));
+            DetailField("Final Approver", DisplayUser(Model.FinalApproverUserName));
         }
     </div>
 </div>
