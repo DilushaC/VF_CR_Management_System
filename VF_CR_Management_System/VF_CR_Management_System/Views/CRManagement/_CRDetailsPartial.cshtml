@@ -75,10 +75,14 @@
         && !testerAlreadyAssigned;
 
     var canApprove = IsAssignedTo(1) && IsPending(deptHeadStep);
-    var canGoAssessment = isApproved && IsAssignedTo(2);
+    var assessmentStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 2);
+    var canGoAssessment = isApproved && IsAssignedTo(2) && IsPending(assessmentStep);
     var canGoSecurity = (isAssessment || isSecurityStatus) && IsAssignedTo(3) && IsPending(securityStep);
     var isTestingStatus = string.Equals(Model.Status, "Testing", StringComparison.OrdinalIgnoreCase);
-    var canGoQA = !isTestingStatus && IsAssignedTo(4) && IsPending(testingStep);
+    var statusKey = (Model.Status ?? string.Empty).Replace(" ", string.Empty);
+    var isPastQaStatus = statusKey.Equals("Testing", StringComparison.OrdinalIgnoreCase)
+        || statusKey.Equals("TestingApproved", StringComparison.OrdinalIgnoreCase);
+    var canGoQA = !isPastQaStatus && IsAssignedTo(4) && IsPending(testingStep);
 
     // Security saved as draft: the InfoSec officer can go back and edit it
     var isSecurityDraft = string.Equals(Model.Status, "SecurityDraft", StringComparison.OrdinalIgnoreCase);
@@ -98,13 +102,26 @@
         return id.Length > 0 && currentIds.Any(c => string.Equals(EmpNoOf(c), id, StringComparison.OrdinalIgnoreCase));
     }
 
-    // Testing status: the assigned approver hands the CR over to the Final Approver
-    // Any still-pending step assigned to me (excluding the tester's own QA step and the tester handover)
-    var hasMyPendingStep = Model.StepAssignments != null && Model.StepAssignments.Any(s =>
-        s.StepID != 4
-        && !string.Equals(s.StepName, "TesterAssignment", StringComparison.OrdinalIgnoreCase)
-        && IsPending(s)
-        && IsCurrentUser(s.AssignedTo));
+    // ===== Step-based permissions =====
+    // A button shows only when ALL are true:
+    //   1) the CR status matches that stage,
+    //   2) the workflow step that owns the action is still pending,
+    //   3) that step's Approval.AssignedTo is the logged-in user.
+
+    // Finds a step by (part of) its StepName. Edit the keywords to match your WorkflowStep table.
+    WorkflowStepAssignment? FindStep(params string[] keywords) =>
+        Model.StepAssignments?.FirstOrDefault(s =>
+            !string.IsNullOrWhiteSpace(s.StepName)
+            && keywords.Any(k => s.StepName.Replace(" ", string.Empty)
+                                     .Contains(k, StringComparison.OrdinalIgnoreCase)));
+
+    bool CanActOn(WorkflowStepAssignment? step) =>
+        step != null && IsPending(step) && IsCurrentUser(step.AssignedTo);
+
+    // Step that hands the CR over to the Final Approver (QA / testing approval step)
+    var testingApprovalStep = FindStep("TestingApproval", "TestingApprover", "QAApproval");
+    // Step that performs the final approval
+    var finalApprovalStep = FindStep("FinalApproval", "FinalApprover");
 
     var dbgMe = string.Join(",", currentIds);
     var dbgSteps = Model.StepAssignments == null
@@ -113,18 +130,22 @@
 
     var canHandoverToFinalApprover = isTestingStatus
         && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
-        && (hasMyPendingStep
-            || IsCurrentUser(Model.ApproverUserName)
-            || IsCurrentUser(Model.TestingApproverUserName));
+        && CanActOn(testingApprovalStep);
 
-    // Status "TestingApproved" (also matches "Testing Approved"): the Final Approver can give final approval
+    // Status "TestingApproved" (also matches "Testing Approved")
     var isTestingApprovedStatus = string.Equals(
         (Model.Status ?? string.Empty).Replace(" ", string.Empty),
         "TestingApproved",
         StringComparison.OrdinalIgnoreCase);
 
-    var canFinalApprove = isTestingApprovedStatus
-        && (IsCurrentUser(Model.FinalApproverUserName) || hasMyPendingStep);
+    // The Final Approver is whoever was chosen in the handover (Model.FinalApproverUserName),
+    // so match on that as well as on the final approval step (step name may differ per setup).
+    var isAssignedFinalApprover = IsCurrentUser(Model.FinalApproverUserName);
+
+    var canFinalApprove = isTestingApprovedStatus && CanActOn(finalApprovalStep);
+
+    // TEMPORARY: shows a small grey diagnostic line in the modal. Set to false / delete when done.
+    var showDebug = false;
 }
 
 <style>
@@ -178,8 +199,6 @@
     }
 }
 
-@* DEBUG (remove later): view in DevTools > Network > CRDetailsPartial > Response *@
-<!-- FINAL-HANDOVER DEBUG status=[@Model.Status] isTesting=[@isTestingStatus] finalApprover=[@Model.FinalApproverUserName] approver=[@Model.ApproverUserName] testingApprover=[@Model.TestingApproverUserName] me=[@dbgMe] hasMyPendingStep=[@hasMyPendingStep] canFinal=[@canHandoverToFinalApprover] steps=[@dbgSteps] -->
 <div class="modal-header">
     <h5 class="modal-title">Change Request Details</h5>
     <div class="ms-auto d-flex align-items-center">
@@ -320,6 +339,17 @@
         }
     </div>
 </div>
+
+@if (showDebug)
+{
+    <div class="px-3 pb-2">
+        <small class="text-muted d-block" style="font-size:11px; word-break:break-all;">
+            DEBUG | status=[@Model.Status] | testingApproved=[@isTestingApprovedStatus] | finalApprover=[@Model.FinalApproverUserName] |
+            me=[@dbgMe] | isFinalApprover=[@isAssignedFinalApprover] |
+            canFinalApprove=[@canFinalApprove] | steps=[@dbgSteps]
+        </small>
+    </div>
+}
 
 <div class="modal-footer">
     @if (canApprove)
