@@ -35,7 +35,7 @@ namespace VF_CR_Management_System.Data.Models
         public bool Active { get; set; }
         public int VendorID { get; set; }
         public int EmpID { get; set; }
-        public int ChangeImpactID { get; set; }
+        public int ImpactID { get; set; }
         public string ChangeImpactName { get; set; }
 
         // Display-only properties, populated via joined lookup tables in list queries.

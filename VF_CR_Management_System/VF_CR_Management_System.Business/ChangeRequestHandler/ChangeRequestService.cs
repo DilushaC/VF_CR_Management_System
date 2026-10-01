@@ -176,7 +176,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.VendorID,
                     cr.ProposalNumber,
                     cr.RiskAssessment,
-                    cr.ChangeImpactID,
+                    cr.ImpactID,
                     ct.ChangeTypeName AS ChangeType,
                     cr.PriorityID,
                     p.PriorityName    AS Priority,
@@ -345,17 +345,20 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             const string sql = @"
                 SELECT
-                    AttachmentID,
-                    CRID,
-                    FileName,
-                    FilePath,
-                    UploadedBy,
-                    UploadedDate,
-                    Active
-                FROM [CRManagementDB].[dbo].[Attachment]
-                WHERE CRID = @CRID
-                  AND Active = 1
-                ORDER BY UploadedDate DESC";
+                    a.AttachmentID,
+                    a.CRID,
+                    a.FileName,
+                    a.FilePath,
+                    a.UploadedBy,
+                    a.UploadedDate,
+                    a.Active,
+                    t.AttachmentName AS AttachmentTypeName
+                FROM [CRManagementDB].[dbo].[Attachment] a
+                LEFT JOIN [CRManagementDB].[dbo].[AttachmentType] t
+                    ON t.AttachmentTypeID = a.AttachmentTypeID
+                WHERE a.CRID = @CRID
+                  AND a.Active = 1
+                ORDER BY a.UploadedDate DESC";
 
             var result = _connectionService.Query<Attachment>(sql, new { CRID = crId })
                             ?? Enumerable.Empty<Attachment>();
@@ -370,16 +373,19 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             const string sql = @"
                 SELECT
-                    AttachmentID,
-                    CRID,
-                    FileName,
-                    FilePath,
-                    UploadedBy,
-                    UploadedDate,
-                    Active
-                FROM [CRManagementDB].[dbo].[Attachment]
-                WHERE AttachmentID = @AttachmentID
-                  AND Active = 1";
+                    a.AttachmentID,
+                    a.CRID,
+                    a.FileName,
+                    a.FilePath,
+                    a.UploadedBy,
+                    a.UploadedDate,
+                    a.Active,
+                    t.AttachmentName AS AttachmentTypeName
+                FROM [CRManagementDB].[dbo].[Attachment] a
+                LEFT JOIN [CRManagementDB].[dbo].[AttachmentType] t
+                    ON t.AttachmentTypeID = a.AttachmentTypeID
+                WHERE a.AttachmentID = @AttachmentID
+                  AND a.Active = 1";
 
             var result = _connectionService.Query<Attachment>(sql, new { AttachmentID = attachmentId });
             var attachment = result?.FirstOrDefault();
@@ -1420,7 +1426,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
                 LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ChangeImpactID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ImpactID
                 WHERE cr.Active = 1
                     AND App.Active = 1
                     AND App.IsApproved = 1
@@ -1595,7 +1601,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
                 LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ChangeImpactID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ImpactID
                 WHERE cr.Active = 1
                     AND App.Active = 1
                     AND App.StepID = @StepID
@@ -1702,7 +1708,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return changeRequests;
         }
 
-        
+
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingApprovalsAsync(string empNo)
         {
             const string getDeptHeadStepSql = @"
@@ -1771,7 +1777,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
                 LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ChangeImpactID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ImpactID
                 WHERE cr.Active = 1
                     AND App.Active = 1
                     AND App.IsApproved = 1
@@ -1942,7 +1948,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
                 LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ChangeImpactID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ImpactID
                 WHERE cr.Active = 1
                     AND App.Active = 1
                     AND App.StepID = @StepID
@@ -2169,7 +2175,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return rowsAffected > 0;
         }
 
-        public async Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
+        public async Task<bool> CreateAssessmentAsync(
+            int crId,
+            IFormCollection collection,
+            string userName,
+            string empId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
@@ -2192,65 +2202,157 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             DateTime targetDate = DateTime.Now.AddDays(estimationDays);
 
             var vendorID = collection["VendorID"].ToString();
-            var poposalNumber = collection["ProposalNumber"].ToString();
+            var proposalNumber = collection["ProposalNumber"].ToString();
 
-            // "1" = Save (btn-save, data-status="1")  -> keep as AssessmentDraft
-            // "2" = Submit (submitBtn, data-status="2") -> move to Development + log workflow step
+            // "1" = Save as Draft
+            // "2" = Submit
             var statusValue = collection["Status"].ToString();
             bool isSubmit = statusValue == "2";
 
-            var targetStatusName = isSubmit ? "Assessment" : "AssessmentDraft";
+            var targetStatusName = isSubmit
+                ? "Assessment"
+                : "AssessmentDraft";
 
-            // Only required when actually submitting — the SweetAlert on the client
-            // already guarantees a selection before Submit posts, via preConfirm.
+            // Required only when submitting
             var isOfficerUserName = collection["ISOfficerUserName"].ToString();
+
             if (isSubmit && string.IsNullOrWhiteSpace(isOfficerUserName))
             {
                 throw new ArgumentException("Please select an IS Officer.");
             }
 
+            // ---------------------------------------------------------
+            // Update Change Request
+            // ---------------------------------------------------------
             const string updateCrSql = @"
-                UPDATE ChangeRequest
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
                 SET 
                     ActivitiesTasks = @ActivitiesTasks,
-                    FixedAssets  = @FixedAssets,
+                    FixedAssets = @FixedAssets,
                     DueDate = @DueDate,
                     VendorID = @VendorID,
                     ProposalNumber = @ProposalNumber,
-                    StatusID        = (SELECT TOP 1 StatusID FROM CRStatus WHERE StatusName = @TargetStatusName)
+                    StatusID = (
+                        SELECT TOP 1 StatusID
+                        FROM [CRManagementDB].[dbo].[CRStatus]
+                        WHERE StatusName = @TargetStatusName
+                          AND Active = 1
+                    )
                 WHERE CRID = @CRID
                   AND Active = 1";
 
             var crParameters = new DynamicParameters();
+
             crParameters.Add("@ActivitiesTasks", activitiesTasks);
             crParameters.Add("@FixedAssets", fixedAssetInfo);
             crParameters.Add("@DueDate", targetDate);
-            if (vendorID == "")
+
+            if (string.IsNullOrWhiteSpace(vendorID))
                 crParameters.Add("@VendorID", null);
             else
                 crParameters.Add("@VendorID", vendorID);
-            crParameters.Add("@ProposalNumber", poposalNumber);
+
+            crParameters.Add("@ProposalNumber", proposalNumber);
             crParameters.Add("@TargetStatusName", targetStatusName);
             crParameters.Add("@CRID", crId);
 
             _connectionService.ExecuteWithPara(updateCrSql, crParameters);
 
-            // ---- Handle attachments included in the same form submission ----
-            var files = collection.Files?.Where(f => f.Length > 0).ToList();
-            if (files != null && files.Count > 0)
-            {
-                await SaveAttachmentsAsync(crId, files, userName);
-            }
 
-            // ---- On Submit only: log the "Development" workflow step in Approval ----
+            // ---------------------------------------------------------
+            // Save SRS Attachments
+            // ---------------------------------------------------------
+            await SaveAttachmentGroupAsync(
+                crId,
+                collection,
+                "srsFile",
+                "SRS",
+                userName);
+
+
+            // ---------------------------------------------------------
+            // Save BA Attachments
+            // ---------------------------------------------------------
+            await SaveAttachmentGroupAsync(
+                crId,
+                collection,
+                "baFile",
+                "BA",
+                userName);
+
+
+            // ---------------------------------------------------------
+            // Save Vendor Attachments
+            // ---------------------------------------------------------
+            await SaveAttachmentGroupAsync(
+                crId,
+                collection,
+                "vendorFiles",
+                "Vendor Report",
+                userName);
+
+
+            // ---------------------------------------------------------
+            // On Submit only:
+            // Create Development/Security workflow approval
+            // ---------------------------------------------------------
             if (isSubmit)
             {
-                await InsertDevelopmentApprovalStepAsync(crId, empId, isOfficerUserName);
+                await InsertDevelopmentApprovalStepAsync(
+                    crId,
+                    empId,
+                    isOfficerUserName);
             }
 
             return true;
         }
 
+        private async Task SaveAttachmentGroupAsync(
+            int crId,
+            IFormCollection collection,
+            string fieldName,
+            string attachmentTypeName,
+            string uploadedBy)
+        {
+            var files = collection.Files
+                .Where(f =>
+                    f.Name.Equals(fieldName, StringComparison.OrdinalIgnoreCase) &&
+                    f.Length > 0)
+                .ToList();
+
+            if (files.Count == 0)
+                return;
+
+            int attachmentTypeId = GetAttachmentTypeId(attachmentTypeName);
+
+            await SaveAttachmentsAsync(
+                crId,
+                files,
+                attachmentTypeId,
+                uploadedBy);
+        }
+
+        private int GetAttachmentTypeId(string attachmentTypeName)
+        {
+            const string sql = @"
+                SELECT TOP 1 AttachmentTypeID
+                FROM [CRManagementDB].[dbo].[AttachmentType]
+                WHERE AttachmentName = @AttachmentName
+                  AND Active = 1";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@AttachmentName", attachmentTypeName);
+
+            var table = _connectionService.ReturnWithPara(sql, parameters);
+
+            if (table == null || table.Rows.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Attachment type '{attachmentTypeName}' was not found or is inactive.");
+            }
+
+            return table.Rows[0].Field<int>("AttachmentTypeID");
+        }
         private async Task InsertDevelopmentApprovalStepAsync(int crId, string empId, string isOfficerUserName)
         {
             const string getStepIdSql = @"
@@ -2287,48 +2389,102 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
 
 
-        private async Task SaveAttachmentsAsync(int crId, List<IFormFile> files, string uploadedBy)
+        private async Task SaveAttachmentsAsync(
+            int crId,
+            List<IFormFile> files,
+            int attachmentTypeId,
+            string uploadedBy)
         {
             if (string.IsNullOrWhiteSpace(uploadedBy))
-                throw new ArgumentException("Session expired. Please log in again before uploading attachments.");
+            {
+                throw new ArgumentException(
+                    "Session expired. Please log in again before uploading attachments.");
+            }
 
-            var rootPath = Path.Combine(_attachmentRootFolder, crId.ToString());
+            if (attachmentTypeId <= 0)
+            {
+                throw new ArgumentException("Invalid attachment type.");
+            }
+
+            if (files == null || files.Count == 0)
+            {
+                return;
+            }
+
+            var rootPath = Path.Combine(
+                _attachmentRootFolder,
+                crId.ToString());
 
             if (!Directory.Exists(rootPath))
+            {
                 Directory.CreateDirectory(rootPath);
+            }
 
+            // IMPORTANT:
+            // AttachmentTypeID was missing from your previous INSERT.
             const string insertAttachmentSql = @"
                 INSERT INTO [CRManagementDB].[dbo].[Attachment]
-                    (CRID, FileName, FilePath, UploadedBy, UploadedDate, Active)
+                (
+                    CRID,
+                    AttachmentTypeID,
+                    FileName,
+                    FilePath,
+                    UploadedBy,
+                    UploadedDate,
+                    Active
+                )
                 VALUES
-                    (@CRID, @FileName, @FilePath, @UploadedBy, @UploadedDate, @Active)";
+                (
+                    @CRID,
+                    @AttachmentTypeID,
+                    @FileName,
+                    @FilePath,
+                    @UploadedBy,
+                    @UploadedDate,
+                    @Active
+                )";
 
             foreach (var formFile in files)
             {
-                if (formFile.Length == 0) continue;
+                if (formFile == null || formFile.Length == 0)
+                    continue;
 
-                var safeFileName = Path.GetFileNameWithoutExtension(formFile.FileName);
-                var extension = Path.GetExtension(formFile.FileName);
-                var uniqueFileName = $"{safeFileName}_{DateTime.Now:yyyyMMddHHmmssfff}{extension}";
-                var fullPath = Path.Combine(rootPath, uniqueFileName);
+                var safeFileName =
+                    Path.GetFileNameWithoutExtension(formFile.FileName);
 
-                using (var stream = new FileStream(fullPath, FileMode.Create))
+                var extension =
+                    Path.GetExtension(formFile.FileName);
+
+                var uniqueFileName =
+                    $"{safeFileName}_{DateTime.Now:yyyyMMddHHmmssfff}{extension}";
+
+                var fullPath =
+                    Path.Combine(rootPath, uniqueFileName);
+
+                // Save physical file
+                using (var stream = new FileStream(
+                    fullPath,
+                    FileMode.Create))
                 {
                     await formFile.CopyToAsync(stream);
                 }
 
+                // Save database record
                 var attachmentParameters = new DynamicParameters();
+
                 attachmentParameters.Add("@CRID", crId);
+                attachmentParameters.Add("@AttachmentTypeID", attachmentTypeId);
                 attachmentParameters.Add("@FileName", formFile.FileName);
                 attachmentParameters.Add("@FilePath", fullPath);
                 attachmentParameters.Add("@UploadedBy", uploadedBy);
                 attachmentParameters.Add("@UploadedDate", DateTime.Now);
                 attachmentParameters.Add("@Active", true);
 
-                _connectionService.ExecuteWithPara(insertAttachmentSql, attachmentParameters);
+                _connectionService.ExecuteWithPara(
+                    insertAttachmentSql,
+                    attachmentParameters);
             }
         }
-
         public async Task<bool> DeleteAttachmentAsync(int attachmentId, string deletedByEmpId)
         {
             if (attachmentId <= 0)
@@ -2382,7 +2538,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var riskAssessment = collection["RiskAssessment"].ToString().Trim();
 
-            int? changeImpactId = int.TryParse(collection["ChangeImpactID"], out var parsedImpactId)
+            int? changeImpactId = int.TryParse(collection["ImpactID"], out var parsedImpactId)
                 ? parsedImpactId
                 : (int?)null;
 
@@ -2413,14 +2569,14 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 UPDATE ChangeRequest
                 SET 
                     RiskAssessment = @RiskAssessment,
-                    ChangeImpactID = @ChangeImpactID,
+                    ImpactID = @ImpactID,
                     StatusID       = @StatusID
                 WHERE CRID = @CRID
                   AND Active = 1";
 
             var crParameters = new DynamicParameters();
             crParameters.Add("@RiskAssessment", riskAssessment);
-            crParameters.Add("@ChangeImpactID", changeImpactId, DbType.Int32);
+            crParameters.Add("@ImpactID", changeImpactId, DbType.Int32);
             crParameters.Add("@StatusID", targetStatusId);
             crParameters.Add("@CRID", crId);
 
@@ -2440,7 +2596,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         public Task<IEnumerable<ChangeRequest>> GetChangeImpactsAsync()
         {
             const string sql = @"
-                SELECT ImpactID   AS ChangeImpactID,
+                SELECT ImpactID   AS ImpactID,
                        ImpactName AS ChangeImpactName
                 FROM [CRManagementDB].[dbo].[ChangeImpact]
                 WHERE Active = 1

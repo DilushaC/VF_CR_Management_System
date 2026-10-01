@@ -142,9 +142,14 @@
                                         </td>
                                         <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
                                         <td>
-                                            @if (cr.Status == "Draft")
-                                            {
-                                                <div class="d-flex gap-1">
+                                            @{
+                                                var isRequestDraft = string.Equals(cr.Status, "Draft", StringComparison.OrdinalIgnoreCase);
+                                                var isAssessmentDraft = string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase);
+                                            }
+
+                                            <div class="d-flex gap-1">
+                                                @if (isRequestDraft)
+                                                {
                                                     <a href="@Url.Action("Edit", "CRManagement", new { id = cr.CRID })"
                                                        class="btn btn-sm btn-outline-primary"
                                                        title="Edit">
@@ -156,11 +161,18 @@
                                                             title="Delete">
                                                         <i class="ri-delete-bin-line"></i>
                                                     </button>
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <div class="d-flex gap-1">
+                                                }
+                                                else
+                                                {
+                                                    if (isAssessmentDraft)
+                                                    {
+                                                        <a href="@Url.Action("Assessment", "CRManagement", new { id = cr.CRID })"
+                                                           class="btn btn-sm btn-outline-primary"
+                                                           title="Edit Assessment">
+                                                            <i class="ri-edit-line"></i>
+                                                        </a>
+                                                    }
+
                                                     <button type="button"
                                                             class="btn btn-sm btn-info btn-view"
                                                             data-bs-toggle="modal"
@@ -169,8 +181,8 @@
                                                             title="View">
                                                         <i class="ri-eye-line"></i>
                                                     </button>
-                                                </div>
-                                            }
+                                                }
+                                            </div>
                                         </td>
                                     </tr>
                                 }

@@ -16,6 +16,82 @@
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
 }
+@{
+    // ---- Existing attachments, split by attachment type ----
+    var allAttachments = (ViewBag.Attachments as IEnumerable<Attachment>) ?? Enumerable.Empty<Attachment>();
+
+    var srsAttachments = allAttachments
+        .Where(a => string.Equals(a.AttachmentTypeName, "SRS", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var baAttachments = allAttachments
+        .Where(a => string.Equals(a.AttachmentTypeName, "BA", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    // Vendor Report files (also catches older uploads that have no type recorded)
+    var vendorAttachments = allAttachments
+        .Where(a => string.IsNullOrWhiteSpace(a.AttachmentTypeName) ||
+                    string.Equals(a.AttachmentTypeName, "Vendor Report", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+
+    void RenderAttachmentList(string listId, IEnumerable<Attachment> items)
+    {
+        if (items == null || !items.Any())
+        {
+            return;
+        }
+
+        <div class="mt-2">
+            <label class="form-label fw-bold mb-1">Previously Uploaded Files</label>
+            <ul class="list-unstyled mb-0" id="@listId">
+                @foreach (var att in items)
+                {
+                    var ext = System.IO.Path.GetExtension(att.FileName).ToLowerInvariant();
+                    var isImage = imageExtensions.Contains(ext);
+                    var isPdf = ext == ".pdf";
+
+                    <li class="d-flex align-items-center gap-2 mb-1" data-attachment-id="@att.AttachmentID">
+                        <i class="mdi mdi-paperclip"></i>
+
+                        @if (isImage)
+                        {
+                            <a href="javascript:void(0);"
+                               class="preview-attachment-link"
+                               data-attachment-id="@att.AttachmentID"
+                               data-file-name="@att.FileName">
+                                @att.FileName
+                            </a>
+                        }
+                        else if (isPdf)
+                        {
+                            <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = att.AttachmentID })"
+                               target="_blank"
+                               rel="noopener noreferrer">
+                                @att.FileName
+                            </a>
+                        }
+                        else
+                        {
+                            <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = att.AttachmentID })">
+                                @att.FileName
+                            </a>
+                        }
+
+                        <small class="text-muted">(@att.UploadedDate.ToString("yyyy/MM/dd"))</small>
+                        <a href="javascript:void(0);"
+                           class="text-danger remove-attachment-btn"
+                           title="Remove attachment"
+                           data-attachment-id="@att.AttachmentID">
+                            &times;
+                        </a>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+}
 
 <div class="row">
     <div class="col-12">
@@ -134,6 +210,25 @@
                                 <textarea name="FixedAssetInfo" id="fixedAssetInfo" class="form-control" rows="6"
                                           placeholder="Write the explanation here...">@Model.FixedAssets</textarea>
                             </div>
+
+                            <!-- SRS Document -->
+                            <div class="mb-3" id="srsSection">
+                                <label class="form-label">SRS Document</label>
+                                <input type="file" name="srsFile" id="srsFileInput" class="form-control" multiple>
+                                @{
+                                    RenderAttachmentList("existingSrsList", srsAttachments);
+                                }
+                            </div>
+
+                            <!-- BA Document -->
+                            <div class="mb-3" id="baSection">
+                                <label class="form-label">BA Document</label>
+                                <input type="file" name="baFile" id="baFileInput" class="form-control" multiple>
+                                @{
+                                    RenderAttachmentList("existingBaList", baAttachments);
+                                }
+                            </div>
+
                             <div class="mb-3" id="modal-isofficer-wrapper" style="display:none;">
                                 <div class="card-body">
                                     <label class="form-label" for="modal-approver">Select IS Officer</label>
@@ -197,63 +292,12 @@
                                                class="form-control" value="@Model.ProposalNumber">
                                     </div>
 
+                                    <!-- Vendor attachments (field name must be "vendorFiles" to match the service) -->
                                     <div id="attachmentSection" class="mb-3" style="display: @(hasVendorSupport ? "block" : "none");">
-                                        <label class="form-label">Attachments</label>
-                                        <input type="file" name="file" id="attachmentInput" class="form-control" multiple>
-
+                                        <label class="form-label">Vendor Attachments</label>
+                                        <input type="file" name="vendorFiles" id="attachmentInput" class="form-control" multiple>
                                         @{
-                                            var existingAttachments = ViewBag.Attachments as IEnumerable<VF_CR_Management_System.Data.Models.Attachment>;
-                                        }
-                                        @if (existingAttachments != null && existingAttachments.Any())
-                                        {
-                                            <div class="mt-2">
-                                                <label class="form-label fw-bold mb-1">Previously Uploaded Files</label>
-                                                <ul class="list-unstyled mb-0" id="existingAttachmentsList">
-                                                    @foreach (var att in existingAttachments)
-                                                    {
-                                                        var ext = System.IO.Path.GetExtension(att.FileName).ToLowerInvariant();
-                                                        var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
-                                                        var isImage = imageExtensions.Contains(ext);
-                                                        var isPdf = ext == ".pdf";
-
-                                                        <li class="d-flex align-items-center gap-2 mb-1" data-attachment-id="@att.AttachmentID">
-                                                            <i class="mdi mdi-paperclip"></i>
-
-                                                            @if (isImage)
-                                                            {
-                                                                <a href="javascript:void(0);"
-                                                                   class="preview-attachment-link"
-                                                                   data-attachment-id="@att.AttachmentID"
-                                                                   data-file-name="@att.FileName">
-                                                                    @att.FileName
-                                                                </a>
-                                                            }
-                                                            else if (isPdf)
-                                                            {
-                                                                <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = att.AttachmentID })"
-                                                                   target="_blank"
-                                                                   rel="noopener noreferrer">
-                                                                    @att.FileName
-                                                                </a>
-                                                            }
-                                                            else
-                                                            {
-                                                                <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = att.AttachmentID })">
-                                                                    @att.FileName
-                                                                </a>
-                                                            }
-
-                                                            <small class="text-muted">(@att.UploadedDate.ToString("yyyy/MM/dd"))</small>
-                                                            <a href="javascript:void(0);"
-                                                               class="text-danger remove-attachment-btn"
-                                                               title="Remove attachment"
-                                                               data-attachment-id="@att.AttachmentID">
-                                                                &times;
-                                                            </a>
-                                                        </li>
-                                                    }
-                                                </ul>
-                                            </div>
+                                            RenderAttachmentList("existingAttachmentsList", vendorAttachments);
                                         }
                                     </div>
                                 </div>
@@ -317,6 +361,7 @@
         var vendorDetails = document.getElementById('vendorSupportDetails');
         var proposalNumberDetails = document.getElementById('proposalNumber');
         var attachmentSection = document.getElementById('attachmentSection');
+        var attachmentInput = document.getElementById('attachmentInput');
         var vendorSelect = document.getElementById('VendorID');
 
         function toggleVendorDetails() {
@@ -325,13 +370,19 @@
             proposalNumberDetails.style.display = show;
             attachmentSection.style.display = show;
 
-            // Clear the vendor selection when support is switched off,
-            // so a stale VendorID isn't posted back.
-            if (!vendorYes.checked && vendorSelect) {
-                if (window.jQuery && $(vendorSelect).data('select2')) {
-                    $(vendorSelect).val('').trigger('change.select2');
-                } else {
-                    vendorSelect.value = '';
+            // Clear the vendor selection and any chosen vendor files when support is
+            // switched off, so stale values aren't posted back.
+            if (!vendorYes.checked) {
+                if (attachmentInput) {
+                    attachmentInput.value = '';
+                }
+
+                if (vendorSelect) {
+                    if (window.jQuery && $(vendorSelect).data('select2')) {
+                        $(vendorSelect).val('').trigger('change.select2');
+                    } else {
+                        vendorSelect.value = '';
+                    }
                 }
             }
         }
@@ -505,7 +556,7 @@
             handleFormSubmission(saveBtn, false);
         });
 
-        // ---- Delete an existing attachment ----
+        // ---- Delete an existing attachment (works for SRS, BA and Vendor lists) ----
         document.querySelectorAll('.remove-attachment-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var attachmentId = btn.getAttribute('data-attachment-id');

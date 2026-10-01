@@ -15,5 +15,6 @@ namespace VF_CR_Management_System.Data.Models
         public string UploadedBy { get; set; }
         public DateTime UploadedDate { get; set; }
         public bool Active { get; set; }
+        public string AttachmentTypeName { get; set; }
     }
 }

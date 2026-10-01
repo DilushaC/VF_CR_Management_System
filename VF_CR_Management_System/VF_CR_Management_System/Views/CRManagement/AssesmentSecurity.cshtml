@@ -8,7 +8,7 @@
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
 
-    // Change impact options are loaded into the ChangeRequest model (ChangeImpactID / ChangeImpactName)
+    // Change impact options are loaded into the ChangeRequest model (ImpactID / ChangeImpactName)
     var changeImpacts = ViewBag.ChangeImpacts as IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>;
 }
 
@@ -194,11 +194,11 @@
                                                 "Major" => "form-radio-danger",
                                                 _ => "form-radio-primary"
                                             };
-                                            var radioId = "changeImpact_" + impact.ChangeImpactID;
+                                            var radioId = "changeImpact_" + impact.ImpactID;
 
                                             <div class="form-check form-check-inline @radioClass mb-0">
-                                                <input type="radio" id="@radioId" name="ChangeImpactID" value="@impact.ChangeImpactID"
-                                                       class="form-check-input" checked="@(Model.ChangeImpactID == impact.ChangeImpactID)">
+                                                <input type="radio" id="@radioId" name="ImpactID" value="@impact.ImpactID"
+                                                       class="form-check-input" checked="@(Model.ImpactID == impact.ImpactID)">
                                                 <label class="form-check-label" for="@radioId">@impact.ChangeImpactName</label>
                                             </div>
                                         }
@@ -325,7 +325,7 @@
                 // Client-side validation only on Submit; Save allows a partial draft.
                 if (isSubmit) {
                     var risk = document.getElementById('securityRiskAssessment').value.trim();
-                    var impact = document.querySelector('input[name="ChangeImpactID"]:checked');
+                    var impact = document.querySelector('input[name="ImpactID"]:checked');
 
                     if (!risk) {
                         Swal.fire({
