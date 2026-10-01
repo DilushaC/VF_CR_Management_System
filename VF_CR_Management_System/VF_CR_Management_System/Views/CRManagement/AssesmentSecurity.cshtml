@@ -1,4 +1,5 @@
 ﻿@model VF_CR_Management_System.Data.Models.ChangeRequest
+@using VF_CR_Management_System.Data.Models
 @{
     ViewData["Title"] = "CR Assesment - Security";
 }
@@ -10,6 +11,77 @@
 
     // Change impact options are loaded into the ChangeRequest model (ImpactID / ChangeImpactName)
     var changeImpacts = ViewBag.ChangeImpacts as IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>;
+}
+@{
+    // ---- Attachments split by type (SRS / BA / Vendor) ----
+    var allAttachments = (ViewBag.Attachments as IEnumerable<Attachment>) ?? Enumerable.Empty<Attachment>();
+
+    var srsFiles = allAttachments
+        .Where(a => string.Equals(a.AttachmentTypeName, "SRS", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var baFiles = allAttachments
+        .Where(a => string.Equals(a.AttachmentTypeName, "BA", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    // Vendor Report files (also catches older uploads that have no type recorded)
+    var vendorFiles = allAttachments
+        .Where(a => string.IsNullOrWhiteSpace(a.AttachmentTypeName)
+                    || string.Equals(a.AttachmentTypeName, "Vendor Report", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var hasAnyAttachments = srsFiles.Any() || baFiles.Any() || vendorFiles.Any();
+
+    var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" };
+
+    // Renders one attachment group (heading + file list). Nothing is rendered when the group is empty.
+    void RenderAttachmentGroup(string title, IEnumerable<Attachment> items)
+    {
+        if (items == null || !items.Any())
+        {
+            return;
+        }
+
+        <div class="mb-3">
+            <label class="fw-bold text-dark d-block mb-1">@title:</label>
+            <ul class="list-unstyled mb-0">
+                @foreach (var attachment in items)
+                {
+                    var fileName = attachment.FileName;
+                    var ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
+                    var isImage = imageExtensions.Contains(ext);
+                    var isPdf = ext == ".pdf";
+                    var previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachment.AttachmentID });
+                    var downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachment.AttachmentID });
+
+                    <li class="mb-1">
+                        @if (isImage)
+                        {
+                            <a href="javascript:void(0);" class="attachment-link"
+                               data-type="image"
+                               data-preview-url="@previewUrl"
+                               data-download-url="@downloadUrl"
+                               data-name="@fileName">
+                                <i class="ri-image-line me-1"></i>@fileName
+                            </a>
+                        }
+                        else if (isPdf)
+                        {
+                            <a href="@previewUrl" target="_blank" rel="noopener">
+                                <i class="ri-file-pdf-line me-1"></i>@fileName
+                            </a>
+                        }
+                        else
+                        {
+                            <a href="@downloadUrl" download>
+                                <i class="ri-download-2-line me-1"></i>@fileName
+                            </a>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    }
 }
 
 <div class="row">
@@ -84,51 +156,17 @@
                         </div>
                     </div>
 
-                    <!-- Attachments -->
+                    <!-- Attachments (grouped by type) -->
                     <div class="card border mb-4">
                         <div class="card-header bg-light-subtle">
                             <h6 class="fs-15 mb-0">Attachments</h6>
                         </div>
                         <div class="card-body">
-                            @if (ViewBag.Attachments != null && ((IEnumerable<dynamic>)ViewBag.Attachments).Any())
+                            @if (hasAnyAttachments)
                             {
-                                <ul class="list-unstyled mb-0">
-                                    @foreach (var attachment in ViewBag.Attachments)
-                                    {
-                                        int attachmentId = attachment.AttachmentID;
-                                        string fileName = attachment.FileName;
-                                        string ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
-                                        bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(ext);
-                                        bool isPdf = ext == ".pdf";
-                                        string previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachmentId });
-                                        string downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachmentId });
-
-                                        <li class="mb-1">
-                                            @if (isImage)
-                                            {
-                                                <a href="javascript:void(0);" class="attachment-link"
-                                                   data-type="image"
-                                                   data-preview-url="@previewUrl"
-                                                   data-download-url="@downloadUrl"
-                                                   data-name="@fileName">
-                                                    <i class="ri-image-line me-1"></i>@fileName
-                                                </a>
-                                            }
-                                            else if (isPdf)
-                                            {
-                                                <a href="@previewUrl" target="_blank" rel="noopener">
-                                                    <i class="ri-file-pdf-line me-1"></i>@fileName
-                                                </a>
-                                            }
-                                            else
-                                            {
-                                                <a href="@downloadUrl" download>
-                                                    <i class="ri-download-2-line me-1"></i>@fileName
-                                                </a>
-                                            }
-                                        </li>
-                                    }
-                                </ul>
+                                RenderAttachmentGroup("SRS Document", srsFiles);
+                                RenderAttachmentGroup("BA Document", baFiles);
+                                RenderAttachmentGroup("Vendor Attachments", vendorFiles);
                             }
                             else
                             {

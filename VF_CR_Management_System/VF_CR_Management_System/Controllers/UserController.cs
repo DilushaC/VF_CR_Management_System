@@ -103,7 +103,7 @@ namespace VF_CR_Management_System.Presentation.Controllers
                     HttpContext.Session.SetString("MenuItems", menuJson);
 
                     //HttpContext.Session.SetString("AccessPages", jsonData);
-                    return Json(new { success = true, redirectUrl = Url.Action("Index", "Home") });
+                    return Json(new { success = true, redirectUrl = Url.Action("Index", "Home"), loggedUser = user.DisplayName });
                 }
                 else
                 {
