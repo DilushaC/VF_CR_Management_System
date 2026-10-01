@@ -1,4 +1,5 @@
 ﻿using Dapper;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -15,41 +16,152 @@ namespace VF_CR_Management_System.Business.UserHandler
     {
         private readonly _ConnectionService _connectionService;
         private readonly ADAuthentication _aDAuthentication;
+        private readonly IConfiguration _configuration;
 
-        public UserService(_ConnectionService connectionService, ADAuthentication aDAuthentication)
+        public UserService(_ConnectionService connectionService, ADAuthentication aDAuthentication, IConfiguration configuration)
         {
             _connectionService = connectionService;
             _aDAuthentication = aDAuthentication;
+            _configuration = configuration;
         }
+        //public async Task<UserModel> ValidateUserAsync(string username, string password)
+        //{
+        //    //string allowedProductName = _configuration.GetValue<string>("AllowedProducts:ProductName");
+        //    var allowedProductNames = _configuration
+        //        .GetSection("AllowedProducts:ProductNames")
+        //        .GetChildren()
+        //        .Select(c => c.Value)
+        //        .Where(v => !string.IsNullOrWhiteSpace(v))
+        //        .ToArray();
 
-        public async Task<UserModel?> ValidateUserAsync(string username, string password, int productId)
+        //    var response = await _aDAuthentication.AuthenticatewithAD(username, password);
+        //    if (!response.Status)
+        //        return null;
+
+        //    // 2. Get User
+        //    const string userQuery = @"
+        //        SELECT U.Id,U.UserName,U.PrimaryBranchId,U.PrimaryDepartmentId,U.IsActive,R.RoleName FROM Users AS U
+        //            INNER JOIN UserRoles AS UR on UR.UserId = U.Id
+        //            INNER JOIN Roles AS R ON R.Id = UR.RoleId
+        //        WHERE U.UserName = @UserName AND U.IsActive = 1";
+
+        //    var userParams = new DynamicParameters();
+        //    userParams.Add("@UserName", username);
+
+        //    var userData = _connectionService.ReturnWithPara2(userQuery, userParams);
+        //    if (userData == null || userData.Rows.Count == 0)
+        //        return null;
+
+        //    var userRow = userData.Rows[0];
+
+        //    var user = new UserModel
+        //    {
+        //        Id = userRow.Field<int>("Id"),
+        //        UserName = userRow.Field<string>("UserName"),
+        //        BranchId = userRow.Field<int>("PrimaryBranchId"),
+        //        Dep_Id = userRow.Field<int>("PrimaryDepartmentId"),
+        //        DisplayName = response.Data.DisplayName,
+        //        DisplayDesignation = response.Data.Title,
+        //        DisplayDepartment = response.Data.Department,
+        //        RoleName = userRow.Field<string>("RoleName"),
+        //        IsActive = userRow.Field<bool>("IsActive")
+        //    };
+
+
+        //    // 4. Get MenuItems with PageUrls properly
+        //    const string menuQuery = @"
+        //                                 SELECT DISTINCT
+        //                                         m.Id,
+        //                                         m.MenuTitle,
+        //                                         m.ParentMenuId,
+        //                                         m.PageId,
+        //                                         m.IconClass,
+        //                                         m.DisplayOrder,
+        //                                         m.IsActive,
+        //                                         m.ProductId,
+        //                                         pd.ProductName,
+        //                                         m.MenuCategoryId,
+        //                                         c.CategoryName,
+        //                                         p.PageUrl
+        //                                     FROM MenuItems m
+        //                                     LEFT JOIN Pages p
+        //                                         ON m.PageId = p.Id
+        //                                     LEFT JOIN MenuCategories c
+        //                                         ON m.MenuCategoryId = c.Id
+        //                                     LEFT JOIN RolePagePermissions rpp
+        //                                         ON m.PageId = rpp.PageId
+        //                                     LEFT JOIN Products pd
+        //                                 	    ON pd.Id = m.ProductId
+        //                                     LEFT JOIN UserRoles ur
+        //                                         ON rpp.RoleId = ur.RoleId
+        //                                     WHERE m.IsActive = 1
+        //                                       AND pd.ProductName IN @ProductNames
+        //                                       AND (
+        //                                             ur.UserId = @UserId
+        //                                             OR m.PageId IS NULL
+        //                                           )
+        //                                     ORDER BY m.DisplayOrder";
+
+
+
+        //    var menuParams = new DynamicParameters();
+        //    menuParams.Add("@UserId", user.Id);
+        //    menuParams.Add("@ProductNames", allowedProductNames);
+
+
+
+        //    var menuData = _connectionService.ReturnWithPara2(menuQuery, menuParams);
+
+        //    if (menuData != null && menuData.Rows.Count > 0)
+        //    {
+        //        user.MenuItems = menuData.AsEnumerable()
+        //        .Select(r => new MenuItem
+        //        {
+        //            Id = r.Field<int>("Id"),
+        //            MenuTitle = r.Field<string>("MenuTitle"),
+        //            ParentMenuItemId = r.Field<int?>("ParentMenuId"),
+        //            PageId = r.Field<int?>("PageId"),
+        //            IconClass = r.Field<string?>("IconClass"),
+        //            DisplayOrder = r.Field<int>("DisplayOrder"),
+        //            IsActive = r.Field<bool>("IsActive"),
+        //            ProductId = r.Field<int?>("ProductId"),
+        //            ProductName = r.Field<string>("ProductName"),
+        //            CategoryId = r.Field<int?>("MenuCategoryId"),
+        //            CategoryName = r.Field<string?>("CategoryName"),
+        //            PageUrl = r.Field<string?>("PageUrl")
+        //        })
+        //        .GroupBy(m => m.Id)          // avoid duplicates from role joins
+        //                            .Select(g => g.First())
+        //        .OrderBy(m => m.DisplayOrder)
+        //        .ToList();
+        //    }
+
+
+
+        //    user.PageUrls = user.MenuItems
+        //    .Where(m => !string.IsNullOrWhiteSpace(m.PageUrl))
+        //    .Select(m => m.PageUrl!.StartsWith("/") ? m.PageUrl : "/" + m.PageUrl)
+        //    .Distinct()
+        //    .ToList();
+
+        //    return user;
+        //}
+
+        public async Task<UserModel> ValidateUserAsync(string username, string password)
         {
-            // 1. Authenticate AD (credential check only — display data now comes from our own tables)
+            //string allowedProductName = _configuration.GetValue<string>("AllowedProducts:ProductName");
+            var allowedProductNames = _configuration.GetSection("AllowedProducts:ProductNames").Get<string[]>() ?? Array.Empty<string>();
+
             var response = await _aDAuthentication.AuthenticatewithAD(username, password);
             if (!response.Status)
                 return null;
 
-            // 2. Get User joined with Department and Designation
-            const string userQuery = @"
-                SELECT
-                    u.Id,
-                    u.UserName,
-                    u.FirstName,
-                    u.LastName,
-                    u.Email,
-                    u.Phone,
-                    u.PrimaryBranchId,
-                    u.PrimaryDepartmentId,
-                    u.DesignationId,
-                    u.IsActive,
-                    d.DepartmentName,
-                    des.DesignationName
-                FROM Users u
-                LEFT JOIN Department d
-                    ON u.PrimaryDepartmentId = d.Id AND d.IsActive = 1
-                LEFT JOIN Designation des
-                    ON u.DesignationId = des.Id AND des.IsActive = 1
-                WHERE u.UserName = @UserName AND u.IsActive = 1";
+            // 2. Get User
+            const string userQuery = @"
+                SELECT U.Id,U.UserName,U.PrimaryBranchId,U.PrimaryDepartmentId,U.IsActive,R.RoleName FROM Users AS U
+                    INNER JOIN UserRoles AS UR on UR.UserId = U.Id
+                    INNER JOIN Roles AS R ON R.Id = UR.RoleId
+                WHERE U.UserName = @UserName AND U.IsActive = 1";
 
             var userParams = new DynamicParameters();
             userParams.Add("@UserName", username);
@@ -60,108 +172,94 @@ namespace VF_CR_Management_System.Business.UserHandler
 
             var userRow = userData.Rows[0];
 
-            var firstName = userRow.Field<string?>("FirstName") ?? string.Empty;
-            var lastName = userRow.Field<string?>("LastName") ?? string.Empty;
-
             var user = new UserModel
             {
                 Id = userRow.Field<int>("Id"),
-                DisplayName = $"{firstName} {lastName}".Trim(),
                 UserName = userRow.Field<string>("UserName"),
-                DisplayDesignation = userRow.Field<string?>("DesignationName") ?? string.Empty,
-                DisplayDepartment = userRow.Field<string?>("DepartmentName") ?? string.Empty,
-                Email = userRow.Field<string?>("Email") ?? string.Empty,
+                BranchId = userRow.Field<int>("PrimaryBranchId"),
+                Dep_Id = userRow.Field<int>("PrimaryDepartmentId"),
+                DisplayName = response.Data.DisplayName,
+                DisplayDesignation = response.Data.Title,
+                DisplayDepartment = response.Data.Department,
+                Email = response.Data.Email,
+                RoleName = userRow.Field<string>("RoleName"),
                 IsActive = userRow.Field<bool>("IsActive")
             };
 
-            // 3. Get ProductIds
-            const string productQuery = @"
-                SELECT ProductId
-                FROM UserProducts
-                WHERE UserId = @UserId";
+            
+            // 4. Get MenuItems with PageUrls properly
+            const string menuQuery = @"
+                                     SELECT DISTINCT
+                                             m.Id,
+                                             m.MenuTitle,
+                                             m.ParentMenuId,
+                                             m.PageId,
+                                             m.IconClass,
+                                             m.DisplayOrder,
+                                             m.IsActive,
+                                             m.ProductId,
+                                             pd.ProductName,
+                                             m.MenuCategoryId,
+                                             c.CategoryName,
+                                             p.PageUrl
+                                         FROM MenuItems m
+                                         LEFT JOIN Pages p
+                                             ON m.PageId = p.Id
+                                         LEFT JOIN MenuCategories c
+                                             ON m.MenuCategoryId = c.Id
+                                         LEFT JOIN RolePagePermissions rpp
+                                             ON m.PageId = rpp.PageId
+                                         LEFT JOIN Products pd
+                                         	ON pd.Id = m.ProductId
+                                         LEFT JOIN UserRoles ur
+                                             ON rpp.RoleId = ur.RoleId
+                                         WHERE m.IsActive = 1
+                                           AND pd.ProductName IN @ProductNames
+                                           AND (
+                                                 ur.UserId = @UserId
+                                                 OR m.PageId IS NULL
+                                               )
+                                         ORDER BY m.DisplayOrder";
 
-            var productParams = new DynamicParameters();
-            productParams.Add("@UserId", user.Id);
 
-            var productData = _connectionService.ReturnWithPara2(productQuery, productParams);
-            if (productData != null && productData.Rows.Count > 0)
-            {
-                user.ProductIds = productData
-                    .AsEnumerable()
-                    .Select(r => r.Field<int>("ProductId"))
-                    .Distinct()
-                    .ToList();
-            }
-
-            if (!user.ProductIds.Any())
-                return user;
-
-            // 4. Get MenuItems with PageUrls properly
-            const string menuQuery = @"
-                SELECT DISTINCT
-                    m.Id,
-                    m.MenuTitle,
-                    m.ParentMenuId,
-                    m.PageId,
-                    m.IconClass,
-                    m.DisplayOrder,
-                    m.IsActive,
-                    m.ProductId,
-                    m.MenuCategoryId,
-                    c.CategoryName,
-                    p.PageUrl
-                FROM MenuItems m
-                LEFT JOIN Pages p 
-                    ON m.PageId = p.Id
-                LEFT JOIN MenuCategories c 
-                    ON m.MenuCategoryId = c.Id
-                LEFT JOIN RolePagePermissions rpp
-                    ON m.PageId = rpp.PageId
-                LEFT JOIN UserRoles ur
-                    ON rpp.RoleId = ur.RoleId
-                WHERE m.IsActive = 1
-                  AND m.ProductId = @ProductId
-                  AND (
-                        ur.UserId = @UserId
-                        OR m.PageId IS NULL
-                      )
-                ORDER BY m.DisplayOrder";
 
             var menuParams = new DynamicParameters();
             menuParams.Add("@UserId", user.Id);
-            menuParams.Add("@ProductId", productId);
+            menuParams.Add("@ProductNames", allowedProductNames);
 
             var menuData = _connectionService.ReturnWithPara2(menuQuery, menuParams);
 
             if (menuData != null && menuData.Rows.Count > 0)
             {
                 user.MenuItems = menuData.AsEnumerable()
-                    .Select(r => new MenuItem
-                    {
-                        Id = r.Field<int>("Id"),
-                        MenuTitle = r.Field<string>("MenuTitle"),
-                        ParentMenuItemId = r.Field<int?>("ParentMenuId"),
-                        PageId = r.Field<int?>("PageId"),
-                        IconClass = r.Field<string?>("IconClass"),
-                        DisplayOrder = r.Field<int>("DisplayOrder"),
-                        IsActive = r.Field<bool>("IsActive"),
-                        ProductId = r.Field<int?>("ProductId"),
-                        CategoryId = r.Field<int?>("MenuCategoryId"),
-                        CategoryName = r.Field<string?>("CategoryName"),
-                        PageUrl = r.Field<string?>("PageUrl")
-                    })
-                    .GroupBy(m => m.Id)
-                    .Select(g => g.First())
-                    .OrderBy(m => m.DisplayOrder)
-                    .ToList();
+                .Select(r => new MenuItem
+                {
+                    Id = r.Field<int>("Id"),
+                    MenuTitle = r.Field<string>("MenuTitle"),
+                    ParentMenuItemId = r.Field<int?>("ParentMenuId"),
+                    PageId = r.Field<int?>("PageId"),
+                    IconClass = r.Field<string?>("IconClass"),
+                    DisplayOrder = r.Field<int>("DisplayOrder"),
+                    IsActive = r.Field<bool>("IsActive"),
+                    ProductId = r.Field<int?>("ProductId"),
+                    ProductName = r.Field<string>("ProductName"),
+                    CategoryId = r.Field<int?>("MenuCategoryId"),
+                    CategoryName = r.Field<string?>("CategoryName"),
+                    PageUrl = r.Field<string?>("PageUrl")
+                })
+                .GroupBy(m => m.Id)          // avoid duplicates from role joins                                    
+                .Select(g => g.First())
+                .OrderBy(m => m.DisplayOrder)
+                .ToList();
             }
 
-            // 5. Populate PageUrls for session
+
+
             user.PageUrls = user.MenuItems
-                .Where(m => !string.IsNullOrWhiteSpace(m.PageUrl))
-                .Select(m => m.PageUrl!.StartsWith("/") ? m.PageUrl : "/" + m.PageUrl)
-                .Distinct()
-                .ToList();
+            .Where(m => !string.IsNullOrWhiteSpace(m.PageUrl))
+            .Select(m => m.PageUrl!.StartsWith("/") ? m.PageUrl : "/" + m.PageUrl)
+            .Distinct()
+            .ToList();
 
             return user;
         }

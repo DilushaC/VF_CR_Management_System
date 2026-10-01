@@ -7,6 +7,25 @@
     var isSecurityStatus = string.Equals(Model.Status, "Security", StringComparison.OrdinalIgnoreCase);
     var imageExt = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
 
+    // ===== Attachments split by type =====
+    var allAttachments = Model.Attachments ?? new List<Attachment>();
+
+    var srsFiles = allAttachments
+        .Where(a => string.Equals(a.AttachmentTypeName, "SRS", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var baFiles = allAttachments
+        .Where(a => string.Equals(a.AttachmentTypeName, "BA", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    // Vendor Report files (also catches older uploads that have no type recorded)
+    var vendorFiles = allAttachments
+        .Where(a => string.IsNullOrWhiteSpace(a.AttachmentTypeName)
+                    || string.Equals(a.AttachmentTypeName, "Vendor Report", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var hasAnyAttachments = srsFiles.Any() || baFiles.Any() || vendorFiles.Any();
+
     var hasAssignedUsers = new[]
     {
         Model.ApproverUserName,
@@ -212,6 +231,16 @@
             font-weight: 700;
         }
 
+    /* Attachment groups (SRS / BA / Vendor) */
+    .cr-attachment-group {
+        grid-column: 1 / -1;
+    }
+
+        .cr-attachment-group .cr-attachment-title {
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
     /* Fix overlay layer ordering for Select2 inside Modals and SweetAlert */
     .select2-container--open {
         z-index: 20000 !important;
@@ -228,6 +257,56 @@
                 <span>@value</span>
             </div>
         }
+    }
+
+    // Renders one attachment group (heading + file list). Nothing is rendered when the group is empty.
+    void RenderAttachmentGroup(string title, IEnumerable<Attachment> items)
+    {
+        if (items == null || !items.Any())
+        {
+            return;
+        }
+
+        <div class="cr-attachment-group">
+            <label class="fw-bold text-dark d-block cr-attachment-title">@title:</label>
+            <ul class="list-unstyled mb-0">
+                @foreach (var a in items)
+                {
+                    var ext = System.IO.Path.GetExtension(a.FileName)?.ToLowerInvariant() ?? "";
+                    var isImage = imageExt.Contains(ext);
+                    var isPdf = ext == ".pdf";
+                    <li class="mb-1">
+                        @if (isImage)
+                        {
+                            <a href="#" class="preview-image-link"
+                               data-attachment-id="@a.AttachmentID"
+                               data-file-name="@a.FileName">
+                                <i class="ri-image-line me-1"></i>@a.FileName
+                            </a>
+                        }
+                        else if (isPdf)
+                        {
+                            <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = a.AttachmentID })"
+                               target="_blank" rel="noopener">
+                                <i class="ri-file-pdf-line me-1"></i>@a.FileName
+                            </a>
+                        }
+                        else
+                        {
+                            <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = a.AttachmentID })" download>
+                                <i class="ri-download-2-line me-1"></i>@a.FileName
+                            </a>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(a.UploadedBy) || a.UploadedDate != default)
+                        {
+                            <small class="text-muted">
+                                (@a.UploadedBy — @a.UploadedDate.ToString("yyyy/MM/dd"))
+                            </small>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
     }
 }
 
@@ -312,48 +391,14 @@
             DetailField("Fixed Assets", Model.FixedAssets, wide: true);
         }
 
-        @if (Model.Attachments != null && Model.Attachments.Any())
+        @* ===== Attachments, grouped by type ===== *@
+        @if (hasAnyAttachments)
         {
-            <div class="cr-field-wide">
-                <label class="fw-bold text-dark d-block mb-1">Attachments:</label>
-                <ul class="list-unstyled mb-0">
-                    @foreach (var a in Model.Attachments)
-                    {
-                        var ext = System.IO.Path.GetExtension(a.FileName)?.ToLowerInvariant() ?? "";
-                        var isImage = imageExt.Contains(ext);
-                        var isPdf = ext == ".pdf";
-                        <li class="mb-1">
-                            @if (isImage)
-                            {
-                                <a href="#" class="preview-image-link"
-                                   data-attachment-id="@a.AttachmentID"
-                                   data-file-name="@a.FileName">
-                                    <i class="ri-image-line me-1"></i>@a.FileName
-                                </a>
-                            }
-                            else if (isPdf)
-                            {
-                                <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = a.AttachmentID })"
-                                   target="_blank" rel="noopener">
-                                    <i class="ri-file-pdf-line me-1"></i>@a.FileName
-                                </a>
-                            }
-                            else
-                            {
-                                <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = a.AttachmentID })" download>
-                                    <i class="ri-download-2-line me-1"></i>@a.FileName
-                                </a>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(a.UploadedBy) || a.UploadedDate != default)
-                            {
-                                <small class="text-muted">
-                                    (@a.UploadedBy — @a.UploadedDate.ToString("yyyy/MM/dd"))
-                                </small>
-                            }
-                        </li>
-                    }
-                </ul>
-            </div>
+            <div class="cr-section-title">Attachments</div>
+
+            RenderAttachmentGroup("SRS Document", srsFiles);
+            RenderAttachmentGroup("BA Document", baFiles);
+            RenderAttachmentGroup("Vendor Attachments", vendorFiles);
         }
 
         @* ===== Assigned users (workflow steps) ===== *@
@@ -440,13 +485,13 @@
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                    foreach (var user in ViewBag.Users)
-                    {
-                            string uId = user.UserName;
-                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                            if (string.IsNullOrEmpty(uId)) { continue; }
-                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                    }
+                        foreach (var user in ViewBag.Users)
+                        {
+                                    string uId = user.UserName;
+                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                    if (string.IsNullOrEmpty(uId)) { continue; }
+                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                        }
             }
         ];
 

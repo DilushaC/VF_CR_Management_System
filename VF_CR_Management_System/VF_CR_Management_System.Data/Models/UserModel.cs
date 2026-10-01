@@ -14,11 +14,15 @@ namespace VF_CR_Management_System.Data.Models
         public string? LastName { get; set; }
         public string Password { get; set; }
         public string DisplayName { get; set; }
+        public int BranchId { get; set; }
+        public int Dep_Id { get; set; }
+        public string RoleName { get; set; }
         public string DisplayDesignation { get; set; }
         public string Email { get; set; }
         public string DisplayDepartment { get; set; }
         public bool IsActive { get; set; }
         public List<int> ProductIds { get; set; } = new List<int>();
+        public List<string> ProductNames { get; set; } = new List<string>();
         public List<string> PageUrls { get; set; } = new List<string>();
         public List<MenuItem> MenuItems { get; set; } = new List<MenuItem>();
     }
