@@ -2361,7 +2361,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         }
         private async Task InsertDevelopmentApprovalStepAsync(int crId, string empId)
         {
-            // ---- 1. Resolve the Assessment StepID from WorkflowStep ----
             const string getStepIdSql = @"
                 SELECT TOP (1) StepID
                 FROM WorkflowStep
@@ -2377,9 +2376,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var assessmentStepId = stepTable.Rows[0].Field<int>("StepID");
 
-            // ---- 2. Who assigned the Assessment step? ----
-            // ASC = the ORIGINAL Assessment row (created when the CR was approved), so its AssignedBy
-            // stays the approver even if this method has already added more rows on a previous submit.
             const string getApproverSql = @"
                 SELECT TOP (1) AssignedBy
                 FROM Approval

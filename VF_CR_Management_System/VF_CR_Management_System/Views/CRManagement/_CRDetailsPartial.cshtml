@@ -122,8 +122,15 @@
     // "Go to Assessment" shows for:
     //   - the Developer: Assessment step pending + CR Approved
     //   - the Developer Documentation assignee: that step pending + CR in Assessment status
+    // Developer Documentation step: pending (no approval/decision yet) and assigned to the logged-in user
+    var canProceedAssessment = isApproved
+        && developerDocStep != null
+        && developerDocStep.IsApproved == null
+        && IsCurrentUser(developerDocStep.AssignedTo);
+
     var canGoAssessment = (isApproved && CanActOn(assessmentStep))
-        || (isAssessment && CanActOn(developerDocStep));
+        || canProceedAssessment;
+
     var canGoSecurity = (isAssessment || isSecurityStatus) && CanActOn(securityStep);
     var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
     var canGoQA = !isPastQaStatus && CanActOn(testingStep);
