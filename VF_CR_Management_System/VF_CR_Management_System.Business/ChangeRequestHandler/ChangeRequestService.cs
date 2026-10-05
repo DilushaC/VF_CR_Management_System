@@ -122,7 +122,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 const string getStepIdSql = @"
                 SELECT TOP 1 StepID 
                 FROM WorkflowStep 
-                WHERE StepName LIKE '%Department Head%' AND Active = 1
+                WHERE StepName LIKE '%Division Head Approval%' AND Active = 1
                 ORDER BY StepOrder ASC;";
 
                 // Use ExecuteScalar or similar helper method from your connection service
@@ -130,7 +130,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
                 if (stepIdObj == null || stepIdObj == DBNull.Value)
                 {
-                    throw new InvalidOperationException("Workflow step for 'Department Head' approval was not found or is inactive.");
+                    throw new InvalidOperationException("Workflow step for 'Division Head' approval was not found or is inactive.");
                 }
 
                 int targetStepId = Convert.ToInt32(stepIdObj);
@@ -205,9 +205,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (changeRequest == null)
                 return null;
 
-            // ---------- Workflow step assignments (ordered by StepOrder) ----------
-            // A step is returned if it belongs to the CR's workflow OR the CR has an
-            // approval row for it, so a WorkflowID mismatch can no longer hide assignments.
             const string stepsQuery = @"
                 SELECT
                     ws.StepID,
@@ -223,9 +220,12 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN (
                     SELECT ap.StepID, ap.AssignedTo, ap.AssignedDate, ap.TargetDate,
                            ap.Decision, ap.IsApproved,
-                           ROW_NUMBER() OVER (PARTITION BY ap.StepID
-                                              ORDER BY ap.ApprovalID DESC) AS rn
+                           ROW_NUMBER() OVER (
+                               PARTITION BY ap.StepID
+                               ORDER BY CASE WHEN wsa.StepName = 'Assessment' THEN ap.ApprovalID END ASC,
+                                        ap.ApprovalID DESC) AS rn
                     FROM [CRManagementDB].[dbo].[Approval] ap
+                    INNER JOIN [CRManagementDB].[dbo].[WorkflowStep] wsa ON wsa.StepID = ap.StepID
                     WHERE ap.CRID = @CRID AND ap.Active = 1
                 ) a ON a.StepID = ws.StepID AND a.rn = 1
                 WHERE ws.Active = 1
@@ -297,19 +297,21 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     step.AssignedToName = ResolveName(step.AssignedTo);
             }
 
-            // ---------- Map each workflow step to its named property (by StepID) ----------
-            string GetAssigneeByStep(int stepId) =>
+            // ---------- Map each workflow step to its named property (by StepName) ----------
+            string Key(string s) => (s ?? string.Empty).Replace(" ", string.Empty);
+
+            string GetAssigneeByStepName(string stepName) =>
                 changeRequest.StepAssignments
-                    .FirstOrDefault(s => s.StepID == stepId)
+                    .FirstOrDefault(s => string.Equals(Key(s.StepName), Key(stepName), StringComparison.OrdinalIgnoreCase))
                     ?.AssignedToName;
 
-            changeRequest.ApproverUserName = GetAssigneeByStep(1); // Department Head Approval
-            changeRequest.AssessmentUserName = GetAssigneeByStep(2); // Assessment
-            changeRequest.SecurityUserName = GetAssigneeByStep(3); // Security
-            changeRequest.TestingUserName = GetAssigneeByStep(4); // Testing
-            changeRequest.FinalApproverUserName = GetAssigneeByStep(5); // Final Approval
-            changeRequest.TesterUserName = GetAssigneeByStep(6); // TesterAssignment
-            changeRequest.TestingApproverUserName = GetAssigneeByStep(7); // TestingApproval
+            changeRequest.ApproverUserName = GetAssigneeByStepName("Division Head Approval"); // CR approved by
+            changeRequest.AssessmentUserName = GetAssigneeByStepName("Assessment");             // Developer
+            changeRequest.SecurityUserName = GetAssigneeByStepName("Security");               // InfoSec officer
+            changeRequest.TestingUserName = GetAssigneeByStepName("Testing");                // QA tester
+            changeRequest.FinalApproverUserName = GetAssigneeByStepName("Final Approval");         // Final CR approver
+            changeRequest.TesterUserName = GetAssigneeByStepName("TesterAssignment");       // QA assigned by
+            changeRequest.TestingApproverUserName = GetAssigneeByStepName("TestingApproval");        // QA approved by
 
             // ---------- Testing records ----------
             const string testingQuery = @"
@@ -337,6 +339,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequest;
         }
+
 
         public Task<IEnumerable<Attachment>> GetAttachmentsByCrIdAsync(int crId)
         {
@@ -490,18 +493,17 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             if (hasApprover)
             {
-                // 1. Fetch StepID dynamically for Department Head approval
                 const string getStepIdSql = @"
                     SELECT TOP 1 StepID 
                     FROM WorkflowStep 
-                    WHERE StepName LIKE '%Department Head%' AND Active = 1
+                    WHERE StepName LIKE '%Division Head Approval%' AND Active = 1
                     ORDER BY StepOrder ASC;";
 
                 var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql);
 
                 if (stepIdObj == null || stepIdObj == DBNull.Value)
                 {
-                    throw new InvalidOperationException("Workflow step for 'Department Head' approval was not found or is inactive.");
+                    throw new InvalidOperationException("Workflow step for 'Division Head' approval was not found or is inactive.");
                 }
 
                 int assignStepId = Convert.ToInt32(stepIdObj);
@@ -580,14 +582,15 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return $"{prefix}{(lastNumber + 1):D3}";   // <-- D3, not D5
         }
 
-        public async Task<bool> ApproveChangeRequestAsync(int crId, int approverId, string approvedByEmpId)
+        public async Task<bool> ApproveChangeRequestAsync(int crId, int approverId, int testerId, string approvedByEmpId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
             if (approverId <= 0)
                 throw new ArgumentException("Please select a valid user to assign.");
+            if (testerId <= 0)
+                throw new ArgumentException("Please select a valid QA user to assign.");
 
-            // 1. Update the current active Approval record
             const string updateApprovalSql = @"
                 UPDATE Approval
                 SET IsApproved = 1,
@@ -604,7 +607,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (approvalRowsAffected <= 0)
                 return false;
 
-            // 2. Fetch the Approved StatusID dynamically from CRStatus
             const string getStatusIdSql = @"
                 SELECT TOP 1 StatusID
                 FROM [CRManagementDB].[dbo].[CRStatus]
@@ -619,7 +621,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int approvedStatusId = Convert.ToInt32(statusIdObj);
 
-            // 3. Update ChangeRequest StatusID
             const string updateStatusSql = @"
                 UPDATE ChangeRequest
                 SET StatusID = @StatusID
@@ -634,40 +635,59 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (statusRowsAffected <= 0)
                 return false;
 
-            // 4. Fetch the Assessment StepID dynamically from WorkflowStep
             const string getAssessmentStepIdSql = @"
                 SELECT TOP 1 StepID
                 FROM [CRManagementDB].[dbo].[WorkflowStep]
-                WHERE StepName LIKE '%Assessment%' AND Active = 1
+                WHERE StepName LIKE '%Developer Documentation%' AND Active = 1
                 ORDER BY StepOrder ASC";
 
             var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepIdSql);
 
             if (stepIdObj == null || stepIdObj == DBNull.Value)
             {
-                throw new InvalidOperationException("Workflow step for 'Assessment' was not found or is inactive.");
+                throw new InvalidOperationException("Workflow step for 'Developer Documentation' was not found or is inactive.");
             }
 
             int assessmentStepId = Convert.ToInt32(stepIdObj);
 
-            // 5. Insert new assignment record into Approval table for the Assessment step
+            const string getTestingStepIdSql = @"
+                SELECT TOP 1 StepID
+                FROM [CRManagementDB].[dbo].[WorkflowStep]
+                WHERE StepName = 'Testing' AND Active = 1
+                ORDER BY StepOrder ASC";
+
+            var testingStepIdObj = _connectionService.ExecuteScalar(getTestingStepIdSql);
+
+            if (testingStepIdObj == null || testingStepIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Workflow step 'Testing' was not found or is inactive.");
+            }
+
+            int testingStepId = Convert.ToInt32(testingStepIdObj);
+
             const string insertNextStepSql = @"
                 INSERT INTO Approval
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
                 VALUES
                     (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
 
-            var insertParameters = new DynamicParameters();
-            insertParameters.Add("@CRID", crId);
-            insertParameters.Add("@StepID", assessmentStepId);
-            insertParameters.Add("@AssignedBy", approvedByEmpId);
-            insertParameters.Add("@AssignedTo", approverId);
-            insertParameters.Add("@AssignedDate", DateTime.Now);
-            insertParameters.Add("@Active", true);
+            int InsertApproval(int stepId, int assignedTo)
+            {
+                var p = new DynamicParameters();
+                p.Add("@CRID", crId);
+                p.Add("@StepID", stepId);
+                p.Add("@AssignedBy", approvedByEmpId);
+                p.Add("@AssignedTo", assignedTo);
+                p.Add("@AssignedDate", DateTime.Now);
+                p.Add("@Active", true);
 
-            int nextStepRowsAffected = _connectionService.ExecuteWithPara(insertNextStepSql, insertParameters);
+                return _connectionService.ExecuteWithPara(insertNextStepSql, p);
+            }
 
-            return nextStepRowsAffected > 0;
+            int assessmentRows = InsertApproval(assessmentStepId, approverId);
+            int testingRows = InsertApproval(testingStepId, testerId);
+
+            return assessmentRows > 0 && testingRows > 0;
         }
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsDraftsAsync(string empNo)
         {
@@ -786,18 +806,18 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         }
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
-            // 1. Fetch "Department Head Approval" StepID dynamically from WorkflowStep
+            // 1. Division Head Approval StepID
             const string getStepSql = @"
                 SELECT TOP 1 StepID 
                 FROM [CRManagementDB].[dbo].[WorkflowStep] 
-                WHERE StepName LIKE '%Department Head Approval%' AND Active = 1
+                WHERE StepName LIKE '%Division Head Approval%' AND Active = 1
                 ORDER BY StepOrder ASC";
 
             var stepIdObj = _connectionService.ExecuteScalar(getStepSql);
 
             if (stepIdObj == null || stepIdObj == DBNull.Value)
             {
-                throw new InvalidOperationException("Workflow step for 'Department Head Approval' was not found or is inactive.");
+                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
             }
 
             int departmentHeadStepId = Convert.ToInt32(stepIdObj);
@@ -819,9 +839,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 return Enumerable.Empty<ChangeRequest>();
             }
 
-            // 3. Query Change Requests joined with Approval
             const string sql = @"
-                SELECT
+                    SELECT
                     cr.CRID,
                     cr.CRNumber,
                     cr.ChangeTitle,
@@ -955,7 +974,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
                     AND cr.StatusID = @StatusID
-                    AND (App.IsApproved = 0 OR App.IsApproved IS NULL)
+                    AND (App.IsApproved = 0)
                     AND (App.AssignedTo = @EmpNo OR App.AssignedBy = @EmpNo OR cr.RequesterUserName = @EmpNo)
                 ORDER BY
                     cr.CRID DESC;";
@@ -1026,14 +1045,14 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getAssessmentStepSql = @"
                 SELECT TOP 1 StepID 
                 FROM [CRManagementDB].[dbo].[WorkflowStep] 
-                WHERE StepName LIKE '%Assessment%' AND Active = 1
+                WHERE StepName LIKE '%Developer Documentation%' AND Active = 1
                 ORDER BY StepOrder ASC";
 
             var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepSql);
 
             if (stepIdObj == null || stepIdObj == DBNull.Value)
             {
-                throw new InvalidOperationException("Workflow step for 'Security' was not found or is inactive.");
+                throw new InvalidOperationException("Workflow step for 'Developer Documentation' was not found or is inactive.");
             }
 
             int assessmentStepId = Convert.ToInt32(stepIdObj);
@@ -1364,14 +1383,14 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getDeptHeadStepSql = @"
                 SELECT TOP 1 StepID 
                 FROM [CRManagementDB].[dbo].[WorkflowStep] 
-                WHERE StepName = 'Department Head Approval' AND Active = 1
+                WHERE StepName = 'Division Head Approval' AND Active = 1
                 ORDER BY StepOrder ASC";
 
             var stepIdObj = _connectionService.ExecuteScalar(getDeptHeadStepSql);
 
             if (stepIdObj == null || stepIdObj == DBNull.Value)
             {
-                throw new InvalidOperationException("Workflow step 'Department Head Approval' was not found or is inactive.");
+                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
             }
 
             int deptHeadStepId = Convert.ToInt32(stepIdObj);
@@ -1714,14 +1733,14 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             const string getDeptHeadStepSql = @"
                 SELECT TOP 1 StepID 
                 FROM [CRManagementDB].[dbo].[WorkflowStep] 
-                WHERE StepName = 'Department Head Approval' AND Active = 1
+                WHERE StepName = 'Division Head Approval' AND Active = 1
                 ORDER BY StepOrder ASC";
 
             var stepIdObj = _connectionService.ExecuteScalar(getDeptHeadStepSql);
 
             if (stepIdObj == null || stepIdObj == DBNull.Value)
             {
-                throw new InvalidOperationException("Workflow step 'Department Head Approval' was not found or is inactive.");
+                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
             }
 
             int deptHeadStepId = Convert.ToInt32(stepIdObj);
@@ -2175,11 +2194,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return rowsAffected > 0;
         }
 
-        public async Task<bool> CreateAssessmentAsync(
-            int crId,
-            IFormCollection collection,
-            string userName,
-            string empId)
+        public async Task<bool> CreateAssessmentAsync(int crId,IFormCollection collection, string userName,string empId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
@@ -2212,14 +2227,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var targetStatusName = isSubmit
                 ? "Assessment"
                 : "AssessmentDraft";
-
-            // Required only when submitting
-            var isOfficerUserName = collection["ISOfficerUserName"].ToString();
-
-            if (isSubmit && string.IsNullOrWhiteSpace(isOfficerUserName))
-            {
-                throw new ArgumentException("Please select an IS Officer.");
-            }
 
             // ---------------------------------------------------------
             // Update Change Request
@@ -2300,8 +2307,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 await InsertDevelopmentApprovalStepAsync(
                     crId,
-                    empId,
-                    isOfficerUserName);
+                    empId);
             }
 
             return true;
@@ -2353,23 +2359,69 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return table.Rows[0].Field<int>("AttachmentTypeID");
         }
-        private async Task InsertDevelopmentApprovalStepAsync(int crId, string empId, string isOfficerUserName)
+        private async Task InsertDevelopmentApprovalStepAsync(int crId, string empId)
         {
+            // ---- 1. Resolve the Assessment StepID from WorkflowStep ----
             const string getStepIdSql = @"
-                SELECT StepID
+                SELECT TOP (1) StepID
                 FROM WorkflowStep
                 WHERE StepName = @StepName
                   AND Active = 1";
 
             var stepParams = new DynamicParameters();
-            stepParams.Add("@StepName", "Security");
+            stepParams.Add("@StepName", "Developer Documentation");
 
             var stepTable = _connectionService.ReturnWithPara(getStepIdSql, stepParams);
             if (stepTable == null || stepTable.Rows.Count == 0)
-                throw new InvalidOperationException("Workflow step 'Security' is not configured.");
+                throw new InvalidOperationException("Workflow step 'Developer Documentation' is not configured.");
 
-            var developmentStepId = stepTable.Rows[0].Field<int>("StepID");
+            var assessmentStepId = stepTable.Rows[0].Field<int>("StepID");
 
+            // ---- 2. Who assigned the Assessment step? ----
+            // ASC = the ORIGINAL Assessment row (created when the CR was approved), so its AssignedBy
+            // stays the approver even if this method has already added more rows on a previous submit.
+            const string getApproverSql = @"
+                SELECT TOP (1) AssignedBy
+                FROM Approval
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1
+                ORDER BY ApprovalID ASC";
+
+            var approverParams = new DynamicParameters();
+            approverParams.Add("@CRID", crId);
+            approverParams.Add("@StepID", assessmentStepId);
+
+            var approverTable = _connectionService.ReturnWithPara(getApproverSql, approverParams);
+            if (approverTable == null || approverTable.Rows.Count == 0)
+                throw new InvalidOperationException(
+                    $"No Assessment approval record found for CR {crId}, so the approver could not be determined.");
+
+            var approverUsername = approverTable.Rows[0].Field<string>("AssignedBy");
+            if (string.IsNullOrWhiteSpace(approverUsername))
+                throw new InvalidOperationException(
+                    $"The Assessment approval for CR {crId} has no AssignedBy user.");
+
+            // ---- 3. Don't insert a second pending row if one already exists for the approver ----
+            const string existsSql = @"
+                SELECT TOP (1) ApprovalID
+                FROM Approval
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND AssignedTo = @AssignedTo
+                  AND Active = 1
+                  AND IsApproved IS NULL";
+
+            var existsParams = new DynamicParameters();
+            existsParams.Add("@CRID", crId);
+            existsParams.Add("@StepID", assessmentStepId);
+            existsParams.Add("@AssignedTo", approverUsername);
+
+            var existsTable = _connectionService.ReturnWithPara(existsSql, existsParams);
+            if (existsTable != null && existsTable.Rows.Count > 0)
+                return;
+
+            // ---- 4. Insert the Assessment approval row assigned back to the approver ----
             const string insertApprovalSql = @"
                 INSERT INTO Approval
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
@@ -2378,14 +2430,15 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var parameters = new DynamicParameters();
             parameters.Add("@CRID", crId);
-            parameters.Add("@StepID", developmentStepId);
+            parameters.Add("@StepID", assessmentStepId);
             parameters.Add("@AssignedBy", empId);
-            parameters.Add("@AssignedTo", isOfficerUserName); // now the selected IS Officer, not the implementer
+            parameters.Add("@AssignedTo", approverUsername);
             parameters.Add("@AssignedDate", DateTime.Now);
             parameters.Add("@Active", true);
 
             await Task.Run(() => _connectionService.ExecuteWithPara(insertApprovalSql, parameters));
         }
+
 
 
 
@@ -2651,11 +2704,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int assessmentStepId = Convert.ToInt32(stepIdObj2);
 
-            var deptHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Department Head Approval" });
+            var deptHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
 
             if (deptHeadStepIdObj == null || deptHeadStepIdObj == DBNull.Value)
             {
-                throw new InvalidOperationException("Workflow step 'Department Head Approval' was not found or is inactive.");
+                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
             }
 
             int deptHeadStepId = Convert.ToInt32(deptHeadStepIdObj);
@@ -2672,7 +2725,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             if (deptHeadAssignedToObj == null || deptHeadAssignedToObj == DBNull.Value)
             {
-                throw new InvalidOperationException("Could not determine the Department Head Approval assignee for this Change Request.");
+                throw new InvalidOperationException("Could not determine the Division Head Approval assignee for this Change Request.");
             }
 
             string departmentHeadAssignedTo = deptHeadAssignedToObj.ToString();
@@ -2694,80 +2747,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             await Task.Run(() => _connectionService.ExecuteWithPara(insertNextStepSql, insertParameters));
         }
-        public async Task<bool> AssignTesterAsync(int crId, string approverId, string approvedByEmpId)
-        {
-            if (crId <= 0)
-                throw new ArgumentException("Invalid Change Request.");
-
-            // Get the int from the string (e.g. "6407" -> 6407)
-            if (!int.TryParse(approverId?.Trim(), out int testerNo) || testerNo <= 0)
-                throw new ArgumentException("Please select a valid user to assign.");
-
-            const string getStatusIdSql = @"
-                SELECT TOP 1 StatusID
-                FROM [CRManagementDB].[dbo].[CRStatus]
-                WHERE StatusName LIKE '%SecurityApproved%' AND Active = 1";
-
-            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql);
-
-            if (statusIdObj == null || statusIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Status 'SecurityApproved' was not found or is inactive in CRStatus table.");
-            }
-
-            int approvedStatusId = Convert.ToInt32(statusIdObj);
-
-            // 3. Update ChangeRequest StatusID
-            const string updateStatusSql = @"
-                UPDATE ChangeRequest
-                SET StatusID = @StatusID
-                WHERE CRID = @CRID";
-
-            var statusParameters = new DynamicParameters();
-            statusParameters.Add("@StatusID", approvedStatusId);
-            statusParameters.Add("@CRID", crId);
-
-            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
-
-            if (statusRowsAffected <= 0)
-                return false;
-
-            // 4. Fetch the Assessment StepID dynamically from WorkflowStep
-            const string getAssessmentStepIdSql = @"
-                SELECT TOP 1 StepID
-                FROM [CRManagementDB].[dbo].[WorkflowStep]
-                WHERE StepName LIKE '%Testing%' AND Active = 1
-                ORDER BY StepOrder ASC";
-
-            var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepIdSql);
-
-            if (stepIdObj == null || stepIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step for 'Testing' was not found or is inactive.");
-            }
-
-            int assessmentStepId = Convert.ToInt32(stepIdObj);
-
-            // 5. Insert new assignment record into Approval table for the Assessment step
-            const string insertNextStepSql = @"
-                INSERT INTO Approval
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
-
-            var insertParameters = new DynamicParameters();
-            insertParameters.Add("@CRID", crId);
-            insertParameters.Add("@StepID", assessmentStepId);
-            insertParameters.Add("@AssignedBy", approvedByEmpId);
-            insertParameters.Add("@AssignedTo", testerNo.ToString());
-            insertParameters.Add("@AssignedDate", DateTime.Now);
-            insertParameters.Add("@Active", true);
-
-            int nextStepRowsAffected = _connectionService.ExecuteWithPara(insertNextStepSql, insertParameters);
-
-            return nextStepRowsAffected > 0;
-        }
-
 
         public async Task<bool> CreateTestingAsync(int crId, IFormCollection collection, string userName, string empId)
         {
@@ -2868,7 +2847,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 return false;
 
             // 4. On submit (not draft), insert a new Approval row for the TestingApproval step.
-            //    AssignedTo is carried over from whoever was AssignedTo on the Department Head
+            //    AssignedTo is carried over from whoever was AssignedTo on the Division Head
             //    Approval step for this CR — same lookup pattern used for TesterAssignment.
             if (isSubmit)
             {
@@ -2888,11 +2867,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
                 int testingApprovalStepId = Convert.ToInt32(testingApprovalStepIdObj);
 
-                var deptHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Department Head Approval" });
+                var deptHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
 
                 if (deptHeadStepIdObj == null || deptHeadStepIdObj == DBNull.Value)
                 {
-                    throw new InvalidOperationException("Workflow step 'Department Head Approval' was not found or is inactive.");
+                    throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
                 }
 
                 int deptHeadStepId = Convert.ToInt32(deptHeadStepIdObj);
@@ -2909,7 +2888,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
                 if (deptHeadAssignedToObj == null || deptHeadAssignedToObj == DBNull.Value)
                 {
-                    throw new InvalidOperationException("Could not determine the Department Head Approval assignee for this Change Request.");
+                    throw new InvalidOperationException("Could not determine the Division Head Approval assignee for this Change Request.");
                 }
 
                 string departmentHeadAssignedTo = deptHeadAssignedToObj.ToString();

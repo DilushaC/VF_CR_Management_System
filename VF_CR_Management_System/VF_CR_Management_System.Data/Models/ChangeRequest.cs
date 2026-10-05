@@ -50,7 +50,7 @@ namespace VF_CR_Management_System.Data.Models
         public string ChangeImpact { get; set; }
 
         // Existing (kept as they are)
-        public string? ApproverUserName { get; set; }          // Department Head Approval (StepID 1)
+        public string? ApproverUserName { get; set; }        
         public string? ImplementerUserName { get; set; }
         public string? ISOfficerUserName { get; set; }
 

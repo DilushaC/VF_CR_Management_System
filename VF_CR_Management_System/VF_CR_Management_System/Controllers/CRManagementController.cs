@@ -157,12 +157,12 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Approve(int id, int ApproverID)
+        public async Task<IActionResult> Approve(int id, int ApproverID, int qaUserId)
         {
             try
             {
                 var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
-                var success = await _changeRequestService.ApproveChangeRequestAsync(id, ApproverID, empNo);
+                var success = await _changeRequestService.ApproveChangeRequestAsync(id, ApproverID, qaUserId, empNo);
 
                 if (!success)
                     return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
@@ -464,9 +464,7 @@ namespace VF_CR_Management_System.Controllers
         public async Task<IActionResult> SubmissionTable()
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
-            var userName = HttpContext.Session.GetString("UserName");
             ViewBag.CurrentEmpNo = empNo;
-            ViewBag.UserName = userName;
             var crs = await _changeRequestService.GetAllChangeRequestsSubmissionsAsync(empNo);
             return View(crs);
         }
@@ -698,29 +696,6 @@ namespace VF_CR_Management_System.Controllers
             catch (Exception ex)
             {
                 return View("Error");
-            }
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> AssignTester(int id, string testerID)
-        {
-            try
-            {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
-                var success = await _changeRequestService.AssignTesterAsync(id, testerID, empNo);
-
-                if (!success)
-                    return BadRequest(new { success = false, message = "Failed to assign the tester." });
-
-                return Ok(new { success = true, message = "Tester assigned successfully." });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception)
-            {
-                return StatusCode(500, new { success = false, message = "An unexpected error occurred while assigning the tester." });
             }
         }
 

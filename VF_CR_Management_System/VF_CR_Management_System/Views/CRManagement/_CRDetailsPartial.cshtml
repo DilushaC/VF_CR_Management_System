@@ -28,6 +28,7 @@
 
     var hasAssignedUsers = new[]
     {
+        Model.RequestedBy,
         Model.ApproverUserName,
         Model.AssessmentUserName,
         Model.SecurityUserName,
@@ -56,56 +57,7 @@
     .Distinct(StringComparer.OrdinalIgnoreCase)
     .ToList();
 
-    // Compares against the RAW value in StepAssignments[..].AssignedTo
-    bool IsAssignedTo(int stepId)
-    {
-        var assignee = Normalize(Model.StepAssignments?
-            .FirstOrDefault(s => s.StepID == stepId)?.AssignedTo);
-
-        return assignee.Length > 0
-            && currentIds.Any(id => string.Equals(id, assignee, StringComparison.OrdinalIgnoreCase));
-    }
-
-    // A step is pending while it is not approved and has no real decision
-    // (a default "Pending" value in Decision counts as no decision)
-    bool IsPending(WorkflowStepAssignment? step) =>
-        step != null
-        && step.IsApproved != true
-        && (string.IsNullOrWhiteSpace(step.Decision)
-            || string.Equals(step.Decision.Trim(), "Pending", StringComparison.OrdinalIgnoreCase));
-
-    var deptHeadStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 1);
-    var securityStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 3);
-    var testingStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 4);
-
-    // Dynamic lookup for the TesterAssignment step
-    var testerAssignmentStep = Model.StepAssignments?
-        .FirstOrDefault(s => string.Equals(s.StepName, "TesterAssignment", StringComparison.OrdinalIgnoreCase));
-
-    var isTesterAssignmentAssigned = testerAssignmentStep != null
-        && !string.IsNullOrWhiteSpace(testerAssignmentStep.AssignedTo)
-        && currentIds.Any(id => string.Equals(id, Normalize(testerAssignmentStep.AssignedTo), StringComparison.OrdinalIgnoreCase));
-
-    // Once a tester has been assigned to the Testing step, the handover is done
-    var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
-
-    var canHandoverToTester = isTesterAssignmentAssigned
-        && IsPending(testerAssignmentStep)
-        && !testerAlreadyAssigned;
-
-    var canApprove = IsAssignedTo(1) && IsPending(deptHeadStep);
-    var assessmentStep = Model.StepAssignments?.FirstOrDefault(s => s.StepID == 2);
-    var canGoAssessment = isApproved && IsAssignedTo(2) && IsPending(assessmentStep);
-    var canGoSecurity = (isAssessment || isSecurityStatus) && IsAssignedTo(3) && IsPending(securityStep);
-    var isTestingStatus = string.Equals(Model.Status, "Testing", StringComparison.OrdinalIgnoreCase);
-    var statusKey = (Model.Status ?? string.Empty).Replace(" ", string.Empty);
-    var isPastQaStatus = statusKey.Equals("Testing", StringComparison.OrdinalIgnoreCase)
-        || statusKey.Equals("TestingApproved", StringComparison.OrdinalIgnoreCase);
-    var canGoQA = !isPastQaStatus && IsAssignedTo(4) && IsPending(testingStep);
-
-    var isSecurityDraft = string.Equals(Model.Status, "SecurityDraft", StringComparison.OrdinalIgnoreCase);
-    var canEditSecurityDraft = isSecurityDraft && IsAssignedTo(3);
-
+    // "6407 - John Smith" -> "6407"
     string EmpNoOf(string? v)
     {
         var x = Normalize(v);
@@ -118,6 +70,71 @@
         var id = EmpNoOf(v);
         return id.Length > 0 && currentIds.Any(c => string.Equals(EmpNoOf(c), id, StringComparison.OrdinalIgnoreCase));
     }
+
+    // A step is pending while it is not approved and has no real decision
+    // (a default "Pending" value in Decision counts as no decision)
+    bool IsPending(WorkflowStepAssignment? step) =>
+        step != null
+        && step.IsApproved != true
+        && (string.IsNullOrWhiteSpace(step.Decision)
+            || string.Equals(step.Decision.Trim(), "Pending", StringComparison.OrdinalIgnoreCase));
+
+    // ===== Step lookup BY NAME (exact match, ignoring spaces and case) =====
+    // Exact match, so "Testing" can never pick up a step like "TestingApproval".
+    string StepKey(string? s) => (s ?? string.Empty).Replace(" ", string.Empty);
+
+    WorkflowStepAssignment? StepByName(string stepName) =>
+        Model.StepAssignments?.FirstOrDefault(s =>
+            string.Equals(StepKey(s.StepName), StepKey(stepName), StringComparison.OrdinalIgnoreCase));
+
+    // The step is still pending AND is assigned to the logged-in user
+    bool CanActOn(WorkflowStepAssignment? step) =>
+        step != null && IsPending(step) && IsCurrentUser(step.AssignedTo);
+
+    var deptHeadStep = StepByName("Division Head Approval");
+    var assessmentStep = StepByName("Assessment");
+    var securityStep = StepByName("Security");
+    var testingStep = StepByName("Testing");
+    var finalApprovalStep = StepByName("Final Approval");
+    var developerDocStep = StepByName("Developer Documentation");
+
+    // Optional steps: these only exist if they are configured in WorkflowStep.
+    // When a step is missing the matching button simply never shows.
+    var testerAssignmentStep = StepByName("TesterAssignment");
+    var testingApprovalStep = StepByName("TestingApproval");
+
+    // ===== Status flags =====
+    var statusKey = StepKey(Model.Status);
+    var isTestingStatus = statusKey.Equals("Testing", StringComparison.OrdinalIgnoreCase);
+    var isTestingApprovedStatus = statusKey.Equals("TestingApproved", StringComparison.OrdinalIgnoreCase);
+    var isPastQaStatus = isTestingStatus || isTestingApprovedStatus;
+    var isSecurityDraft = statusKey.Equals("SecurityDraft", StringComparison.OrdinalIgnoreCase);
+
+    // ===== Button permissions (all based on step NAMES) =====
+    // A button shows only when the CR status matches the stage, the step that owns the action
+    // is still pending, and that step's Approval.AssignedTo is the logged-in user.
+
+    // Once a tester has been assigned to the Testing step, the handover is done
+    var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
+
+    var isRejected = string.Equals(Model.Status, "Rejected", StringComparison.OrdinalIgnoreCase);
+    var canApprove = !isApproved && !isRejected && CanActOn(deptHeadStep);
+    // "Go to Assessment" shows for:
+    //   - the Developer: Assessment step pending + CR Approved
+    //   - the Developer Documentation assignee: that step pending + CR in Assessment status
+    var canGoAssessment = (isApproved && CanActOn(assessmentStep))
+        || (isAssessment && CanActOn(developerDocStep));
+    var canGoSecurity = (isAssessment || isSecurityStatus) && CanActOn(securityStep);
+    var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
+    var canGoQA = !isPastQaStatus && CanActOn(testingStep);
+    var canHandoverToTester = CanActOn(testerAssignmentStep) && !testerAlreadyAssigned;
+    var canHandoverToFinalApprover = isTestingStatus
+        && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
+        && CanActOn(testingApprovalStep);
+    var canFinalApprove = isTestingApprovedStatus && CanActOn(finalApprovalStep);
+
+    // The Final Approver is whoever was chosen in the handover (Model.FinalApproverUserName)
+    var isAssignedFinalApprover = IsCurrentUser(Model.FinalApproverUserName);
 
     var userLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     var nameLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -153,47 +170,10 @@
         return raw;
     }
 
-    // ===== Step-based permissions =====
-    // A button shows only when ALL are true:
-    //   1) the CR status matches that stage,
-    //   2) the workflow step that owns the action is still pending,
-    //   3) that step's Approval.AssignedTo is the logged-in user.
-
-    // Finds a step by (part of) its StepName. Edit the keywords to match your WorkflowStep table.
-    WorkflowStepAssignment? FindStep(params string[] keywords) =>
-        Model.StepAssignments?.FirstOrDefault(s =>
-            !string.IsNullOrWhiteSpace(s.StepName)
-            && keywords.Any(k => s.StepName.Replace(" ", string.Empty)
-                                     .Contains(k, StringComparison.OrdinalIgnoreCase)));
-
-    bool CanActOn(WorkflowStepAssignment? step) =>
-        step != null && IsPending(step) && IsCurrentUser(step.AssignedTo);
-
-    // Step that hands the CR over to the Final Approver (QA / testing approval step)
-    var testingApprovalStep = FindStep("TestingApproval", "TestingApprover", "QAApproval");
-    // Step that performs the final approval
-    var finalApprovalStep = FindStep("FinalApproval", "FinalApprover");
-
     var dbgMe = string.Join(",", currentIds);
     var dbgSteps = Model.StepAssignments == null
         ? "none"
         : string.Join(" | ", Model.StepAssignments.Select(x => $"{x.StepID}:{x.StepName}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
-
-    var canHandoverToFinalApprover = isTestingStatus
-        && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
-        && CanActOn(testingApprovalStep);
-
-    // Status "TestingApproved" (also matches "Testing Approved")
-    var isTestingApprovedStatus = string.Equals(
-        (Model.Status ?? string.Empty).Replace(" ", string.Empty),
-        "TestingApproved",
-        StringComparison.OrdinalIgnoreCase);
-
-    // The Final Approver is whoever was chosen in the handover (Model.FinalApproverUserName),
-    // so match on that as well as on the final approval step (step name may differ per setup).
-    var isAssignedFinalApprover = IsCurrentUser(Model.FinalApproverUserName);
-
-    var canFinalApprove = isTestingApprovedStatus && CanActOn(finalApprovalStep);
 
     // TEMPORARY: shows a small grey diagnostic line in the modal. Set to false / delete when done.
     var showDebug = false;
@@ -354,9 +334,6 @@
             DetailField("Proposal Number", Model.ProposalNumber);
         }
         @{
-            DetailField("Requested By", Model.RequestedBy);
-        }
-        @{
             DetailField("Requested Date", Model.RequestedDate.ToString("yyyy/MM/dd"));
         }
         @{
@@ -406,13 +383,14 @@
         {
             <div class="cr-section-title">Assigned Users</div>
 
+            DetailField("Requested By", DisplayUser(Model.RequestedBy));
             DetailField("CR Approver", DisplayUser(Model.ApproverUserName));
-            DetailField("Developed By", DisplayUser(Model.AssessmentUserName));
+            DetailField("Developer", DisplayUser(Model.AssessmentUserName));
             DetailField("InfoSec Officer", DisplayUser(Model.SecurityUserName));
-            DetailField("QA Done By", DisplayUser(Model.TestingUserName));
+            DetailField("QA Tester", DisplayUser(Model.TestingUserName));
             DetailField("QA Assigned By", DisplayUser(Model.TesterUserName));
             DetailField("QA Approved By", DisplayUser(Model.TestingApproverUserName));
-            DetailField("Final Approver", DisplayUser(Model.FinalApproverUserName));
+            DetailField("Final CR Approver", DisplayUser(Model.FinalApproverUserName));
         }
     </div>
 </div>
@@ -423,7 +401,7 @@
         <small class="text-muted d-block" style="font-size:11px; word-break:break-all;">
             DEBUG | status=[@Model.Status] | testingApproved=[@isTestingApprovedStatus] | finalApprover=[@Model.FinalApproverUserName] |
             me=[@dbgMe] | isFinalApprover=[@isAssignedFinalApprover] |
-            canFinalApprove=[@canFinalApprove] | steps=[@dbgSteps]
+            canApprove=[@canApprove] | canFinalApprove=[@canFinalApprove] | steps=[@dbgSteps]
         </small>
     </div>
 }
@@ -485,13 +463,13 @@
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                        foreach (var user in ViewBag.Users)
-                        {
-                                    string uId = user.UserName;
-                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                    if (string.IsNullOrEmpty(uId)) { continue; }
-                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                        }
+                                foreach (var user in ViewBag.Users)
+                                {
+                                                    string uId = user.UserName;
+                                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                                    if (string.IsNullOrEmpty(uId)) { continue; }
+                                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                                }
             }
         ];
 
@@ -553,20 +531,84 @@
             });
         }
 
-        // ===== APPROVE: pick the implementer inside the SweetAlert, then approve =====
+        // Reusable: SweetAlert with TWO searchable user dropdowns (Implementer + QA user).
+        // Resolves with { implementerId, qaId } in result.value.
+        function pickImplementerAndQa(title, confirmText, confirmColor) {
+            return Swal.fire({
+                title: title,
+                html: `
+                    <div class="text-start">
+                        <div class="mb-3">
+                            <label for="swal-implementer-select" class="form-label fw-semibold">Select Implementer:</label>
+                            <select id="swal-implementer-select" class="form-select" style="width:100%;"></select>
+                            <span id="swal-implementer-error" class="text-danger d-none small">Please select an Implementer.</span>
+                        </div>
+                        <div>
+                            <label for="swal-qa-select" class="form-label fw-semibold">Select QA User:</label>
+                            <select id="swal-qa-select" class="form-select" style="width:100%;"></select>
+                            <span id="swal-qa-error" class="text-danger d-none small">Please select a QA user.</span>
+                        </div>
+                    </div>`,
+                showCancelButton: true,
+                confirmButtonText: confirmText,
+                confirmButtonColor: confirmColor,
+                cancelButtonText: 'Cancel',
+                focusConfirm: false,
+                didOpen: () => {
+                    ['#swal-implementer-select', '#swal-qa-select'].forEach(function (sel) {
+                        $(sel).select2({
+                            dropdownParent: $('.swal2-popup'),
+                            placeholder: 'Select User',
+                            width: '100%',
+                            data: [{ id: '', text: '' }].concat(userOptions)
+                        });
+                    });
+
+                    // Hide each error as soon as a value is chosen
+                    $('#swal-implementer-select').on('change', function () {
+                        if (this.value) { $('#swal-implementer-error').addClass('d-none'); }
+                    });
+                    $('#swal-qa-select').on('change', function () {
+                        if (this.value) { $('#swal-qa-error').addClass('d-none'); }
+                    });
+                },
+                preConfirm: () => {
+                    var implementerId = $('#swal-implementer-select').val();
+                    var qaId = $('#swal-qa-select').val();
+                    var valid = true;
+
+                    if (!implementerId) {
+                        $('#swal-implementer-error').removeClass('d-none');
+                        valid = false;
+                    }
+                    if (!qaId) {
+                        $('#swal-qa-error').removeClass('d-none');
+                        valid = false;
+                    }
+
+                    return valid ? { implementerId: implementerId, qaId: qaId } : false;
+                }
+            });
+        }
+
+        // ===== APPROVE: pick the Implementer and the QA user, then approve =====
         $(document).off('click', '#modal-approve-btn')
                    .on('click', '#modal-approve-btn', function () {
 
             var crId = $(this).data('id');
 
-            pickUser('Approve Change Request', 'Select Implementer:', 'Approve', '#198754')
+            pickImplementerAndQa('Approve Change Request', 'Approve', '#198754')
                 .then((result) => {
                     if (!result.isConfirmed) return;
 
                     $.ajax({
                         url: '@Url.Action("Approve", "CRManagement")',
                         type: 'POST',
-                        data: { id: crId, approverID: result.value },
+                        data: {
+                            id: crId,
+                            approverID: result.value.implementerId,
+                            qaUserId: result.value.qaId
+                        },
                         success: function (response) {
                             if (response.success) {
                                 successAndClose(response.message || 'Change Request approved.');
@@ -581,6 +623,51 @@
                         }
                     });
                 });
+        });
+
+        // ===== REJECT: ask for a reason in the SweetAlert, then reject =====
+        $(document).off('click', '#modal-reject-btn')
+                   .on('click', '#modal-reject-btn', function () {
+
+            var crId = $(this).data('id');
+
+            Swal.fire({
+                title: 'Reject Change Request',
+                input: 'textarea',
+                inputLabel: 'Reason for rejection',
+                inputPlaceholder: 'Enter the reason for rejecting this Change Request...',
+                inputAttributes: { 'aria-label': 'Reason for rejection', maxlength: 1000 },
+                showCancelButton: true,
+                confirmButtonText: 'Reject',
+                confirmButtonColor: '#dc3545',
+                cancelButtonText: 'Cancel',
+                focusConfirm: false,
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Please enter a reason for rejection.';
+                    }
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                var token = $('input[name="__RequestVerificationToken"]').val();
+
+                $.ajax({
+                    url: '@Url.Action("Reject", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crId, RejectReason: result.value.trim() },
+                    headers: token ? { "RequestVerificationToken": token } : {},
+                    success: function (response) {
+                        // The controller returns 200 with { message } on success
+                        successAndClose((response && response.message) || 'Change Request rejected.');
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            || 'Failed to reject the Change Request. Please try again.';
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            });
         });
 
         // ===== HANDOVER TO TESTER =====

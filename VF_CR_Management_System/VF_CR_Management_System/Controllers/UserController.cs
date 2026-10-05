@@ -46,7 +46,6 @@ namespace VF_CR_Management_System.Presentation.Controllers
         //        if (user.ProductIds == null || !user.ProductIds.Contains(allowedProductId))
         //            return Json(new { success = false, message = "Unauthorized product access" });
 
-        //        // Session storage — now sourced from Users/Department/Designation, not AD
         //        HttpContext.Session.SetString("UserName", user.DisplayName);
         //        HttpContext.Session.SetString("EmpNo", user.UserName);
         //        HttpContext.Session.SetString("Designation", user.DisplayDesignation);

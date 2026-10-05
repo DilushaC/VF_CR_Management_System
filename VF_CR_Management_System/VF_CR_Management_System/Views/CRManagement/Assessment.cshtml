@@ -229,23 +229,6 @@
                                 }
                             </div>
 
-                            <div class="mb-3" id="modal-isofficer-wrapper" style="display:none;">
-                                <div class="card-body">
-                                    <label class="form-label" for="modal-approver">Select IS Officer</label>
-                                    <select id="modal-isofficer" name="ISOfficerUserName" class="form-control select2" data-toggle="select2">
-                                        <option value="" selected disabled hidden>Select User</option>
-                                        @if (ViewBag.Users != null)
-                                        {
-                                            @foreach (var user in ViewBag.Users)
-                                            {
-                                                <option value="@user.UserName">@user.FirstName @user.LastName - @user.UserName</option>
-                                            }
-                                        }
-                                    </select>
-                                    <span id="modal-approver-error" class="text-danger d-none">Please select an user.</span>
-                                </div>
-                            </div>
-
                         </div>
 
                         <!-- Right Column -->
@@ -485,59 +468,18 @@
             }
 
             if (isSubmit) {
-                var isOfficerSelect = document.getElementById('modal-isofficer');
-                var optionsHtml = isOfficerSelect.innerHTML;
-
+                // Simple confirmation before submitting (no IS Officer selection).
                 Swal.fire({
                     title: 'Submit this assessment?',
-                    html:
-                        '<p class="mb-3">Once submitted, the Change Request will move to Security Assessment.</p>' +
-                        '<div class="text-start">' +
-                            '<label class="form-label fw-bold" for="swal-isofficer">Select IS Officer</label>' +
-                            '<select id="swal-isofficer" class="form-control select2" style="width:100%;">' + optionsHtml + '</select>' +
-                            '<span id="swal-isofficer-error" class="text-danger d-none d-block mt-1">Please select an IS Officer.</span>' +
-                        '</div>',
+                    text: 'Once submitted, the Change Request will move to Security Assessment.',
                     icon: 'question',
                     showCancelButton: true,
                     confirmButtonText: 'Yes, submit',
                     cancelButtonText: 'Cancel',
                     customClass: { confirmButton: 'btn btn-primary me-2', cancelButton: 'btn btn-outline-secondary' },
-                    buttonsStyling: false,
-                    focusConfirm: false,
-                    didOpen: function () {
-                        $('#swal-isofficer').select2({
-                            dropdownParent: $('.swal2-popup'),
-                            placeholder: 'Select User',
-                            width: '100%'
-                        });
-
-                        // Clear the error message as soon as a valid selection is made.
-                        $('#swal-isofficer').on('change', function () {
-                            if (this.value) {
-                                document.getElementById('swal-isofficer-error').classList.add('d-none');
-                            }
-                        });
-                    },
-                    willClose: function () {
-                        // Clean up select2 so a stale instance doesn't linger if the alert reopens.
-                        if ($('#swal-isofficer').data('select2')) {
-                            $('#swal-isofficer').select2('destroy');
-                        }
-                    },
-                    preConfirm: function () {
-                        var swalSelect = document.getElementById('swal-isofficer');
-                        var errorSpan = document.getElementById('swal-isofficer-error');
-
-                        if (!swalSelect.value) {
-                            errorSpan.classList.remove('d-none');
-                            return false; // keeps the alert open
-                        }
-
-                        return swalSelect.value;
-                    }
+                    buttonsStyling: false
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        isOfficerSelect.value = result.value;
                         performSubmission();
                     }
                 });
