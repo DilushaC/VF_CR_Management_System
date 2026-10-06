@@ -306,7 +306,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ?.AssignedToName;
 
             changeRequest.ApproverUserName = GetAssigneeByStepName("Division Head Approval"); // CR approved by
-            changeRequest.AssessmentUserName = GetAssigneeByStepName("Assessment");             // Developer
+            changeRequest.AssessmentUserName = new[] { "Assessment", "Developer Documentation" }
+             .Select(GetAssigneeByStepName)
+             .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));           // Developer
             changeRequest.SecurityUserName = GetAssigneeByStepName("Security");               // InfoSec officer
             changeRequest.TestingUserName = GetAssigneeByStepName("Testing");                // QA tester
             changeRequest.FinalApproverUserName = GetAssigneeByStepName("Final Approval");         // Final CR approver
@@ -2228,9 +2230,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 ? "Assessment"
                 : "AssessmentDraft";
 
-            // ---------------------------------------------------------
-            // Update Change Request
-            // ---------------------------------------------------------
             const string updateCrSql = @"
                 UPDATE [CRManagementDB].[dbo].[ChangeRequest]
                 SET 
