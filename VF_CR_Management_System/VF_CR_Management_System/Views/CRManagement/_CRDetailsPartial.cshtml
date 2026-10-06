@@ -92,18 +92,13 @@
     var testerAssignmentStep = StepByName("TesterAssignment");
     var testingApprovalStep = StepByName("TestingApproval");
 
-    // ===== Status flags =====
-    // Status names follow the CRStatus table:
-    //   Approved            = Division Head approved (dev + QA assigned)
-    //   AssessmentSubmitted = was "Assessment"
-    //   SecuritySubmitted   = was "Security"
-    //   TestingSubmitted    = was "Testing"
     var statusKey = StepKey(Model.Status);
 
     bool StatusIs(params string[] names) =>
         names.Any(n => string.Equals(statusKey, StepKey(n), StringComparison.OrdinalIgnoreCase));
 
     var isApproved = StatusIs("Approved");
+    var isAssessmentReturned = StatusIs("AssessmentReturned");
     var isRejected = StatusIs("Rejected");
     var isAssessment = StatusIs("Assessment", "AssessmentSubmitted", "AssessmentAccepted");
     var isSecurityStatus = StatusIs("SecuritySubmitted");
@@ -114,14 +109,12 @@
 
     var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
     var canApprove = !isApproved && !isRejected && CanActOn(deptHeadStep);
-
-    // Go to Assessment: ONLY when status is Approved and the logged-in user is the assigned developer
     var isAssignedDeveloper = CanActOn(assessmentStep)
         || (developerDocStep != null
             && developerDocStep.IsApproved == null
             && IsCurrentUser(developerDocStep.AssignedTo));
 
-    var canGoAssessment = isApproved && isAssignedDeveloper;
+    var canGoAssessment = isApproved && isAssignedDeveloper || isAssessmentReturned && isAssignedDeveloper;
 
     var canGoSecurity = (isAssessment || isSecurityStatus) && CanActOn(securityStep);
     var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
@@ -131,13 +124,8 @@
         && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
         && CanActOn(testingApprovalStep);
     var canFinalApprove = isTestingApprovedStatus && CanActOn(finalApprovalStep);
-    // Approve / Return of the developer's assessment & documents:
-    // only after the assessment has been submitted for acceptance, and only for the step's assignee
-    // "Assessment" is the old name of status 4, "AssessmentSubmitted" the new one; both are accepted
     var isAssessmentSubmitted = StatusIs("Assessment", "AssessmentSubmitted");
     var canDevDocDecide = isAssessmentSubmitted && CanActOn(developerDocStep);
-
-    // The Final Approver is whoever was chosen in the handover (Model.FinalApproverUserName)
     var isAssignedFinalApprover = IsCurrentUser(Model.FinalApproverUserName);
 
     var userLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -179,7 +167,6 @@
         ? "none"
         : string.Join(" | ", Model.StepAssignments.Select(x => $"{x.StepID}:{x.StepName}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
 
-    // TEMPORARY: shows a small grey diagnostic line in the modal. Set to false / delete when done.
     var showDebug = false;
 }
 
@@ -800,7 +787,7 @@
                 var token = $('input[name="__RequestVerificationToken"]').val();
 
                 $.ajax({
-                    url: '@Url.Action("ReturnDeveloperDocumentation", "CRManagement")',
+                    url: '@Url.Action("ReturnDevAssessment", "CRManagement")',
                     type: 'POST',
                     data: { id: crId },
                     headers: token ? { "RequestVerificationToken": token } : {},

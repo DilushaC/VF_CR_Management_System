@@ -840,49 +840,57 @@ namespace VF_CR_Management_System.Controllers
 
 
         [HttpPost]
-        public async Task<IActionResult> AcceptDevAssessment(int id, int securityOfficerId)
+        public async Task<IActionResult> AcceptDevAssessment(int id, string securityOfficerId)
         {
             try
             {
                 var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
-                var success = await _changeRequestService.AcceptDevAssessment(id, securityOfficerId);
+                var success = await _changeRequestService.AcceptDevAssessment(id, empNo, securityOfficerId);
 
                 if (!success)
-                    return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
+                    return BadRequest(new { success = false, message = "Failed to accept the Change Request." });
 
-                return Ok(new { success = true, message = "Change Request approved successfully." });
+                return Ok(new { success = true, message = "Assessment accepted and assigned to the IS Officer." });
             }
             catch (ArgumentException ex)
             {
                 return BadRequest(new { success = false, message = ex.Message });
             }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
             catch (Exception)
             {
-                return StatusCode(500, new { success = false, message = "An unexpected error occurred while approving the CR." });
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred while accepting the CR." });
             }
         }
 
-        //[HttpPost]
-        //public async Task<IActionResult> ReturnDevAssessment(int id)
-        //{
-        //    try
-        //    {
-        //        var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
-        //        var success = await _changeRequestService.ReturnDevAssessment(id);
+        [HttpPost]
+        public async Task<IActionResult> ReturnDevAssessment(int id)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.ReturnDevAssessment(id, empNo);
 
-        //        if (!success)
-        //            return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
+                if (!success)
+                    return BadRequest(new { success = false, message = "Failed to return the Change Request." });
 
-        //        return Ok(new { success = true, message = "Change Request approved successfully." });
-        //    }
-        //    catch (ArgumentException ex)
-        //    {
-        //        return BadRequest(new { success = false, message = ex.Message });
-        //    }
-        //    catch (Exception)
-        //    {
-        //        return StatusCode(500, new { success = false, message = "An unexpected error occurred while approving the CR." });
-        //    }
-        //}
+                return Ok(new { success = true, message = "Change Request returned to the developer." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred while returning the CR." });
+            }
+        }
     }
 }
