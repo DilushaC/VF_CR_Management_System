@@ -35,5 +35,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<IEnumerable<Attachment>> GetAttachmentsByCrIdAsync(int crId);
         Task<Attachment> GetAttachmentByIdAsync(int attachmentId);
         Task<bool> DeleteAttachmentAsync(int attachmentId, string deletedByEmpId);
+        Task<bool> AcceptDevAssessment(int crId,int securityOfficerId);
+        //Task<bool> ReturnDevAssessment(int crId);
     }
 }

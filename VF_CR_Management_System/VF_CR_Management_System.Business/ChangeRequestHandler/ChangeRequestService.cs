@@ -2360,6 +2360,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         }
         private async Task InsertDevelopmentApprovalStepAsync(int crId, string empId)
         {
+            // ---- 1. Get the StepID of "Developer Documentation" ----
             const string getStepIdSql = @"
                 SELECT TOP (1) StepID
                 FROM WorkflowStep
@@ -2375,6 +2376,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var assessmentStepId = stepTable.Rows[0].Field<int>("StepID");
 
+            // ---- 2. Find who assigned the developer (the approver) ----
             const string getApproverSql = @"
                 SELECT TOP (1) AssignedBy
                 FROM Approval
@@ -2390,14 +2392,49 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var approverTable = _connectionService.ReturnWithPara(getApproverSql, approverParams);
             if (approverTable == null || approverTable.Rows.Count == 0)
                 throw new InvalidOperationException(
-                    $"No Assessment approval record found for CR {crId}, so the approver could not be determined.");
+                    $"No Developer Documentation approval record found for CR {crId}, so the approver could not be determined.");
 
             var approverUsername = approverTable.Rows[0].Field<string>("AssignedBy");
             if (string.IsNullOrWhiteSpace(approverUsername))
                 throw new InvalidOperationException(
-                    $"The Assessment approval for CR {crId} has no AssignedBy user.");
+                    $"The Developer Documentation approval for CR {crId} has no AssignedBy user.");
 
-            // ---- 3. Don't insert a second pending row if one already exists for the approver ----
+            // ---- 3. Close the logged-in user's pending Developer Documentation row ----
+            const string findDevRowSql = @"
+                SELECT TOP (1) ApprovalID
+                FROM Approval
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND AssignedTo = @AssignedTo
+                  AND Active = 1
+                  AND IsApproved IS NULL
+                ORDER BY ApprovalID DESC";
+
+            var findParams = new DynamicParameters();
+            findParams.Add("@CRID", crId);
+            findParams.Add("@StepID", assessmentStepId);
+            findParams.Add("@AssignedTo", empId);
+
+            var devRowTable = _connectionService.ReturnWithPara(findDevRowSql, findParams);
+            if (devRowTable == null || devRowTable.Rows.Count == 0)
+                throw new InvalidOperationException(
+                    $"No pending Developer Documentation row found for CR {crId} and user {empId}.");
+
+            var devApprovalId = devRowTable.Rows[0].Field<int>("ApprovalID");
+
+            const string completeDevRowSql = @"
+                UPDATE Approval
+                SET IsApproved   = 1,
+                    ApprovalDate = @ApprovalDate
+                WHERE ApprovalID = @ApprovalID";
+
+            var completeParams = new DynamicParameters();
+            completeParams.Add("@ApprovalDate", DateTime.Now);
+            completeParams.Add("@ApprovalID", devApprovalId);
+
+            await Task.Run(() => _connectionService.ExecuteWithPara(completeDevRowSql, completeParams));
+
+            // ---- 4. Don't insert a second pending row if one already exists for the approver ----
             const string existsSql = @"
                 SELECT TOP (1) ApprovalID
                 FROM Approval
@@ -2416,7 +2453,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (existsTable != null && existsTable.Rows.Count > 0)
                 return;
 
-            // ---- 4. Insert the Assessment approval row assigned back to the approver ----
+            // ---- 5. Insert the Developer Documentation row assigned back to the approver ----
             const string insertApprovalSql = @"
                 INSERT INTO Approval
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
@@ -2433,9 +2470,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             await Task.Run(() => _connectionService.ExecuteWithPara(insertApprovalSql, parameters));
         }
-
-
-
 
         private async Task SaveAttachmentsAsync(
             int crId,
@@ -3006,6 +3040,110 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             int nextStepRowsAffected = await Task.Run(() => _connectionService.ExecuteWithPara(insertNextStepSql, insertParameters));
 
             return nextStepRowsAffected > 0;
+        }
+
+        public async Task<bool> AcceptDevAssessment(int crId, int securityOfficerId)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            const string updateApprovalSql = @"
+                UPDATE Approval
+                SET IsApproved = 1,
+                    ApprovalDate = @ApprovalDate
+                WHERE CRID = @CRID
+                  AND Active = 1";
+
+            var updateApprovalParameters = new DynamicParameters();
+            updateApprovalParameters.Add("@CRID", crId);
+            updateApprovalParameters.Add("@ApprovalDate", DateTime.Now);
+
+            int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, updateApprovalParameters);
+
+            if (approvalRowsAffected <= 0)
+                return false;
+
+            const string getStatusIdSql = @"
+                SELECT TOP 1 StatusID
+                FROM [CRManagementDB].[dbo].[CRStatus]
+                WHERE StatusName LIKE '%Approved%' AND Active = 1";
+
+            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql);
+
+            if (statusIdObj == null || statusIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Status 'Approved' was not found or is inactive in CRStatus table.");
+            }
+
+            int approvedStatusId = Convert.ToInt32(statusIdObj);
+
+            const string updateStatusSql = @"
+                UPDATE ChangeRequest
+                SET StatusID = @StatusID
+                WHERE CRID = @CRID";
+
+            var statusParameters = new DynamicParameters();
+            statusParameters.Add("@StatusID", approvedStatusId);
+            statusParameters.Add("@CRID", crId);
+
+            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
+
+            if (statusRowsAffected <= 0)
+                return false;
+
+            const string getAssessmentStepIdSql = @"
+                SELECT TOP 1 StepID
+                FROM [CRManagementDB].[dbo].[WorkflowStep]
+                WHERE StepName LIKE '%Developer Documentation%' AND Active = 1
+                ORDER BY StepOrder ASC";
+
+            var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepIdSql);
+
+            if (stepIdObj == null || stepIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Workflow step for 'Developer Documentation' was not found or is inactive.");
+            }
+
+            int assessmentStepId = Convert.ToInt32(stepIdObj);
+
+            const string getTestingStepIdSql = @"
+                SELECT TOP 1 StepID
+                FROM [CRManagementDB].[dbo].[WorkflowStep]
+                WHERE StepName = 'Testing' AND Active = 1
+                ORDER BY StepOrder ASC";
+
+            var testingStepIdObj = _connectionService.ExecuteScalar(getTestingStepIdSql);
+
+            if (testingStepIdObj == null || testingStepIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Workflow step 'Testing' was not found or is inactive.");
+            }
+
+            int testingStepId = Convert.ToInt32(testingStepIdObj);
+
+            const string insertNextStepSql = @"
+                INSERT INTO Approval
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+            int InsertApproval(int stepId, int assignedTo)
+            {
+                var p = new DynamicParameters();
+                p.Add("@CRID", crId);
+                p.Add("@StepID", stepId);
+                p.Add("@AssignedBy", assignedTo);
+                p.Add("@AssignedTo", assignedTo);
+                p.Add("@AssignedDate", DateTime.Now);
+                p.Add("@Active", true);
+
+                return _connectionService.ExecuteWithPara(insertNextStepSql, p);
+            }
+
+            int assessmentRows = InsertApproval(assessmentStepId, 123);
+            int testingRows = InsertApproval(testingStepId, 123);
+
+            return assessmentRows > 0 && testingRows > 0;
         }
 
 

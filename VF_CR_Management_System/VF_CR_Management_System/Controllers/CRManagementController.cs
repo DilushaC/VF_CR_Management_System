@@ -838,5 +838,51 @@ namespace VF_CR_Management_System.Controllers
             return PartialView("_CRDetailsPartial", cr);
         }
 
+
+        [HttpPost]
+        public async Task<IActionResult> AcceptDevAssessment(int id, int securityOfficerId)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.AcceptDevAssessment(id, securityOfficerId);
+
+                if (!success)
+                    return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
+
+                return Ok(new { success = true, message = "Change Request approved successfully." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred while approving the CR." });
+            }
+        }
+
+        //[HttpPost]
+        //public async Task<IActionResult> ReturnDevAssessment(int id)
+        //{
+        //    try
+        //    {
+        //        var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+        //        var success = await _changeRequestService.ReturnDevAssessment(id);
+
+        //        if (!success)
+        //            return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
+
+        //        return Ok(new { success = true, message = "Change Request approved successfully." });
+        //    }
+        //    catch (ArgumentException ex)
+        //    {
+        //        return BadRequest(new { success = false, message = ex.Message });
+        //    }
+        //    catch (Exception)
+        //    {
+        //        return StatusCode(500, new { success = false, message = "An unexpected error occurred while approving the CR." });
+        //    }
+        //}
     }
 }

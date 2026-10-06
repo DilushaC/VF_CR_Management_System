@@ -760,7 +760,7 @@
                 var token = $('input[name="__RequestVerificationToken"]').val();
 
                 $.ajax({
-                    url: '@Url.Action("ApproveDeveloperDocumentation", "CRManagement")',
+                    url: '@Url.Action("AcceptDevAssessment", "CRManagement")',
                     type: 'POST',
                     data: { id: crId, securityOfficerId: result.value },
                     headers: token ? { "RequestVerificationToken": token } : {},
