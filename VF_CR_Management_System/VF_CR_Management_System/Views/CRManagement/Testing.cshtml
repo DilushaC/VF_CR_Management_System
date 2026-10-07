@@ -189,7 +189,7 @@
                                 <div class="col-md-6">
                                     <label class="form-label">Acceptance Date</label>
                                     <input type="text" class="form-control"
-                                           value="@(latestTest != null ? latestTest.TestingDate.ToString("dd/MM/yyyy") : DateTime.Now.ToString("dd/MM/yyyy"))" disabled>
+                                           value="@((latestTest?.TestingDate ?? DateTime.Now).ToString("dd/MM/yyyy"))" disabled>
                                 </div>
                             </div>
 
@@ -210,7 +210,7 @@
                                     <div class="mb-3">
                                         <label class="form-label">UAT Confirmation &amp; Comments</label>
                                         <textarea name="UatComments" id="uatComments" class="form-control" rows="12"
-                                                  placeholder="Write the explanation here...">@(latestTest?.UATComment)</textarea>
+                                                  placeholder="Write the explanation here...">@(latestTest?.UATLink)</textarea>
                                     </div>
                                 </div>
                             </div>

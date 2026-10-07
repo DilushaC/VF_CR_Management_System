@@ -493,38 +493,6 @@ namespace VF_CR_Management_System.Controllers
             return View(crs);
         }
 
-        public async Task<IActionResult> TestingAssignTable()
-        {
-            var empNo = HttpContext.Session.GetString("EmpNo");
-            ViewBag.CurrentEmpNo = empNo;
-            var crs = await _changeRequestService.GetAllChangeRequestsTestingAssignAsync(empNo);
-            return View(crs);
-        }
-
-        public async Task<IActionResult> TestingQueueTable()
-        {
-            var empNo = HttpContext.Session.GetString("EmpNo");
-            ViewBag.CurrentEmpNo = empNo;
-            var crs = await _changeRequestService.GetAllChangeRequestsTestingQueueAsync(empNo);
-            return View(crs);
-        }
-
-        public async Task<IActionResult> TestingApprovals()
-        {
-            var empNo = HttpContext.Session.GetString("EmpNo");
-            ViewBag.CurrentEmpNo = empNo;
-            var crs = await _changeRequestService.GetAllChangeRequestsTestingApprovalsAsync(empNo);
-            return View(crs);
-        }
-
-        public async Task<IActionResult> FinalApprovals()
-        {
-            var empNo = HttpContext.Session.GetString("EmpNo");
-            ViewBag.CurrentEmpNo = empNo;
-            var crs = await _changeRequestService.GetAllChangeRequestsFinalApprovalsAsync(empNo);
-            return View(crs);
-        }
-
 
         [HttpGet]
         public async Task<IActionResult> EditAssessment(int? id)
@@ -822,20 +790,29 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> CRDetailsPartial(int id)
         {
-            var cr = await _changeRequestService.GetChangeRequestByIdAsync(id);
-            if (cr == null)
-                return NotFound();
+            try
+            {
+                var cr = await _changeRequestService.GetChangeRequestByIdAsync(id);
+                if (cr == null)
+                    return NotFound();
 
-            var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id);
-            cr.Attachments = attachments?.ToList() ?? new List<Attachment>();
-            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id);
+                cr.Attachments = attachments?.ToList() ?? new List<Attachment>();
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
 
-            ViewBag.CurrentEmpNo = empNo;
-            ViewBag.CurrentUserName = empNo; 
-            ViewBag.CurrentDisplayName = HttpContext.Session.GetString("UserName") ?? string.Empty; 
-            ViewBag.Users = await _userService.GetAllUsersAsync();
+                ViewBag.CurrentEmpNo = empNo;
+                ViewBag.CurrentUserName = empNo;
+                ViewBag.CurrentDisplayName = HttpContext.Session.GetString("UserName") ?? string.Empty;
+                ViewBag.Users = await _userService.GetAllUsersAsync();
 
-            return PartialView("_CRDetailsPartial", cr);
+                return PartialView("_CRDetailsPartial", cr);
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
+
         }
 
 
@@ -909,6 +886,52 @@ namespace VF_CR_Management_System.Controllers
             ViewBag.CurrentEmpNo = empNo;
             var crs = await _changeRequestService.GetAllChangeRequestsAssignedToMeAsync(empNo);
             return View(crs);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ApproveToDevelopment(int id)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.ApproveToDevelopmentAsync(id,empNo);
+
+                if (!success)
+                    return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
+
+                return Ok(new { success = true, message = "Change Request approved successfully." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred while approving the CR." });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ProceedToDevelopment(int id, string uatLink)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.ProceedToDevelopmentAsync(id, uatLink, empNo);
+
+                if (!success)
+                    return BadRequest(new { message = "Failed to send UAT Link." });
+
+                return Ok(new { message = "UAT handover to QA." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred while rejecting the CR." });
+            }
         }
     }
 }

@@ -141,11 +141,18 @@
 
     var canGoSecurity = (isAssessment || isSecurityStatus) && CanActOn(securityStep);
     var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
+    // "Proceed to Development" is shown when the status is DevelopmentApproved, to the assigned developer.
+    // Clicking it opens a popup asking for the UAT link (it no longer links to the Assessment page).
+    var isDevelopmentApproved = StatusIs("DevelopmentApproved");
+    var canProceedToDevelopment = isDevelopmentApproved && isAssignedDeveloper;
+
     // "Approve to Development" is shown only when the status is SecurityApproved
     var canApproveToDevelopment = isSecurityApproved;
 
-    // "Proceed to QA Test" is hidden until Security has approved the CR
-    var canGoQA = isSecurityApproved && CanActOn(testingStep);
+    // "Proceed to QA Test" is shown when the status is DevReturn (developer has uploaded the UAT link),
+    // to the QA user whose Testing step is still pending.
+    var isDevReturn = StatusIs("DevReturn");
+    var canGoQA = isDevReturn && CanActOn(testingStep);
     var canHandoverToTester = CanActOn(testerAssignmentStep) && !testerAlreadyAssigned;
     var canHandoverToFinalApprover = isTestingStatus
         && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
@@ -437,6 +444,12 @@
     @if (canGoAssessment)
     {
         <a href="@Url.Action("Assessment", "CRManagement", new { id = Model.CRID })" class="btn btn-warning">Go to Assessment</a>
+    }
+    @if (canProceedToDevelopment)
+    {
+        <button type="button" id="modal-proceed-dev-btn" class="btn btn-warning" data-id="@Model.CRID">
+            <i class="ri-code-s-slash-line me-1"></i>Proceed to Development
+        </button>
     }
     @if (canGoSecurity)
     {
@@ -805,6 +818,57 @@
                     error: function (xhr) {
                         var msg = (xhr.responseJSON && xhr.responseJSON.message)
                             || 'Failed to approve to Development. Please try again.';
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            });
+        });
+
+        // ===== PROCEED TO DEVELOPMENT (status = DevelopmentApproved): ask for the UAT link =====
+        $(document).off('click', '#modal-proceed-dev-btn')
+                   .on('click', '#modal-proceed-dev-btn', function () {
+
+            var crId = $(this).data('id');
+
+            Swal.fire({
+                title: 'Proceed to Development',
+                input: 'url',
+                inputLabel: 'UAT Link',
+                inputPlaceholder: 'https://uat.example.com/...',
+                inputAttributes: { 'aria-label': 'UAT Link', maxlength: 500 },
+                showCancelButton: true,
+                confirmButtonText: 'Submit',
+                confirmButtonColor: '#198754',
+                cancelButtonText: 'Cancel',
+                focusConfirm: false,
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Please enter the UAT link.';
+                    }
+                    if (!/^https?:\/\/\S+$/i.test(value.trim())) {
+                        return 'Please enter a valid link starting with http:// or https://';
+                    }
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                var token = $('input[name="__RequestVerificationToken"]').val();
+
+                $.ajax({
+                    url: '@Url.Action("ProceedToDevelopment", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crId, uatLink: result.value.trim() },
+                    headers: token ? { "RequestVerificationToken": token } : {},
+                    success: function (response) {
+                        if (response && response.success === false) {
+                            Swal.fire('Error', response.message || 'Failed to save the UAT link.', 'error');
+                        } else {
+                            successAndClose((response && response.message) || 'UAT link saved.');
+                        }
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            || 'Failed to save the UAT link. Please try again.';
                         Swal.fire('Error', msg, 'error');
                     }
                 });

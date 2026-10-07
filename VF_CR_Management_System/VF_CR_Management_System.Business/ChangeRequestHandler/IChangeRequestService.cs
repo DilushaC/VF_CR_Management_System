@@ -18,10 +18,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsRejectionsAsync(string empNo);
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssessmentsAsync(string empNo);
         Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSecurityAsync(string empNo);
-        Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingAssignAsync(string empNo);
-        Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingQueueAsync(string empNo);
-        Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingApprovalsAsync(string empNo);
-        Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsFinalApprovalsAsync(string empNo);
         Task<ChangeRequest> GetChangeRequestByIdAsync(int crId);
         Task<string> GetAssignedApproverUserNameAsync(int crId);
         Task<bool> UpdateChangeRequestAsync(int crId, IFormCollection collection, string userName, string empNo);
@@ -39,5 +35,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<bool> DeleteAttachmentAsync(int attachmentId, string deletedByEmpId);
         Task<bool> AcceptDevAssessment(int crId, string empNo, string securityOfficerId);
         Task<bool> ReturnDevAssessment(int crId,string empNo);
+        Task<bool> ApproveToDevelopmentAsync(int crId, string empNo);
+        Task<bool> ProceedToDevelopmentAsync(int crId, string uatLink, string empNo);
     }
 }

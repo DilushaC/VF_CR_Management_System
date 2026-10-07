@@ -12,8 +12,8 @@ namespace VF_CR_Management_System.Data.Models
         public int CRID { get; set; }
         public int TestCycleNumber { get; set; }
         public string TestResult { get; set; }
-        public string UATComment { get; set; }
-        public DateTime TestingDate { get; set; }
+        public string UATLink { get; set; }
+        public DateTime? TestingDate { get; set; }
         public bool Active { get; set; }
     }
 }

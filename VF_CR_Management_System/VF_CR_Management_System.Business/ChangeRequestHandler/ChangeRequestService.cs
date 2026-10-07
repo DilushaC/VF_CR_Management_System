@@ -317,7 +317,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             // ---------- Testing records ----------
             const string testingQuery = @"
-                SELECT TestID, CRID, TestCycleNumber, TestResult, UATComment, TestingDate, Active
+                SELECT TestID, CRID, TestCycleNumber, TestResult, UATLink, TestingDate, Active
                 FROM [CRManagementDB].[dbo].[Testing]
                 WHERE CRID = @CRID AND Active = 1
                 ORDER BY TestCycleNumber DESC";
@@ -334,8 +334,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     CRID = r.Field<int>("CRID"),
                     TestCycleNumber = r.Field<int>("TestCycleNumber"),
                     TestResult = r.Field<string>("TestResult"),
-                    UATComment = r.Field<string>("UATComment"),
-                    TestingDate = r.Field<DateTime>("TestingDate"),
+                    UATLink = r.Field<string>("UATLink"),
+                    TestingDate = r.Field<DateTime?>("TestingDate"),
                     Active = r.Field<bool>("Active")
                 }).ToList();
 
@@ -692,6 +692,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return assessmentRows > 0 && testingRows > 0;
         }
+
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsDraftsAsync(string empNo)
         {
             // 1. Fetch Rejected StatusID dynamically from CRStatus
@@ -1752,357 +1753,357 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequests;
         }
-        public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingQueueAsync(string empNo)
-        {
-            // 1. Fetch Assessment StepID dynamically from WorkflowStep
-            const string getAssessmentStepSql = @"
-                SELECT TOP 1 StepID 
-                FROM [CRManagementDB].[dbo].[WorkflowStep] 
-                WHERE StepName LIKE '%Testing%' AND Active = 1
-                ORDER BY StepOrder ASC";
+        //public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingQueueAsync(string empNo)
+        //{
+        //    // 1. Fetch Assessment StepID dynamically from WorkflowStep
+        //    const string getAssessmentStepSql = @"
+        //        SELECT TOP 1 StepID 
+        //        FROM [CRManagementDB].[dbo].[WorkflowStep] 
+        //        WHERE StepName LIKE '%Testing%' AND Active = 1
+        //        ORDER BY StepOrder ASC";
 
-            var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepSql);
+        //    var stepIdObj = _connectionService.ExecuteScalar(getAssessmentStepSql);
 
-            if (stepIdObj == null || stepIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step for 'Security' was not found or is inactive.");
-            }
+        //    if (stepIdObj == null || stepIdObj == DBNull.Value)
+        //    {
+        //        throw new InvalidOperationException("Workflow step for 'Security' was not found or is inactive.");
+        //    }
 
-            int assessmentStepId = Convert.ToInt32(stepIdObj);
+        //    int assessmentStepId = Convert.ToInt32(stepIdObj);
 
-            const string getStatusIdsSql = @"
-                SELECT StatusID 
-                FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE StatusName != 'Draft'
-                  AND StatusName != 'Submitted'
-                  AND StatusName != 'Approved'
-                  AND StatusName != 'Assessment'
-                  AND StatusName != 'Security'
-                  AND Active = 1";
+        //    const string getStatusIdsSql = @"
+        //        SELECT StatusID 
+        //        FROM [CRManagementDB].[dbo].[CRStatus] 
+        //        WHERE StatusName != 'Draft'
+        //          AND StatusName != 'Submitted'
+        //          AND StatusName != 'Approved'
+        //          AND StatusName != 'Assessment'
+        //          AND StatusName != 'Security'
+        //          AND Active = 1";
 
-            var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
-            var statusIds = statusTable.AsEnumerable()
-                .Select(r => r.Field<int>("StatusID"))
-                .ToList();
+        //    var statusTable = _connectionService.ReturnWithPara(getStatusIdsSql, null);
+        //    var statusIds = statusTable.AsEnumerable()
+        //        .Select(r => r.Field<int>("StatusID"))
+        //        .ToList();
 
-            if (!statusIds.Any())
-            {
-                return Enumerable.Empty<ChangeRequest>();
-            }
+        //    if (!statusIds.Any())
+        //    {
+        //        return Enumerable.Empty<ChangeRequest>();
+        //    }
 
-            // 3. Query Change Requests joined with Approval
-            const string sql = @"
-                SELECT
-                    cr.CRID,
-                    cr.CRNumber,
-                    cr.ChangeTitle,
-                    cr.Summary,
-                    cr.ProposalNumber,
-                    ct.ChangeTypeName AS ChangeType,
-                    p.PriorityName AS Priority,
-                    cr.DivisionID,
-                    d.DivisionName AS Division,
-                    cr.ModuleID,
-                    cr.ActivitiesTasks,
-                    cr.FixedAssets,
-                    cr.RiskAssessment,
-                    m.ModuleName AS Module,
-                    s.StatusName AS Status,
-                    cr.RequesterUserName AS RequestedBy,
-                    App.AssignedTo AS ApproverUserName,
-                    cr.RequestedDate,
-                    v.VendorName AS Vendor,
-                    ci.ImpactName AS ChangeImpact
-                FROM [dbo].[Approval] AS App
-                INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
-                LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ImpactID
-                WHERE cr.Active = 1
-                    AND App.Active = 1
-                    AND App.StepID = @StepID
-                    AND App.AssignedTo = @EmpNo
-                    AND cr.StatusID IN @StatusIDs
-                ORDER BY
-                    cr.CRID DESC;";
+        //    // 3. Query Change Requests joined with Approval
+        //    const string sql = @"
+        //        SELECT
+        //            cr.CRID,
+        //            cr.CRNumber,
+        //            cr.ChangeTitle,
+        //            cr.Summary,
+        //            cr.ProposalNumber,
+        //            ct.ChangeTypeName AS ChangeType,
+        //            p.PriorityName AS Priority,
+        //            cr.DivisionID,
+        //            d.DivisionName AS Division,
+        //            cr.ModuleID,
+        //            cr.ActivitiesTasks,
+        //            cr.FixedAssets,
+        //            cr.RiskAssessment,
+        //            m.ModuleName AS Module,
+        //            s.StatusName AS Status,
+        //            cr.RequesterUserName AS RequestedBy,
+        //            App.AssignedTo AS ApproverUserName,
+        //            cr.RequestedDate,
+        //            v.VendorName AS Vendor,
+        //            ci.ImpactName AS ChangeImpact
+        //        FROM [dbo].[Approval] AS App
+        //        INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
+        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
+        //        LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
+        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ImpactID
+        //        WHERE cr.Active = 1
+        //            AND App.Active = 1
+        //            AND App.StepID = @StepID
+        //            AND App.AssignedTo = @EmpNo
+        //            AND cr.StatusID IN @StatusIDs
+        //        ORDER BY
+        //            cr.CRID DESC;";
 
-            var changeRequests = _connectionService.Query<ChangeRequest>(
-                sql,
-                new
-                {
-                    EmpNo = empNo,
-                    StepID = assessmentStepId,
-                    StatusIDs = statusIds
-                }).ToList();
+        //    var changeRequests = _connectionService.Query<ChangeRequest>(
+        //        sql,
+        //        new
+        //        {
+        //            EmpNo = empNo,
+        //            StepID = assessmentStepId,
+        //            StatusIDs = statusIds
+        //        }).ToList();
 
-            if (!changeRequests.Any())
-                return changeRequests;
+        //    if (!changeRequests.Any())
+        //        return changeRequests;
 
-            // 4. Resolve Full Names for Requesters and Approvers
-            var userNames = changeRequests
-                .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
-                .Where(u => !string.IsNullOrWhiteSpace(u))
-                .Distinct()
-                .ToList();
+        //    // 4. Resolve Full Names for Requesters and Approvers
+        //    var userNames = changeRequests
+        //        .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
+        //        .Where(u => !string.IsNullOrWhiteSpace(u))
+        //        .Distinct()
+        //        .ToList();
 
-            if (userNames.Any())
-            {
-                const string usersQuery = @"
-                    SELECT UserName, FirstName, LastName
-                    FROM Users
-                    WHERE UserName IN @UserNames";
+        //    if (userNames.Any())
+        //    {
+        //        const string usersQuery = @"
+        //            SELECT UserName, FirstName, LastName
+        //            FROM Users
+        //            WHERE UserName IN @UserNames";
 
-                var userParams = new DynamicParameters();
-                userParams.Add("@UserNames", userNames);
+        //        var userParams = new DynamicParameters();
+        //        userParams.Add("@UserNames", userNames);
 
-                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+        //        var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
 
-                var nameLookup = usersTable.AsEnumerable()
-                    .ToDictionary(
-                        r => r.Field<string>("UserName"),
-                        r =>
-                        {
-                            var uName = r.Field<string>("UserName");
-                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
-                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
-                        },
-                        StringComparer.OrdinalIgnoreCase);
+        //        var nameLookup = usersTable.AsEnumerable()
+        //            .ToDictionary(
+        //                r => r.Field<string>("UserName"),
+        //                r =>
+        //                {
+        //                    var uName = r.Field<string>("UserName");
+        //                    var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+        //                    return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+        //                },
+        //                StringComparer.OrdinalIgnoreCase);
 
-                foreach (var cr in changeRequests)
-                {
-                    if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
-                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
-                    {
-                        cr.RequestedBy = requesterFormattedName;
-                    }
+        //        foreach (var cr in changeRequests)
+        //        {
+        //            if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
+        //                nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
+        //            {
+        //                cr.RequestedBy = requesterFormattedName;
+        //            }
 
-                    if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
-                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
-                    {
-                        cr.ApproverUserName = approverFormattedName;
-                    }
-                }
-            }
+        //            if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
+        //                nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
+        //            {
+        //                cr.ApproverUserName = approverFormattedName;
+        //            }
+        //        }
+        //    }
 
-            // 5. Fetch attachments for all CRs in a single round-trip
-            var crIds = changeRequests.Select(cr => cr.CRID).Distinct().ToList();
+        //    // 5. Fetch attachments for all CRs in a single round-trip
+        //    var crIds = changeRequests.Select(cr => cr.CRID).Distinct().ToList();
 
-            const string attachmentsQuery = @"
-                SELECT AttachmentID, CRID, FileName, FilePath, UploadedBy, UploadedDate, Active
-                FROM [CRManagementDB].[dbo].[Attachment]
-                WHERE CRID IN @CRIDs AND Active = 1
-                ORDER BY UploadedDate DESC";
+        //    const string attachmentsQuery = @"
+        //        SELECT AttachmentID, CRID, FileName, FilePath, UploadedBy, UploadedDate, Active
+        //        FROM [CRManagementDB].[dbo].[Attachment]
+        //        WHERE CRID IN @CRIDs AND Active = 1
+        //        ORDER BY UploadedDate DESC";
 
-            var attachmentParams = new DynamicParameters();
-            attachmentParams.Add("@CRIDs", crIds);
+        //    var attachmentParams = new DynamicParameters();
+        //    attachmentParams.Add("@CRIDs", crIds);
 
-            var attachmentsTable = _connectionService.ReturnWithPara(attachmentsQuery, attachmentParams);
+        //    var attachmentsTable = _connectionService.ReturnWithPara(attachmentsQuery, attachmentParams);
 
-            var attachmentsByCrId = attachmentsTable.AsEnumerable()
-                .GroupBy(r => r.Field<int>("CRID"))
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Select(r => new Attachment
-                    {
-                        AttachmentID = r.Field<int>("AttachmentID"),
-                        CRID = r.Field<int>("CRID"),
-                        FileName = r.Field<string>("FileName"),
-                        FilePath = r.Field<string>("FilePath"),
-                        UploadedBy = r.Field<string>("UploadedBy"),
-                        UploadedDate = r.Field<DateTime>("UploadedDate"),
-                        Active = r.Field<bool>("Active")
-                    }).ToList()
-                );
+        //    var attachmentsByCrId = attachmentsTable.AsEnumerable()
+        //        .GroupBy(r => r.Field<int>("CRID"))
+        //        .ToDictionary(
+        //            g => g.Key,
+        //            g => g.Select(r => new Attachment
+        //            {
+        //                AttachmentID = r.Field<int>("AttachmentID"),
+        //                CRID = r.Field<int>("CRID"),
+        //                FileName = r.Field<string>("FileName"),
+        //                FilePath = r.Field<string>("FilePath"),
+        //                UploadedBy = r.Field<string>("UploadedBy"),
+        //                UploadedDate = r.Field<DateTime>("UploadedDate"),
+        //                Active = r.Field<bool>("Active")
+        //            }).ToList()
+        //        );
 
-            foreach (var cr in changeRequests)
-            {
-                cr.Attachments = attachmentsByCrId.TryGetValue(cr.CRID, out var files)
-                    ? files
-                    : new List<Attachment>();
-            }
+        //    foreach (var cr in changeRequests)
+        //    {
+        //        cr.Attachments = attachmentsByCrId.TryGetValue(cr.CRID, out var files)
+        //            ? files
+        //            : new List<Attachment>();
+        //    }
 
-            return changeRequests;
-        }
+        //    return changeRequests;
+        //}
 
 
-        public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingApprovalsAsync(string empNo)
-        {
-            const string getDeptHeadStepSql = @"
-                SELECT TOP 1 StepID 
-                FROM [CRManagementDB].[dbo].[WorkflowStep] 
-                WHERE StepName = 'Division Head Approval' AND Active = 1
-                ORDER BY StepOrder ASC";
+        //public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsTestingApprovalsAsync(string empNo)
+        //{
+        //    const string getDeptHeadStepSql = @"
+        //        SELECT TOP 1 StepID 
+        //        FROM [CRManagementDB].[dbo].[WorkflowStep] 
+        //        WHERE StepName = 'Division Head Approval' AND Active = 1
+        //        ORDER BY StepOrder ASC";
 
-            var stepIdObj = _connectionService.ExecuteScalar(getDeptHeadStepSql);
+        //    var stepIdObj = _connectionService.ExecuteScalar(getDeptHeadStepSql);
 
-            if (stepIdObj == null || stepIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
-            }
+        //    if (stepIdObj == null || stepIdObj == DBNull.Value)
+        //    {
+        //        throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
+        //    }
 
-            int deptHeadStepId = Convert.ToInt32(stepIdObj);
+        //    int deptHeadStepId = Convert.ToInt32(stepIdObj);
 
-            // Get all StatusIDs NOT in the excluded set (Draft, Submitted, Approved, Assessment)
-            const string getTestingStatusIdsSql = @"
-                SELECT StatusID 
-                FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE StatusName != 'Draft'
-                  AND StatusName != 'Submitted'
-                  AND StatusName != 'Approved'
-                  AND StatusName != 'Assessment'
-                  AND StatusName != 'Security'
-                  AND Active = 1";
+        //    // Get all StatusIDs NOT in the excluded set (Draft, Submitted, Approved, Assessment)
+        //    const string getTestingStatusIdsSql = @"
+        //        SELECT StatusID 
+        //        FROM [CRManagementDB].[dbo].[CRStatus] 
+        //        WHERE StatusName != 'Draft'
+        //          AND StatusName != 'Submitted'
+        //          AND StatusName != 'Approved'
+        //          AND StatusName != 'Assessment'
+        //          AND StatusName != 'Security'
+        //          AND Active = 1";
 
-            var statusTable = _connectionService.ReturnWithPara(getTestingStatusIdsSql, null);
-            var statusIds = statusTable.AsEnumerable()
-                .Select(r => r.Field<int>("StatusID"))
-                .ToList();
+        //    var statusTable = _connectionService.ReturnWithPara(getTestingStatusIdsSql, null);
+        //    var statusIds = statusTable.AsEnumerable()
+        //        .Select(r => r.Field<int>("StatusID"))
+        //        .ToList();
 
-            if (!statusIds.Any())
-            {
-                return Enumerable.Empty<ChangeRequest>();
-            }
+        //    if (!statusIds.Any())
+        //    {
+        //        return Enumerable.Empty<ChangeRequest>();
+        //    }
 
-            const string sql = @"
-                SELECT
-                    cr.CRID,
-                    cr.CRNumber,
-                    cr.ChangeTitle,
-                    cr.Summary,
-                    cr.ProposalNumber,
-                    ct.ChangeTypeName AS ChangeType,
-                    p.PriorityName AS Priority,
-                    cr.DivisionID,
-                    d.DivisionName AS Division,
-                    cr.ModuleID,
-                    cr.ActivitiesTasks,
-                    cr.FixedAssets,
-                    cr.RiskAssessment,
-                    m.ModuleName AS Module,
-                    s.StatusName AS Status,
-                    cr.RequesterUserName AS RequestedBy,
-                    App.AssignedTo AS ApproverUserName,
-                    cr.RequestedDate,
-                    v.VendorName AS Vendor,
-                    ci.ImpactName AS ChangeImpact
-                FROM [dbo].[Approval] AS App
-                INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
-                LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ImpactID
-                WHERE cr.Active = 1
-                    AND App.Active = 1
-                    AND App.IsApproved = 1
-                    AND App.StepID = @StepID
-                    AND App.AssignedTo = @EmpNo
-                    AND cr.StatusID IN @StatusIDs
-                ORDER BY
-                    cr.CRID DESC;";
+        //    const string sql = @"
+        //        SELECT
+        //            cr.CRID,
+        //            cr.CRNumber,
+        //            cr.ChangeTitle,
+        //            cr.Summary,
+        //            cr.ProposalNumber,
+        //            ct.ChangeTypeName AS ChangeType,
+        //            p.PriorityName AS Priority,
+        //            cr.DivisionID,
+        //            d.DivisionName AS Division,
+        //            cr.ModuleID,
+        //            cr.ActivitiesTasks,
+        //            cr.FixedAssets,
+        //            cr.RiskAssessment,
+        //            m.ModuleName AS Module,
+        //            s.StatusName AS Status,
+        //            cr.RequesterUserName AS RequestedBy,
+        //            App.AssignedTo AS ApproverUserName,
+        //            cr.RequestedDate,
+        //            v.VendorName AS Vendor,
+        //            ci.ImpactName AS ChangeImpact
+        //        FROM [dbo].[Approval] AS App
+        //        INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
+        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Priority] AS p ON p.PriorityID = cr.PriorityID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Division] AS d ON d.DivisionID = cr.DivisionID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Module] AS m ON m.ModuleID = cr.ModuleID
+        //        LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s ON s.StatusID = cr.StatusID
+        //        LEFT JOIN [CRManagementDB].[dbo].[Vendor] AS v ON v.VendorID = cr.VendorID 
+        //        LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] AS ci ON ci.ImpactID = cr.ImpactID
+        //        WHERE cr.Active = 1
+        //            AND App.Active = 1
+        //            AND App.IsApproved = 1
+        //            AND App.StepID = @StepID
+        //            AND App.AssignedTo = @EmpNo
+        //            AND cr.StatusID IN @StatusIDs
+        //        ORDER BY
+        //            cr.CRID DESC;";
 
-            var changeRequests = _connectionService.Query<ChangeRequest>(
-                sql,
-                new
-                {
-                    EmpNo = empNo,
-                    StepID = deptHeadStepId,
-                    StatusIDs = statusIds
-                }).ToList();
+        //    var changeRequests = _connectionService.Query<ChangeRequest>(
+        //        sql,
+        //        new
+        //        {
+        //            EmpNo = empNo,
+        //            StepID = deptHeadStepId,
+        //            StatusIDs = statusIds
+        //        }).ToList();
 
-            if (!changeRequests.Any())
-                return changeRequests;
+        //    if (!changeRequests.Any())
+        //        return changeRequests;
 
-            // 4. Resolve Full Names for Requesters and Approvers
-            var userNames = changeRequests
-                .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
-                .Where(u => !string.IsNullOrWhiteSpace(u))
-                .Distinct()
-                .ToList();
+        //    // 4. Resolve Full Names for Requesters and Approvers
+        //    var userNames = changeRequests
+        //        .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
+        //        .Where(u => !string.IsNullOrWhiteSpace(u))
+        //        .Distinct()
+        //        .ToList();
 
-            if (userNames.Any())
-            {
-                const string usersQuery = @"
-                    SELECT UserName, FirstName, LastName
-                    FROM Users
-                    WHERE UserName IN @UserNames";
+        //    if (userNames.Any())
+        //    {
+        //        const string usersQuery = @"
+        //            SELECT UserName, FirstName, LastName
+        //            FROM Users
+        //            WHERE UserName IN @UserNames";
 
-                var userParams = new DynamicParameters();
-                userParams.Add("@UserNames", userNames);
+        //        var userParams = new DynamicParameters();
+        //        userParams.Add("@UserNames", userNames);
 
-                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+        //        var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
 
-                var nameLookup = usersTable.AsEnumerable()
-                    .ToDictionary(
-                        r => r.Field<string>("UserName"),
-                        r =>
-                        {
-                            var uName = r.Field<string>("UserName");
-                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
-                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
-                        },
-                        StringComparer.OrdinalIgnoreCase);
+        //        var nameLookup = usersTable.AsEnumerable()
+        //            .ToDictionary(
+        //                r => r.Field<string>("UserName"),
+        //                r =>
+        //                {
+        //                    var uName = r.Field<string>("UserName");
+        //                    var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+        //                    return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+        //                },
+        //                StringComparer.OrdinalIgnoreCase);
 
-                foreach (var cr in changeRequests)
-                {
-                    if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
-                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
-                    {
-                        cr.RequestedBy = requesterFormattedName;
-                    }
+        //        foreach (var cr in changeRequests)
+        //        {
+        //            if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
+        //                nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
+        //            {
+        //                cr.RequestedBy = requesterFormattedName;
+        //            }
 
-                    if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
-                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
-                    {
-                        cr.ApproverUserName = approverFormattedName;
-                    }
-                }
-            }
+        //            if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
+        //                nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
+        //            {
+        //                cr.ApproverUserName = approverFormattedName;
+        //            }
+        //        }
+        //    }
 
-            var crIds = changeRequests.Select(cr => cr.CRID).Distinct().ToList();
+        //    var crIds = changeRequests.Select(cr => cr.CRID).Distinct().ToList();
 
-            const string attachmentsQuery = @"
-                SELECT AttachmentID, CRID, FileName, FilePath, UploadedBy, UploadedDate, Active
-                FROM [CRManagementDB].[dbo].[Attachment]
-                WHERE CRID IN @CRIDs AND Active = 1
-                ORDER BY UploadedDate DESC";
+        //    const string attachmentsQuery = @"
+        //        SELECT AttachmentID, CRID, FileName, FilePath, UploadedBy, UploadedDate, Active
+        //        FROM [CRManagementDB].[dbo].[Attachment]
+        //        WHERE CRID IN @CRIDs AND Active = 1
+        //        ORDER BY UploadedDate DESC";
 
-            var attachmentParams = new DynamicParameters();
-            attachmentParams.Add("@CRIDs", crIds);
+        //    var attachmentParams = new DynamicParameters();
+        //    attachmentParams.Add("@CRIDs", crIds);
 
-            var attachmentsTable = _connectionService.ReturnWithPara(attachmentsQuery, attachmentParams);
+        //    var attachmentsTable = _connectionService.ReturnWithPara(attachmentsQuery, attachmentParams);
 
-            var attachmentsByCrId = attachmentsTable.AsEnumerable()
-                .GroupBy(r => r.Field<int>("CRID"))
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Select(r => new Attachment
-                    {
-                        AttachmentID = r.Field<int>("AttachmentID"),
-                        CRID = r.Field<int>("CRID"),
-                        FileName = r.Field<string>("FileName"),
-                        FilePath = r.Field<string>("FilePath"),
-                        UploadedBy = r.Field<string>("UploadedBy"),
-                        UploadedDate = r.Field<DateTime>("UploadedDate"),
-                        Active = r.Field<bool>("Active")
-                    }).ToList()
-                );
+        //    var attachmentsByCrId = attachmentsTable.AsEnumerable()
+        //        .GroupBy(r => r.Field<int>("CRID"))
+        //        .ToDictionary(
+        //            g => g.Key,
+        //            g => g.Select(r => new Attachment
+        //            {
+        //                AttachmentID = r.Field<int>("AttachmentID"),
+        //                CRID = r.Field<int>("CRID"),
+        //                FileName = r.Field<string>("FileName"),
+        //                FilePath = r.Field<string>("FilePath"),
+        //                UploadedBy = r.Field<string>("UploadedBy"),
+        //                UploadedDate = r.Field<DateTime>("UploadedDate"),
+        //                Active = r.Field<bool>("Active")
+        //            }).ToList()
+        //        );
 
-            foreach (var cr in changeRequests)
-            {
-                cr.Attachments = attachmentsByCrId.TryGetValue(cr.CRID, out var files)
-                    ? files
-                    : new List<Attachment>();
-            }
+        //    foreach (var cr in changeRequests)
+        //    {
+        //        cr.Attachments = attachmentsByCrId.TryGetValue(cr.CRID, out var files)
+        //            ? files
+        //            : new List<Attachment>();
+        //    }
 
-            return changeRequests;
-        }
+        //    return changeRequests;
+        //}
 
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsFinalApprovalsAsync(string empNo)
         {
@@ -2395,7 +2396,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return rowsAffected > 0;
         }
 
-        public async Task<bool> CreateAssessmentAsync(int crId,IFormCollection collection, string userName,string empId)
+        public async Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
@@ -3369,7 +3370,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 WHERE ApprovalID = @ApprovalID";
 
             var closeParams = new DynamicParameters();
-            closeParams.Add("@Decision", "Accepted");
+            closeParams.Add("@Decision", "Dev Docs Accepted");
             closeParams.Add("@ApprovalDate", DateTime.Now);
             closeParams.Add("@ApprovalID", pendingApprovalId);
 
@@ -3506,6 +3507,268 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return insertRows > 0;
         }
 
+        public async Task<bool> ApproveToDevelopmentAsync(int crId, string empNo)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+
+            // Resolves a StepID by step NAME (never a hard-coded ID)
+            int GetStepId(string stepName)
+            {
+                const string getStepIdSql = @"
+                    SELECT TOP 1 StepID
+                    FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = @StepName
+                      AND Active = 1
+                    ORDER BY StepOrder ASC";
+
+                var obj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = stepName });
+
+                if (obj == null || obj == DBNull.Value)
+                {
+                    throw new InvalidOperationException($"Workflow step '{stepName}' was not found or is inactive.");
+                }
+
+                return Convert.ToInt32(obj);
+            }
+
+            int securityStepId = GetStepId("Security");
+            int developerDocStepId = GetStepId("Developer Documentation");
+
+            // 1. Mark the pending Security approval row as approved
+            const string updateApprovalSql = @"
+                UPDATE Approval
+                SET IsApproved = 1,
+                    ApprovalDate = @ApprovalDate,
+                    Decision = 'Division Head Approved'
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND IsApproved IS NULL
+                  AND Active = 1";
+
+            var updateApprovalParameters = new DynamicParameters();
+            updateApprovalParameters.Add("@CRID", crId);
+            updateApprovalParameters.Add("@StepID", securityStepId);
+            updateApprovalParameters.Add("@ApprovalDate", DateTime.Now);
+
+            int approvalRowsAffected = _connectionService.ExecuteWithPara(updateApprovalSql, updateApprovalParameters);
+
+            if (approvalRowsAffected <= 0)
+                return false;
+
+            // 2. Update the CR status to DevelopmentApproved
+            const string getStatusIdSql = @"
+                SELECT TOP 1 StatusID
+                FROM [CRManagementDB].[dbo].[CRStatus]
+                WHERE StatusName = 'DevelopmentApproved' AND Active = 1";
+
+            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql);
+
+            if (statusIdObj == null || statusIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Status 'DevelopmentApproved' was not found or is inactive in CRStatus table.");
+            }
+
+            int approvedStatusId = Convert.ToInt32(statusIdObj);
+
+            const string updateStatusSql = @"
+                UPDATE ChangeRequest
+                SET StatusID = @StatusID
+                WHERE CRID = @CRID";
+
+            var statusParameters = new DynamicParameters();
+            statusParameters.Add("@StatusID", approvedStatusId);
+            statusParameters.Add("@CRID", crId);
+
+            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
+
+            if (statusRowsAffected <= 0)
+                return false;
+
+            // 3. Find the developer: AssignedTo of the FIRST "Developer Documentation" row for this CR
+            const string getDeveloperSql = @"
+                SELECT TOP 1 AssignedTo
+                FROM [CRManagementDB].[dbo].[Approval]
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1
+                ORDER BY ApprovalID ASC";
+
+            var developerObj = _connectionService.ExecuteScalar(
+                getDeveloperSql, new { CRID = crId, StepID = developerDocStepId });
+
+            if (developerObj == null || developerObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Could not determine the Developer Documentation assignee for this Change Request.");
+            }
+
+            string developerUser = developerObj.ToString()!;
+
+            // 4. Insert the new Approval row for the "Developer Documentation" step, assigned to the developer
+            const string insertNextStepSql = @"
+                INSERT INTO Approval
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+            var insertParameters = new DynamicParameters();
+            insertParameters.Add("@CRID", crId);
+            insertParameters.Add("@StepID", developerDocStepId);
+            insertParameters.Add("@AssignedBy", empNo);
+            insertParameters.Add("@AssignedTo", developerUser);
+            insertParameters.Add("@AssignedDate", DateTime.Now);
+            insertParameters.Add("@Active", true);
+
+            int insertedRows = _connectionService.ExecuteWithPara(insertNextStepSql, insertParameters);
+
+            return insertedRows > 0;
+        }
+
+        public async Task<bool> ProceedToDevelopmentAsync(int crId, string uatLink, string empNo)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            if (string.IsNullOrWhiteSpace(uatLink))
+                throw new ArgumentException("Please provide UAT Link.");
+
+            if (string.IsNullOrWhiteSpace(empNo))
+                throw new ArgumentException("Employee number is required.");
+
+            uatLink = uatLink.Trim();
+
+            // 1. Resolve the "Developer Documentation" StepID by NAME
+            const string getStepIdSql = @"
+                SELECT TOP 1 StepID
+                FROM [CRManagementDB].[dbo].[WorkflowStep]
+                WHERE StepName = @StepName
+                  AND Active = 1
+                ORDER BY StepOrder ASC";
+
+            var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Developer Documentation" });
+
+            if (stepIdObj == null || stepIdObj == DBNull.Value)
+                throw new InvalidOperationException("Workflow step 'Developer Documentation' was not found or is inactive.");
+
+            int developerDocStepId = Convert.ToInt32(stepIdObj);
+
+            // 2. Resolve the "DevReturn" StatusID from CRStatus BEFORE changing anything
+            const string getStatusIdSql = @"
+                SELECT TOP 1 StatusID
+                FROM [CRManagementDB].[dbo].[CRStatus]
+                WHERE StatusName = @StatusName
+                  AND Active = 1";
+
+            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = "DevReturn" });
+
+            if (statusIdObj == null || statusIdObj == DBNull.Value)
+                throw new InvalidOperationException("Status 'DevReturn' was not found or is inactive in CRStatus table.");
+
+            int devReturnStatusId = Convert.ToInt32(statusIdObj);
+
+            // 3. Find the CURRENT pending row for this CR + step assigned to the logged-in user
+            const string getCurrentApprovalSql = @"
+                SELECT TOP 1 ApprovalID, AssignedBy
+                FROM [CRManagementDB].[dbo].[Approval]
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND AssignedTo = @EmpNo
+                  AND IsApproved IS NULL
+                  AND Active = 1
+                ORDER BY ApprovalID DESC";
+
+            var currentParams = new DynamicParameters();
+            currentParams.Add("@CRID", crId);
+            currentParams.Add("@StepID", developerDocStepId);
+            currentParams.Add("@EmpNo", empNo);
+
+            var currentTable = _connectionService.ReturnWithPara2(getCurrentApprovalSql, currentParams);
+
+            if (currentTable == null || currentTable.Rows.Count == 0)
+                return false; // nothing pending for this user on this step
+
+            int currentApprovalId = Convert.ToInt32(currentTable.Rows[0]["ApprovalID"]);
+            var previousAssignedByObj = currentTable.Rows[0]["AssignedBy"];
+
+            if (previousAssignedByObj == null || previousAssignedByObj == DBNull.Value)
+                throw new InvalidOperationException("Could not determine who assigned this Change Request.");
+
+            string previousAssignedBy = previousAssignedByObj.ToString()!;
+
+            // 4. Approve the current record and set the approval date
+            const string updateApprovalSql = @"
+                UPDATE Approval
+                SET IsApproved = 1,
+                    ApprovalDate = @ApprovalDate,
+                    Comments = @Comments
+                WHERE ApprovalID = @ApprovalID";
+
+            var updateParameters = new DynamicParameters();
+            updateParameters.Add("@ApprovalDate", DateTime.Now);
+            updateParameters.Add("@Comments", "UAT Link Uploaded");
+            updateParameters.Add("@ApprovalID", currentApprovalId);
+
+            int updatedRows = _connectionService.ExecuteWithPara(updateApprovalSql, updateParameters);
+
+            if (updatedRows <= 0)
+                return false;
+
+            // 5. Insert the new Approval record: AssignedBy = me, AssignedTo = the previous AssignedBy
+            const string insertApprovalSql = @"
+                INSERT INTO Approval
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+            var insertApprovalParameters = new DynamicParameters();
+            insertApprovalParameters.Add("@CRID", crId);
+            insertApprovalParameters.Add("@StepID", developerDocStepId);
+            insertApprovalParameters.Add("@AssignedBy", empNo);
+            insertApprovalParameters.Add("@AssignedTo", previousAssignedBy);
+            insertApprovalParameters.Add("@AssignedDate", DateTime.Now);
+            insertApprovalParameters.Add("@Active", true);
+
+            int approvalInserted = _connectionService.ExecuteWithPara(insertApprovalSql, insertApprovalParameters);
+
+            if (approvalInserted <= 0)
+                return false;
+
+            // 6. Insert the Testing record: cycle number + UAT link, Active = 1, everything else NULL
+            //    Cycle = next number for this CR (the first time this is 1)
+            const string insertTestingSql = @"
+                INSERT INTO [CRManagementDB].[dbo].[Testing]
+                    (CRID, TestCycleNumber, TestResult, UATLink, TestingDate, Active, IsPassed)
+                VALUES
+                    (@CRID,
+                     (SELECT ISNULL(MAX(TestCycleNumber), 0) + 1
+                      FROM [CRManagementDB].[dbo].[Testing]
+                      WHERE CRID = @CRID),
+                     NULL, @UATLink, NULL, 1, NULL)";
+
+            var testingParameters = new DynamicParameters();
+            testingParameters.Add("@CRID", crId);
+            testingParameters.Add("@UATLink", uatLink);
+
+            int testingInserted = _connectionService.ExecuteWithPara(insertTestingSql, testingParameters);
+
+            if (testingInserted <= 0)
+                return false;
+
+            // 7. Update the Change Request status to DevReturn
+            const string updateStatusSql = @"
+                UPDATE ChangeRequest
+                SET StatusID = @StatusID
+                WHERE CRID = @CRID";
+
+            var statusParameters = new DynamicParameters();
+            statusParameters.Add("@StatusID", devReturnStatusId);
+            statusParameters.Add("@CRID", crId);
+
+            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
+
+            return statusRowsAffected > 0;
+        }
 
     }
 }
