@@ -892,5 +892,23 @@ namespace VF_CR_Management_System.Controllers
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while returning the CR." });
             }
         }
+
+        [HttpGet]
+        public async Task<IActionResult> AssignedByMeTable()
+        {
+            var empNo = HttpContext.Session.GetString("EmpNo");
+            ViewBag.CurrentEmpNo = empNo;
+            var crs = await _changeRequestService.GetAllChangeRequestsAssignedByMeAsync(empNo);
+            return View(crs);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> AssignedToMeTable()
+        {
+            var empNo = HttpContext.Session.GetString("EmpNo");
+            ViewBag.CurrentEmpNo = empNo;
+            var crs = await _changeRequestService.GetAllChangeRequestsAssignedToMeAsync(empNo);
+            return View(crs);
+        }
     }
 }

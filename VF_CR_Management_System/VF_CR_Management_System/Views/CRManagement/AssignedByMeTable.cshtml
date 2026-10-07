@@ -1,0 +1,434 @@
+﻿@model IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>
+@{
+    ViewData["Title"] = "CR Management";
+
+    // StatusName (no spaces) -> (label shown in table, badge colour)
+    (string Label, string Css) StatusBadge(string? status)
+    {
+        var key = (status ?? string.Empty).Replace(" ", string.Empty);
+
+        return key.ToLowerInvariant() switch
+        {
+            "draft" => ("Draft", "bg-light text-dark"),
+            "submitted" => ("Pending Approval", "bg-warning"),
+            "approved" => ("Approved", "bg-success"),
+            "assessment" => ("Assessment Submitted", "bg-primary"),
+            "assessmentdraft" => ("Assessment Draft", "bg-info"),
+            "assessmentaccepted" => ("Assessment Accepted", "bg-success"),
+            "assessmentreturned" => ("Assessment Returned", "bg-warning"),
+            "devreturn" => ("Returned to Developer", "bg-warning"),
+            "security" => ("Security Review", "bg-primary"),
+            "securitydraft" => ("Security Draft", "bg-info"),
+            "securityapproved" => ("Security Approved", "bg-success"),
+            "testing" => ("In QA Testing", "bg-primary"),
+            "testingdraft" => ("QA Test Draft", "bg-info"),
+            "testingapproved" => ("QA Approved", "bg-success"),
+            "testingrejected" => ("QA Rejected", "bg-danger"),
+            "qareturn" => ("Returned from QA", "bg-warning"),
+            "finalapproved" => ("Final Approved", "bg-success"),
+            "finalrejected" => ("Final Rejected", "bg-danger"),
+            "released" => ("Released", "bg-dark"),
+            "rejected" => ("Rejected", "bg-danger"),
+            // Unknown status: show it with spaces added between words, in grey
+            _ => (System.Text.RegularExpressions.Regex.Replace(status ?? string.Empty, "(?<=[a-z])(?=[A-Z])", " "),
+                  "bg-secondary")
+        };
+    }
+}
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <h4 class="header-title mb-0">CR/s Assigned By Me</h4>
+                </div>
+
+                <style>
+                    #basic-datatable {
+                        border-collapse: separate;
+                        border-spacing: 0;
+                    }
+
+                        #basic-datatable > thead > tr > th:last-child,
+                        #basic-datatable > tbody > tr > td:last-child {
+                            position: sticky;
+                            right: 0;
+                            z-index: 2;
+                        }
+
+                        #basic-datatable > thead > tr > th:last-child {
+                            z-index: 3;
+                            background-color: #fff;
+                        }
+
+                        #basic-datatable > tbody > tr > td:last-child {
+                            background-color: #fff;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd) > td:last-child {
+                            background-color: #f2f2f2;
+                        }
+
+                        #basic-datatable > tbody > tr:hover > td:last-child {
+                            background-color: #ededed;
+                        }
+
+                        #basic-datatable.table-striped > tbody > tr:nth-of-type(odd):hover > td:last-child {
+                            background-color: #e0e0e0;
+                        }
+
+                        #basic-datatable > thead > tr > th:last-child::before,
+                        #basic-datatable > tbody > tr > td:last-child::before {
+                            content: "";
+                            position: absolute;
+                            top: 0;
+                            bottom: 0;
+                            left: 0;
+                            width: 8px;
+                            box-shadow: inset 6px 0 6px -6px rgba(0, 0, 0, 0.25);
+                            pointer-events: none;
+                        }
+
+                        #basic-datatable td.title-cell {
+                            max-width: 220px;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+
+                    /* Stacked modal fix: image preview modal must sit above crDetailsModal */
+                    #imagePreviewModal {
+                        z-index: 1070;
+                    }
+
+                    .modal-backdrop + .modal-backdrop {
+                        z-index: 1065;
+                    }
+
+                    #imagePreviewImg {
+                        max-width: 100%;
+                        max-height: 70vh;
+                    }
+                </style>
+
+                <div class="table-responsive">
+                    <table id="basic-datatable" class="table table-striped nowrap w-100">
+                        <thead>
+                            <tr>
+                                <th>CR Number</th>
+                                <th>Title</th>
+                                <th>Change Type</th>
+                                <th>Division</th>
+                                <th>Module</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Requested Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model != null)
+                            {
+                                foreach (var cr in Model)
+                                {
+                                    var isDraft = cr.CRNumber != null &&
+                                    cr.CRNumber.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase);
+                                    var displayCrNumber = isDraft ? "WAITING" : cr.CRNumber;
+                                    var badge = StatusBadge(cr.Status);
+                                    var isSecurityDraft = string.Equals(cr.Status, "SecurityDraft", StringComparison.OrdinalIgnoreCase);
+
+                                    <tr>
+                                        <td title="@cr.CRNumber">@displayCrNumber</td>
+                                        <td class="title-cell" title="@cr.ChangeTitle">@cr.ChangeTitle</td>
+                                        <td>@cr.ChangeType</td>
+                                        <td>@(string.IsNullOrEmpty(cr.Division) ? "—" : cr.Division)</td>
+                                        <td>@cr.Module</td>
+                                        <td>
+                                            @if (string.Equals(cr.Priority, "Emergency", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <span class="badge bg-danger">@cr.Priority</span>
+                                            }
+                                            else
+                                            {
+                                                @cr.Priority
+                                            }
+                                        </td>
+                                        <td>
+                                            <span class="badge @badge.Css">@badge.Label</span>
+                                        </td>
+                                        <td>@cr.RequestedDate.ToString("yyyy/MM/dd")</td>
+                                        <td>
+                                            @if (isSecurityDraft)
+                                            {
+                                                <div class="d-flex gap-1">
+                                                    <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = cr.CRID })"
+                                                       class="btn btn-sm btn-outline-primary"
+                                                       title="Edit">
+                                                        <i class="ri-edit-line"></i>
+                                                    </a>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="d-flex gap-1">
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-info btn-view"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#crDetailsModal"
+                                                            data-bs-crid="@cr.CRID"
+                                                            title="View">
+                                                        <i class="ri-eye-line"></i>
+                                                    </button>
+                                                </div>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CR Details Modal shell — content is loaded from the shared partial via AJAX -->
+<div class="modal fade" id="crDetailsModal" tabindex="-1" aria-labelledby="crDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" id="crDetailsModalContent">
+            <!-- populated by AJAX -->
+        </div>
+    </div>
+</div>
+
+<!-- Image Preview Modal (stacked on top of crDetailsModal) -->
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="imagePreviewSpinner" class="py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <img id="imagePreviewImg" src="" alt="Attachment preview" class="img-fluid d-none" />
+            </div>
+            <div class="modal-footer">
+                <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
+                    <i class="ri-download-2-line me-1"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#basic-datatable').DataTable({
+                responsive: false,
+                paging: true,
+                pageLength: 10,
+                lengthChange: true,
+                order: [[7, 'desc']],
+                columnDefs: [
+                    { orderable: false, targets: 8 },
+                    { orderable: false, targets: 1 }
+                ]
+            });
+        });
+
+        var crDetailsModal = document.getElementById('crDetailsModal');
+        var $modalContent = $('#crDetailsModalContent');
+        var partialUrlBase = '@Url.Action("CRDetailsPartial", "CRManagement")';
+        var previewUrlBase = '@Url.Action("PreviewAttachment", "CRManagement")';
+        var downloadUrlBase = '@Url.Action("DownloadAttachment", "CRManagement")';
+
+        // Single source of truth for the currently-open CR's id.
+        var currentCrId = null;
+
+        // --- Image preview modal wiring ---
+        var imagePreviewModalEl = document.getElementById('imagePreviewModal');
+        var imagePreviewModal = new bootstrap.Modal(imagePreviewModalEl);
+        var $imagePreviewImg = $('#imagePreviewImg');
+        var $imagePreviewSpinner = $('#imagePreviewSpinner');
+        var $imagePreviewDownloadBtn = $('#imagePreviewDownloadBtn');
+
+        // Delegated click handler: attachments list is injected fresh each time the
+        // details modal opens, so binding on the static container avoids needing to
+        // re-wire handlers after every AJAX load.
+        $modalContent.on('click', 'a.preview-image-link', function (e) {
+            e.preventDefault();
+
+            var attachmentId = $(this).data('attachment-id');
+            var fileName = $(this).data('file-name');
+            var previewUrl = previewUrlBase + '?id=' + encodeURIComponent(attachmentId);
+            var downloadUrl = downloadUrlBase + '?id=' + encodeURIComponent(attachmentId);
+
+            $imagePreviewImg.addClass('d-none').attr('src', '');
+            $imagePreviewSpinner.removeClass('d-none');
+            $imagePreviewDownloadBtn.attr('href', downloadUrl).attr('download', fileName);
+            $('#imagePreviewModalLabel').text(fileName || 'Attachment Preview');
+
+            imagePreviewModal.show();
+
+            var img = new Image();
+            img.onload = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.attr('src', previewUrl).removeClass('d-none');
+            };
+            img.onerror = function () {
+                $imagePreviewSpinner.addClass('d-none');
+                $imagePreviewImg.removeClass('d-none').attr('alt', 'Failed to load image');
+            };
+            img.src = previewUrl;
+        });
+
+        // Keep crDetailsModal's backdrop visible when the nested image modal closes
+        imagePreviewModalEl.addEventListener('hidden.bs.modal', function () {
+            if (crDetailsModal.classList.contains('show')) {
+                document.body.classList.add('modal-open');
+            }
+        });
+
+        // Load the partial fresh every time the modal opens.
+        crDetailsModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            if (!button) {
+                console.error('crDetailsModal opened without a relatedTarget button.');
+                return;
+            }
+
+            var rawCrid = button.getAttribute('data-bs-crid');
+            currentCrId = parseInt(rawCrid, 10);
+            if (isNaN(currentCrId) || currentCrId <= 0) {
+                currentCrId = null;
+            }
+
+            $modalContent.html(
+                '<div class="modal-body text-center py-5">' +
+                '<div class="spinner-border text-primary" role="status"></div></div>'
+            );
+
+            if (!currentCrId) {
+                $modalContent.html('<div class="modal-body text-danger">Invalid Change Request.</div>');
+                return;
+            }
+
+            $.get(partialUrlBase, { id: currentCrId })
+                .done(function (html) {
+                    $modalContent.html(html);
+
+                    // select2 only exists in the DOM when the partial renders the
+                    // approver dropdown, so guard for it.
+                    var $approver = $('#modal-approver');
+                    if ($approver.length) {
+                        $approver.select2({
+                            dropdownParent: $(crDetailsModal),
+                            width: '100%'
+                        });
+                    }
+                })
+                .fail(function () {
+                    $modalContent.html('<div class="modal-body text-danger">Failed to load Change Request details.</div>');
+                });
+        });
+
+        $(crDetailsModal).on('hidden.bs.modal', function () {
+            currentCrId = null;
+            $modalContent.empty();
+        });
+
+        $('#basic-datatable').on('click', '.btn-submit-cr', function () {
+            var crid = $(this).data('id');
+
+            Swal.fire({
+                title: 'Submit this Change Request?',
+                text: 'This will send the draft CR forward for processing.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, submit it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#0d6efd',
+                cancelButtonColor: '#6c757d'
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: '@Url.Action("Submit", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            title: 'Submitted!',
+                            text: 'The Change Request has been submitted.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to submit the CR. Please try again.';
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+        });
+
+        $('#basic-datatable').on('click', '.btn-delete-cr', function () {
+            var crid = $(this).data('id');
+
+            Swal.fire({
+                title: 'Delete this Change Request?',
+                text: 'This will permanently remove the draft CR. This action cannot be undone.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, delete it',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#fa5c7c',
+                cancelButtonColor: '#6c757d'
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    url: '@Url.Action("Delete", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crid },
+                    headers: {
+                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    success: function () {
+                        Swal.fire({
+                            title: 'Deleted',
+                            text: 'The Change Request has been deleted.',
+                            icon: 'success'
+                        }).then(function () { location.reload(); });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete the CR. Please try again.';
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+        });
+
+    </script>
+}

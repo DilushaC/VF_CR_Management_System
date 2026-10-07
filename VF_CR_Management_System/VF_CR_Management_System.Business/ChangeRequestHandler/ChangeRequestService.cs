@@ -807,6 +807,215 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequests;
         }
+
+        public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssignedByMeAsync(string empNo)
+        {
+            const string sql = @"
+                SELECT
+                    x.CRID,
+                    x.CRNumber,
+                    x.ChangeTitle,
+                    x.Summary,
+                    x.ChangeType,
+                    x.Priority,
+                    x.DivisionID,
+                    x.Division,
+                    x.ModuleID,
+                    x.Module,
+                    x.Status,
+                    x.RequestedBy,
+                    x.ApproverUserName,
+                    x.RequestedDate
+                FROM (
+                    SELECT
+                        cr.CRID,
+                        cr.CRNumber,
+                        cr.ChangeTitle,
+                        cr.Summary,
+                        ct.ChangeTypeName AS ChangeType,
+                        p.PriorityName    AS Priority,
+                        cr.DivisionID,
+                        d.DivisionName    AS Division,
+                        cr.ModuleID,
+                        m.ModuleName      AS Module,
+                        s.StatusName      AS Status,
+                        cr.RequesterUserName AS RequestedBy,
+                        App.AssignedTo    AS ApproverUserName,
+                        cr.RequestedDate,
+                        ROW_NUMBER() OVER (PARTITION BY cr.CRID ORDER BY App.ApprovalID DESC) AS rn
+                    FROM [CRManagementDB].[dbo].[Approval] AS App
+                    INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
+                    LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                    LEFT JOIN [CRManagementDB].[dbo].[Priority]   AS p  ON p.PriorityID   = cr.PriorityID
+                    LEFT JOIN [CRManagementDB].[dbo].[Division]   AS d  ON d.DivisionID   = cr.DivisionID
+                    LEFT JOIN [CRManagementDB].[dbo].[Module]     AS m  ON m.ModuleID     = cr.ModuleID
+                    LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   AS s  ON s.StatusID     = cr.StatusID
+                    WHERE App.AssignedBy = @EmpNo
+                      AND App.Active = 1
+                      AND cr.Active = 1
+                ) AS x
+                WHERE x.rn = 1
+                ORDER BY x.CRNumber DESC;";
+
+            var changeRequests = _connectionService.Query<ChangeRequest>(
+                sql,
+                new { EmpNo = empNo }).ToList();
+
+            if (!changeRequests.Any())
+                return changeRequests;
+
+            var userNames = changeRequests
+                .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct()
+                .ToList();
+
+            if (userNames.Any())
+            {
+                const string usersQuery = @"
+            SELECT UserName, FirstName, LastName
+            FROM Users
+            WHERE UserName IN @UserNames";
+
+                var userParams = new DynamicParameters();
+                userParams.Add("@UserNames", userNames);
+
+                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+                var nameLookup = usersTable.AsEnumerable()
+                    .ToDictionary(
+                        r => r.Field<string>("UserName"),
+                        r =>
+                        {
+                            var uName = r.Field<string>("UserName");
+                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+                        },
+                        StringComparer.OrdinalIgnoreCase);
+
+                foreach (var cr in changeRequests)
+                {
+                    if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
+                    {
+                        cr.RequestedBy = requesterFormattedName;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
+                    {
+                        cr.ApproverUserName = approverFormattedName;
+                    }
+                }
+            }
+
+            return changeRequests;
+        }
+
+        public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssignedToMeAsync(string empNo)
+        {
+            const string sql = @"
+                SELECT
+                    x.CRID,
+                    x.CRNumber,
+                    x.ChangeTitle,
+                    x.Summary,
+                    x.ChangeType,
+                    x.Priority,
+                    x.DivisionID,
+                    x.Division,
+                    x.ModuleID,
+                    x.Module,
+                    x.Status,
+                    x.RequestedBy,
+                    x.ApproverUserName,
+                    x.RequestedDate
+                FROM (
+                    SELECT
+                        cr.CRID,
+                        cr.CRNumber,
+                        cr.ChangeTitle,
+                        cr.Summary,
+                        ct.ChangeTypeName AS ChangeType,
+                        p.PriorityName    AS Priority,
+                        cr.DivisionID,
+                        d.DivisionName    AS Division,
+                        cr.ModuleID,
+                        m.ModuleName      AS Module,
+                        s.StatusName      AS Status,
+                        cr.RequesterUserName AS RequestedBy,
+                        App.AssignedTo    AS ApproverUserName,
+                        cr.RequestedDate,
+                        ROW_NUMBER() OVER (PARTITION BY cr.CRID ORDER BY App.ApprovalID DESC) AS rn
+                    FROM [CRManagementDB].[dbo].[Approval] AS App
+                    INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
+                    LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                    LEFT JOIN [CRManagementDB].[dbo].[Priority]   AS p  ON p.PriorityID   = cr.PriorityID
+                    LEFT JOIN [CRManagementDB].[dbo].[Division]   AS d  ON d.DivisionID   = cr.DivisionID
+                    LEFT JOIN [CRManagementDB].[dbo].[Module]     AS m  ON m.ModuleID     = cr.ModuleID
+                    LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   AS s  ON s.StatusID     = cr.StatusID
+                    WHERE App.AssignedTo = @EmpNo
+                      AND App.Active = 1
+                      AND cr.Active = 1
+                ) AS x
+                WHERE x.rn = 1
+                ORDER BY x.CRNumber DESC;";
+
+            var changeRequests = _connectionService.Query<ChangeRequest>(
+                sql,
+                new { EmpNo = empNo }).ToList();
+
+            if (!changeRequests.Any())
+                return changeRequests;
+
+            var userNames = changeRequests
+                .SelectMany(cr => new[] { cr.RequestedBy, cr.ApproverUserName })
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct()
+                .ToList();
+
+            if (userNames.Any())
+            {
+                const string usersQuery = @"
+            SELECT UserName, FirstName, LastName
+            FROM Users
+            WHERE UserName IN @UserNames";
+
+                var userParams = new DynamicParameters();
+                userParams.Add("@UserNames", userNames);
+
+                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+                var nameLookup = usersTable.AsEnumerable()
+                    .ToDictionary(
+                        r => r.Field<string>("UserName"),
+                        r =>
+                        {
+                            var uName = r.Field<string>("UserName");
+                            var fullName = $"{r.Field<string?>("FirstName")} {r.Field<string?>("LastName")}".Trim();
+                            return string.IsNullOrWhiteSpace(fullName) ? uName : $"{uName} - {fullName}";
+                        },
+                        StringComparer.OrdinalIgnoreCase);
+
+                foreach (var cr in changeRequests)
+                {
+                    if (!string.IsNullOrWhiteSpace(cr.RequestedBy) &&
+                        nameLookup.TryGetValue(cr.RequestedBy, out var requesterFormattedName))
+                    {
+                        cr.RequestedBy = requesterFormattedName;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(cr.ApproverUserName) &&
+                        nameLookup.TryGetValue(cr.ApproverUserName, out var approverFormattedName))
+                    {
+                        cr.ApproverUserName = approverFormattedName;
+                    }
+                }
+            }
+
+            return changeRequests;
+        }
+
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
             // 1. Division Head Approval StepID
@@ -2606,7 +2815,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var statusValue = collection["Status"].ToString();
             bool isSubmit = statusValue == "2";
 
-            var targetStatusName = isSubmit ? "Security" : "SecurityDraft";
+            var targetStatusName = isSubmit ? "SecurityApproved" : "SecurityDraft";
 
             var riskAssessment = collection["RiskAssessment"].ToString().Trim();
 
@@ -2682,22 +2891,30 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
         private async Task UpdateSecurityApprovalStepAsync(int crId, string empId)
         {
-            const string getStepIdSql = @"
-                SELECT TOP 1 StepID
-                FROM [CRManagementDB].[dbo].[WorkflowStep]
-                WHERE StepName = @StepName
-                  AND Active = 1
-                ORDER BY StepOrder ASC";
-
-            var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Security" });
-
-            if (stepIdObj == null || stepIdObj == DBNull.Value)
+            // Resolves a StepID by step NAME (never a hard-coded ID)
+            int GetStepId(string stepName)
             {
-                throw new InvalidOperationException("Workflow step 'Security' was not found or is inactive.");
+                const string getStepIdSql = @"
+                    SELECT TOP 1 StepID
+                    FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = @StepName
+                      AND Active = 1
+                    ORDER BY StepOrder ASC";
+
+                var obj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = stepName });
+
+                if (obj == null || obj == DBNull.Value)
+                {
+                    throw new InvalidOperationException($"Workflow step '{stepName}' was not found or is inactive.");
+                }
+
+                return Convert.ToInt32(obj);
             }
 
-            int securityStepId = Convert.ToInt32(stepIdObj);
+            int securityStepId = GetStepId("Security");
+            int deptHeadStepId = GetStepId("Division Head Approval");
 
+            // 1. Mark the current Security approval row as approved
             const string updateApprovalSql = @"
                 UPDATE Approval
                 SET IsApproved = 1,
@@ -2713,25 +2930,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             await Task.Run(() => _connectionService.ExecuteWithPara(updateApprovalSql, updateApprovalParameters));
 
-            // Step ID for the next workflow step (TesterAssignment)
-            var stepIdObj2 = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "TesterAssignment" });
-
-            if (stepIdObj2 == null || stepIdObj2 == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step 'TesterAssignment' was not found or is inactive.");
-            }
-
-            int assessmentStepId = Convert.ToInt32(stepIdObj2);
-
-            var deptHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
-
-            if (deptHeadStepIdObj == null || deptHeadStepIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
-            }
-
-            int deptHeadStepId = Convert.ToInt32(deptHeadStepIdObj);
-
+            // 2. Find who the Division Head Approval step was assigned to
             const string getDeptHeadAssignedToSql = @"
                 SELECT TOP 1 AssignedTo
                 FROM [CRManagementDB].[dbo].[Approval]
@@ -2740,17 +2939,18 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                   AND Active = 1
                 ORDER BY AssignedDate DESC";
 
-            var deptHeadAssignedToObj = _connectionService.ExecuteScalar(getDeptHeadAssignedToSql, new { CRID = crId, StepID = deptHeadStepId });
+            var deptHeadAssignedToObj = _connectionService.ExecuteScalar(
+                getDeptHeadAssignedToSql, new { CRID = crId, StepID = deptHeadStepId });
 
             if (deptHeadAssignedToObj == null || deptHeadAssignedToObj == DBNull.Value)
             {
                 throw new InvalidOperationException("Could not determine the Division Head Approval assignee for this Change Request.");
             }
 
-            string departmentHeadAssignedTo = deptHeadAssignedToObj.ToString();
+            string departmentHeadAssignedTo = deptHeadAssignedToObj.ToString()!;
 
-            // Insert new assignment record into Approval table for the TesterAssignment step
-            const string insertNextStepSql = @"
+            // 3. Insert the new approval record for the "Security" step
+            const string insertSecurityStepSql = @"
                 INSERT INTO Approval
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
                 VALUES
@@ -2758,13 +2958,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var insertParameters = new DynamicParameters();
             insertParameters.Add("@CRID", crId);
-            insertParameters.Add("@StepID", assessmentStepId);
+            insertParameters.Add("@StepID", securityStepId);
             insertParameters.Add("@AssignedBy", empId);
             insertParameters.Add("@AssignedTo", departmentHeadAssignedTo);
             insertParameters.Add("@AssignedDate", DateTime.Now);
             insertParameters.Add("@Active", true);
 
-            await Task.Run(() => _connectionService.ExecuteWithPara(insertNextStepSql, insertParameters));
+            await Task.Run(() => _connectionService.ExecuteWithPara(insertSecurityStepSql, insertParameters));
         }
 
         public async Task<bool> CreateTestingAsync(int crId, IFormCollection collection, string userName, string empId)

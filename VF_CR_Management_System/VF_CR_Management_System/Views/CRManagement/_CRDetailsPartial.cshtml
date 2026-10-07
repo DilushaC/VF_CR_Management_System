@@ -23,18 +23,6 @@
 
     var hasAnyAttachments = srsFiles.Any() || baFiles.Any() || vendorFiles.Any();
 
-    var hasAssignedUsers = new[]
-    {
-        Model.RequestedBy,
-        Model.ApproverUserName,
-        Model.AssessmentUserName,
-        Model.SecurityUserName,
-        Model.TestingUserName,
-        Model.FinalApproverUserName,
-        Model.TesterUserName,
-        Model.TestingApproverUserName
-    }.Any(u => !string.IsNullOrWhiteSpace(u));
-
     // Strips a DOMAIN\ prefix and whitespace so both sides compare cleanly.
     string Normalize(string? u)
     {
@@ -88,9 +76,43 @@
     var securityStep = StepByName("Security");
     var testingStep = StepByName("Testing");
     var finalApprovalStep = StepByName("Final Approval");
-    var developerDocStep = StepByName("Developer Documentation");
     var testerAssignmentStep = StepByName("TesterAssignment");
     var testingApprovalStep = StepByName("TestingApproval");
+
+    // ===== Developer Documentation step =====
+    // This step can have TWO (or more) rows for one CR, always matched by NAME (never by a hard-coded StepID):
+    //   1st row  -> AssignedTo = the DEVELOPER (approver assigned the work)
+    //   later row(s) -> the step goes back to the approver to Accept / Return after the developer submits
+    // NOTE: WorkflowStepAssignment has no ApprovalID property, so rows are used in the order they arrive in
+    // Model.StepAssignments. Make sure the controller/repository loads them ORDER BY ApprovalID ASC.
+    var devDocRows = (Model.StepAssignments ?? new List<WorkflowStepAssignment>())
+        .Where(s => string.Equals(StepKey(s.StepName), StepKey("Developer Documentation"), StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    // Display only: the developer is the AssignedTo of the FIRST row
+    var developerUser = devDocRows.FirstOrDefault()?.AssignedTo;
+    if (string.IsNullOrWhiteSpace(developerUser))
+    {
+        developerUser = Model.AssessmentUserName;
+    }
+
+    // Latest row for the step (kept for reference / debug)
+    var developerDocStep = devDocRows.LastOrDefault();
+
+    // The row that is waiting for a decision right now (the Accept / Return row)
+    var pendingDevDocStep = devDocRows.LastOrDefault(r => IsPending(r));
+
+    var hasAssignedUsers = new[]
+    {
+        Model.RequestedBy,
+        Model.ApproverUserName,
+        developerUser,
+        Model.SecurityUserName,
+        Model.TestingUserName,
+        Model.FinalApproverUserName,
+        Model.TesterUserName,
+        Model.TestingApproverUserName
+    }.Any(u => !string.IsNullOrWhiteSpace(u));
 
     var statusKey = StepKey(Model.Status);
 
@@ -103,29 +125,36 @@
     var isAssessment = StatusIs("Assessment", "AssessmentSubmitted", "AssessmentAccepted");
     var isSecurityStatus = StatusIs("SecuritySubmitted");
     var isSecurityDraft = StatusIs("SecurityDraft");
+    var isSecurityApproved = StatusIs("SecurityApproved");
     var isTestingStatus = StatusIs("TestingSubmitted");
     var isTestingApprovedStatus = StatusIs("TestingApproved");
     var isPastQaStatus = isTestingStatus || isTestingApprovedStatus;
 
     var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
     var canApprove = !isApproved && !isRejected && CanActOn(deptHeadStep);
+
+    // Developer = current user owns a still-open Developer Documentation row, or the Assessment step
     var isAssignedDeveloper = CanActOn(assessmentStep)
-        || (developerDocStep != null
-            && developerDocStep.IsApproved == null
-            && IsCurrentUser(developerDocStep.AssignedTo));
+        || devDocRows.Any(r => r.IsApproved == null && IsCurrentUser(r.AssignedTo));
 
     var canGoAssessment = isApproved && isAssignedDeveloper || isAssessmentReturned && isAssignedDeveloper;
 
     var canGoSecurity = (isAssessment || isSecurityStatus) && CanActOn(securityStep);
     var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
-    var canGoQA = !isPastQaStatus && CanActOn(testingStep);
+    // "Approve to Development" is shown only when the status is SecurityApproved
+    var canApproveToDevelopment = isSecurityApproved;
+
+    // "Proceed to QA Test" is hidden until Security has approved the CR
+    var canGoQA = isSecurityApproved && CanActOn(testingStep);
     var canHandoverToTester = CanActOn(testerAssignmentStep) && !testerAlreadyAssigned;
     var canHandoverToFinalApprover = isTestingStatus
         && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
         && CanActOn(testingApprovalStep);
     var canFinalApprove = isTestingApprovedStatus && CanActOn(finalApprovalStep);
     var isAssessmentSubmitted = StatusIs("Assessment", "AssessmentSubmitted");
-    var canDevDocDecide = isAssessmentSubmitted && CanActOn(developerDocStep);
+
+    // Accept / Return must act on the PENDING Developer Documentation row (assigned back to the approver)
+    var canDevDocDecide = isAssessmentSubmitted && CanActOn(pendingDevDocStep);
     var isAssignedFinalApprover = IsCurrentUser(Model.FinalApproverUserName);
 
     var userLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -166,6 +195,7 @@
     var dbgSteps = Model.StepAssignments == null
         ? "none"
         : string.Join(" | ", Model.StepAssignments.Select(x => $"{x.StepID}:{x.StepName}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
+    var dbgDevDoc = string.Join(" | ", devDocRows.Select(x => $"{x.StepID}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
 
     var showDebug = false;
 }
@@ -376,7 +406,7 @@
 
             DetailField("Requested By", DisplayUser(Model.RequestedBy));
             DetailField("CR Approver", DisplayUser(Model.ApproverUserName));
-            DetailField("Developer", DisplayUser(Model.AssessmentUserName));
+            DetailField("Developer", DisplayUser(developerUser));
             DetailField("InfoSec Officer", DisplayUser(Model.SecurityUserName));
             DetailField("QA Tester", DisplayUser(Model.TestingUserName));
             DetailField("QA Assigned By", DisplayUser(Model.TesterUserName));
@@ -392,7 +422,8 @@
         <small class="text-muted d-block" style="font-size:11px; word-break:break-all;">
             DEBUG | status=[@Model.Status] | testingApproved=[@isTestingApprovedStatus] | finalApprover=[@Model.FinalApproverUserName] |
             me=[@dbgMe] | isFinalApprover=[@isAssignedFinalApprover] |
-            canApprove=[@canApprove] | canGoAssessment=[@canGoAssessment] | canFinalApprove=[@canFinalApprove] | steps=[@dbgSteps]
+            developer=[@developerUser] | devDocRows=[@dbgDevDoc] |
+            canApprove=[@canApprove] | canGoAssessment=[@canGoAssessment] | canDevDocDecide=[@canDevDocDecide] | canFinalApprove=[@canFinalApprove] | steps=[@dbgSteps]
         </small>
     </div>
 }
@@ -444,6 +475,12 @@
             <i class="ri-test-tube-line me-1"></i>Proceed to QA Test
         </a>
     }
+    @if (canApproveToDevelopment)
+    {
+        <button type="button" id="modal-approve-dev-btn" class="btn btn-success" data-id="@Model.CRID">
+            <i class="ri-check-double-line me-1"></i>Approve to Development
+        </button>
+    }
     @if (canDevDocDecide)
     {
         <button type="button" id="modal-devdoc-approve-btn" class="btn btn-success" data-id="@Model.CRID">
@@ -463,13 +500,13 @@
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                        foreach (var user in ViewBag.Users)
-                        {
-                                    string uId = user.UserName;
-                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                    if (string.IsNullOrEmpty(uId)) { continue; }
-                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                        }
+                            foreach (var user in ViewBag.Users)
+                            {
+                                            string uId = user.UserName;
+                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                            if (string.IsNullOrEmpty(uId)) { continue; }
+                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                            }
             }
         ];
 
@@ -732,6 +769,46 @@
                         }
                     });
                 });
+        });
+
+        // ===== APPROVE TO DEVELOPMENT (status = SecurityApproved): confirm first =====
+        $(document).off('click', '#modal-approve-dev-btn')
+                   .on('click', '#modal-approve-dev-btn', function () {
+
+            var crId = $(this).data('id');
+
+            Swal.fire({
+                title: 'Approve to Development?',
+                text: 'Are you sure you want to approve this Change Request to Development?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, approve',
+                confirmButtonColor: '#198754',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                var token = $('input[name="__RequestVerificationToken"]').val();
+
+                $.ajax({
+                    url: '@Url.Action("ApproveToDevelopment", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crId },
+                    headers: token ? { "RequestVerificationToken": token } : {},
+                    success: function (response) {
+                        if (response && response.success === false) {
+                            Swal.fire('Error', response.message || 'Failed to approve to Development.', 'error');
+                        } else {
+                            successAndClose((response && response.message) || 'Change Request approved to Development.');
+                        }
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            || 'Failed to approve to Development. Please try again.';
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            });
         });
 
         // ===== DEVELOPER DOCUMENTATION: APPROVE =====
