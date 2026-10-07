@@ -1,4 +1,5 @@
-﻿@model VF_CR_Management_System.Data.Models.ChangeRequest
+﻿@using VF_CR_Management_System.Data.Models
+@model VF_CR_Management_System.Data.Models.ChangeRequest
 @{
     ViewData["Title"] = "CR Assesment - Testing";
 }
@@ -14,6 +15,183 @@
         .FirstOrDefault();
 
     var nextCycleNumber = (latestTest?.TestCycleNumber ?? 0) + 1;
+
+    // UAT link uploaded by the developer (read-only here)
+    var uatLink = latestTest?.UATLink?.Trim() ?? string.Empty;
+
+    // ===== Attachments grouped by type =====
+    var rawAttachments = ((IEnumerable<object>?)ViewBag.Attachments)?.ToList() ?? new List<object>();
+
+    // Reads AttachmentTypeName from whatever object type the controller put in ViewBag.Attachments
+    string AttachmentType(object a) =>
+        (a.GetType().GetProperty("AttachmentTypeName")?.GetValue(a) as string ?? string.Empty).Trim();
+
+    var srsFiles = rawAttachments
+        .Where(a => string.Equals(AttachmentType(a), "SRS", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var baFiles = rawAttachments
+        .Where(a => string.Equals(AttachmentType(a), "BA", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    // Vendor Report files (also catches older uploads that have no type recorded)
+    var vendorFiles = rawAttachments
+        .Where(a =>
+        {
+            var t = AttachmentType(a);
+            return t.Length == 0 || string.Equals(t, "Vendor Report", StringComparison.OrdinalIgnoreCase);
+        })
+        .ToList();
+
+    // Any other type, so nothing is hidden
+    var otherFiles = rawAttachments
+        .Except(srsFiles)
+        .Except(baFiles)
+        .Except(vendorFiles)
+        .ToList();
+
+    var hasAnyAttachments = rawAttachments.Any();
+
+    // ===== User display helpers (full name - UserName), same logic as the details popup =====
+    string Normalize(string? u)
+    {
+        u = (u ?? string.Empty).Trim();
+        var slash = u.LastIndexOf('\\');
+        return slash >= 0 ? u.Substring(slash + 1) : u;
+    }
+
+    // "6407 - John Smith" -> "6407"
+    string EmpNoOf(string? v)
+    {
+        var x = Normalize(v);
+        var i = x.IndexOf(" - ", StringComparison.Ordinal);
+        return (i >= 0 ? x.Substring(0, i) : x).Trim();
+    }
+
+    var userLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    var nameLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (ViewBag.Users != null)
+    {
+        foreach (var u in ViewBag.Users)
+        {
+            string un = u.UserName;
+            if (string.IsNullOrWhiteSpace(un)) { continue; }
+            un = un.Trim();
+            string fullName = ((string)u.FirstName + " " + (string)u.LastName).Trim();
+            var display = fullName.Length > 0 ? $"{fullName} - {un}" : un;
+            userLookup[un] = display;
+            if (fullName.Length > 0) { nameLookup[fullName] = display; }
+        }
+    }
+
+    string DisplayUser(string? v)
+    {
+        if (string.IsNullOrWhiteSpace(v)) { return string.Empty; }
+        var raw = Normalize(v);
+
+        if (userLookup.TryGetValue(EmpNoOf(raw), out var d)) { return d; }
+
+        if (nameLookup.TryGetValue(raw, out d)) { return d; }
+
+        var i = raw.IndexOf(" - ", StringComparison.Ordinal);
+        if (i > 0 && raw.Substring(0, i).Trim().All(char.IsDigit))
+        {
+            return $"{raw.Substring(i + 3).Trim()} - {raw.Substring(0, i).Trim()}";
+        }
+
+        return raw;
+    }
+
+    string StepKey(string? s) => (s ?? string.Empty).Replace(" ", string.Empty);
+
+    // Developer = AssignedTo of the FIRST "Developer Documentation" row (matched by step NAME).
+    // Falls back to AssessmentUserName when the step rows are not loaded.
+    var developerUser = (Model.StepAssignments ?? new List<WorkflowStepAssignment>())
+        .Where(s => string.Equals(StepKey(s.StepName), StepKey("Developer Documentation"), StringComparison.OrdinalIgnoreCase))
+        .Select(s => s.AssignedTo)
+        .FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(developerUser))
+    {
+        developerUser = Model.AssessmentUserName;
+    }
+
+    var hasAssignedUsers = new[]
+    {
+        Model.RequestedBy,
+        Model.ApproverUserName,
+        developerUser,
+        Model.SecurityUserName,
+        Model.TestingUserName,
+        Model.FinalApproverUserName,
+        Model.TesterUserName,
+        Model.TestingApproverUserName
+    }.Any(u => !string.IsNullOrWhiteSpace(u));
+}
+
+@{
+    // One "label: value" cell in the Assigned Users section. Nothing is rendered when the value is empty.
+    void AssignedUserField(string label, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            <div class="col-md-6">
+                <label class="fw-bold text-dark d-block mb-1">@label:</label>
+                <span>@value</span>
+            </div>
+        }
+    }
+
+    // Renders one attachment group (heading + file list). Nothing is rendered when the group is empty.
+    void RenderAttachmentGroup(string title, List<object> items)
+    {
+        if (items == null || items.Count == 0)
+        {
+            return;
+        }
+
+        <div class="mb-3">
+            <label class="fw-bold text-dark d-block mb-1">@title:</label>
+            <ul class="list-unstyled mb-0">
+                @foreach (var item in items)
+                {
+                    dynamic attachment = item;
+                    int attachmentId = attachment.AttachmentID;
+                    string fileName = attachment.FileName;
+                    string ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
+                    bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(ext);
+                    bool isPdf = ext == ".pdf";
+                    string previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachmentId });
+                    string downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachmentId });
+
+                    <li class="mb-1">
+                        @if (isImage)
+                        {
+                            <a href="javascript:void(0);" class="attachment-link"
+                               data-type="image"
+                               data-preview-url="@previewUrl"
+                               data-download-url="@downloadUrl"
+                               data-name="@fileName">
+                                <i class="ri-image-line me-1"></i>@fileName
+                            </a>
+                        }
+                        else if (isPdf)
+                        {
+                            <a href="@previewUrl" target="_blank" rel="noopener">
+                                <i class="ri-file-pdf-line me-1"></i>@fileName
+                            </a>
+                        }
+                        else
+                        {
+                            <a href="@downloadUrl" download>
+                                <i class="ri-download-2-line me-1"></i>@fileName
+                            </a>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    }
 }
 
 <div class="row">
@@ -106,55 +284,68 @@
                         </div>
                     </div>
 
-                    <!-- Attachments -->
+                    <!-- Attachments, grouped by type -->
                     <div class="card border mb-4">
                         <div class="card-header bg-light-subtle">
-                            <h6 class="fs-15 mb-0">Assessment Attachments by Implementer </h6>
+                            <h6 class="fs-15 mb-0">Attachments</h6>
                         </div>
                         <div class="card-body">
-                            @if (ViewBag.Attachments != null && ((IEnumerable<dynamic>)ViewBag.Attachments).Any())
+                            @if (hasAnyAttachments)
                             {
-                                <ul class="list-unstyled mb-0">
-                                    @foreach (var attachment in ViewBag.Attachments)
-                                    {
-                                        int attachmentId = attachment.AttachmentID;
-                                        string fileName = attachment.FileName;
-                                        string ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
-                                        bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(ext);
-                                        bool isPdf = ext == ".pdf";
-                                        string previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachmentId });
-                                        string downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachmentId });
-
-                                        <li class="mb-1">
-                                            @if (isImage)
-                                            {
-                                                <a href="javascript:void(0);" class="attachment-link"
-                                                   data-type="image"
-                                                   data-preview-url="@previewUrl"
-                                                   data-download-url="@downloadUrl"
-                                                   data-name="@fileName">
-                                                    <i class="ri-image-line me-1"></i>@fileName
-                                                </a>
-                                            }
-                                            else if (isPdf)
-                                            {
-                                                <a href="@previewUrl" target="_blank" rel="noopener">
-                                                    <i class="ri-file-pdf-line me-1"></i>@fileName
-                                                </a>
-                                            }
-                                            else
-                                            {
-                                                <a href="@downloadUrl" download>
-                                                    <i class="ri-download-2-line me-1"></i>@fileName
-                                                </a>
-                                            }
-                                        </li>
-                                    }
-                                </ul>
+                                RenderAttachmentGroup("SRS Document", srsFiles);
+                                RenderAttachmentGroup("BA Document", baFiles);
+                                RenderAttachmentGroup("Vendor Attachments", vendorFiles);
+                                RenderAttachmentGroup("Other Attachments", otherFiles);
                             }
                             else
                             {
                                 <p class="text-muted mb-0">No attachments found.</p>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Assigned Users -->
+                    @if (hasAssignedUsers)
+                    {
+                        <div class="card border mb-4">
+                            <div class="card-header bg-light-subtle">
+                                <h6 class="fs-15 mb-0">Assigned Users</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    @{
+                                        AssignedUserField("Requested By", DisplayUser(Model.RequestedBy));
+                                        AssignedUserField("CR Approver", DisplayUser(Model.ApproverUserName));
+                                        AssignedUserField("Developer", DisplayUser(developerUser));
+                                        AssignedUserField("InfoSec Officer", DisplayUser(Model.SecurityUserName));
+                                        AssignedUserField("QA Tester", DisplayUser(Model.TestingUserName));
+                                        AssignedUserField("QA Assigned By", DisplayUser(Model.TesterUserName));
+                                        AssignedUserField("QA Approved By", DisplayUser(Model.TestingApproverUserName));
+                                        AssignedUserField("Final CR Approver", DisplayUser(Model.FinalApproverUserName));
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- UAT Link (read-only, uploaded by the developer) -->
+                    <div class="card border mb-4">
+                        <div class="card-header bg-light-subtle">
+                            <h6 class="fs-15 mb-0">UAT Link</h6>
+                        </div>
+                        <div class="card-body">
+                            @if (!string.IsNullOrWhiteSpace(uatLink))
+                            {
+                                <div class="input-group">
+                                    <input type="text" id="uatLinkField" class="form-control" value="@uatLink" readonly />
+                                    <a href="@uatLink" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
+                                        <i class="ri-external-link-line me-1"></i>Open
+                                    </a>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted mb-0">No UAT link has been provided yet.</p>
                             }
                         </div>
                     </div>
@@ -210,7 +401,7 @@
                                     <div class="mb-3">
                                         <label class="form-label">UAT Confirmation &amp; Comments</label>
                                         <textarea name="UatComments" id="uatComments" class="form-control" rows="12"
-                                                  placeholder="Write the explanation here...">@(latestTest?.UATLink)</textarea>
+                                                  placeholder="Write the explanation here..."></textarea>
                                     </div>
                                 </div>
                             </div>
