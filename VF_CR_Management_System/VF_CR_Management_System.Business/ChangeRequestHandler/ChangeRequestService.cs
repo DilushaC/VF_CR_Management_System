@@ -2974,27 +2974,40 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 throw new ArgumentException("Invalid Change Request.");
 
             var statusValue = collection["Status"].ToString();
-            bool isSubmit = statusValue == "2";
+            bool isPass = statusValue == "2";
+            bool isFail = statusValue == "3";
 
-            var targetStatusName = isSubmit ? "Testing" : "TestingDraft";
+            if (!isPass && !isFail)
+                throw new ArgumentException("Invalid action. Please choose Test Passed or Test Failed.");
 
-            // Fields from the Testing view
-            int.TryParse(collection["TestID"], out int testId);
-            int.TryParse(collection["TestCycleNumber"], out int testCycleNumber);
             var testResult = collection["Test"].ToString().Trim();
-            var uatComment = collection["UatComments"].ToString().Trim();
 
-            if (testCycleNumber <= 0)
-                testCycleNumber = 1;
+            if (string.IsNullOrWhiteSpace(testResult))
+                throw new ArgumentException("Please enter the Test Plan and Test Results.");
 
-            if (isSubmit)
+            // Validate attachments before touching the database
+            var files = collection.Files.GetFiles("TestResultFiles");
+            var allowedExt = new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt",
+                                     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip" };
+            const long maxBytes = 10 * 1024 * 1024;
+
+            if (files.Count > 10)
+                throw new ArgumentException("You can upload a maximum of 10 files.");
+
+            foreach (var file in files)
             {
-                if (string.IsNullOrWhiteSpace(testResult))
-                    throw new ArgumentException("Please enter the Test Plan and Test Results.");
+                if (file.Length == 0) continue;
 
-                if (string.IsNullOrWhiteSpace(uatComment))
-                    throw new ArgumentException("Please enter the UAT Confirmation & Comments.");
+                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+
+                if (!allowedExt.Contains(ext))
+                    throw new ArgumentException($"File type not allowed: {file.FileName}");
+
+                if (file.Length > maxBytes)
+                    throw new ArgumentException($"File is larger than 10 MB: {file.FileName}");
             }
+
+            var targetStatusName = isPass ? "TestingApproved" : "QAReturn";
 
             // 1. Resolve target CRStatus
             const string getStatusIdSql = @"
@@ -3011,51 +3024,48 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int targetStatusId = Convert.ToInt32(statusIdObj);
 
-            // 2. Insert or update the Testing record
-            if (testId > 0)
+            // 2. Find the pending Testing row (handed over by the developer, not yet tested)
+            const string getPendingTestSql = @"
+                SELECT TOP 1 TestID
+                FROM [CRManagementDB].[dbo].[Testing]
+                WHERE CRID = @CRID
+                  AND Active = 1
+                  AND IsPassed IS NULL
+                ORDER BY TestCycleNumber DESC";
+
+            var pendingTestObj = _connectionService.ExecuteScalar(getPendingTestSql, new { CRID = crId });
+
+            if (pendingTestObj == null || pendingTestObj == DBNull.Value)
             {
-                const string updateTestingSql = @"
-                    UPDATE [CRManagementDB].[dbo].[Testing]
-                    SET TestResult      = @TestResult,
-                        UATComment      = @UATComment,
-                        TestCycleNumber = @TestCycleNumber,
-                        TestingDate     = @TestingDate
-                    WHERE TestID = @TestID
-                      AND Active = 1";
-
-                var updateParams = new DynamicParameters();
-                updateParams.Add("@TestResult", testResult);
-                updateParams.Add("@UATComment", uatComment);
-                updateParams.Add("@TestCycleNumber", testCycleNumber);
-                updateParams.Add("@TestingDate", DateTime.Now);
-                updateParams.Add("@TestID", testId);
-
-                _connectionService.ExecuteWithPara(updateTestingSql, updateParams);
-            }
-            else
-            {
-                const string insertTestingSql = @"
-                    INSERT INTO [CRManagementDB].[dbo].[Testing]
-                        (CRID, TestCycleNumber, TestResult, UATComment, TestingDate, Active)
-                    VALUES
-                        (@CRID, @TestCycleNumber, @TestResult, @UATComment, @TestingDate, 1)";
-
-                var insertParams = new DynamicParameters();
-                insertParams.Add("@CRID", crId);
-                insertParams.Add("@TestCycleNumber", testCycleNumber);
-                insertParams.Add("@TestResult", testResult);
-                insertParams.Add("@UATComment", uatComment);
-                insertParams.Add("@TestingDate", DateTime.Now);
-
-                _connectionService.ExecuteWithPara(insertTestingSql, insertParams);
+                throw new InvalidOperationException(
+                    "No pending test was found for this Change Request. The developer has not handed it over to QA, or it has already been tested.");
             }
 
-            // 3. Update the ChangeRequest's status
+            int testId = Convert.ToInt32(pendingTestObj);
+
+            // 3. Record the QA result on that row
+            const string updateTestingSql = @"
+                UPDATE [CRManagementDB].[dbo].[Testing]
+                SET TestResult  = @TestResult,
+                    TestingDate = @TestingDate,
+                    IsPassed    = @IsPassed
+                WHERE TestID = @TestID
+                  AND Active = 1";
+
+            var updateParams = new DynamicParameters();
+            updateParams.Add("@TestResult", testResult);
+            updateParams.Add("@TestingDate", DateTime.Now);
+            updateParams.Add("@IsPassed", isPass);
+            updateParams.Add("@TestID", testId);
+
+            _connectionService.ExecuteWithPara(updateTestingSql, updateParams);
+
+            // 4. Update the ChangeRequest's status
             const string updateCrSql = @"
                 UPDATE ChangeRequest
                 SET StatusID = @StatusID
                 WHERE CRID = @CRID
-                    AND Active = 1";
+                  AND Active = 1";
 
             var crParameters = new DynamicParameters();
             crParameters.Add("@StatusID", targetStatusId);
@@ -3066,73 +3076,103 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (rowsAffected <= 0)
                 return false;
 
-            // 4. On submit (not draft), insert a new Approval row for the TestingApproval step.
-            //    AssignedTo is carried over from whoever was AssignedTo on the Division Head
-            //    Approval step for this CR — same lookup pattern used for TesterAssignment.
-            if (isSubmit)
+            // 5. Create the next approval record
+            const string getStepIdSql = @"
+                SELECT TOP 1 StepID
+                FROM [CRManagementDB].[dbo].[WorkflowStep]
+                WHERE StepName = @StepName
+                  AND Active = 1
+                ORDER BY StepOrder ASC";
+
+            const string insertApprovalSql = @"
+                INSERT INTO [CRManagementDB].[dbo].[Approval]
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+            if (isPass)
             {
-                const string getStepIdSql = @"
-                    SELECT TOP 1 StepID
-                    FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = @StepName
-                      AND Active = 1
-                    ORDER BY StepOrder ASC";
+                // Test passed: create a new "Division Head Approval" row, assigned to the same
+                // user the original "Division Head Approval" step was assigned to (the division head).
+                var divisionHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
 
-                var testingApprovalStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "TestingApproval" });
-
-                if (testingApprovalStepIdObj == null || testingApprovalStepIdObj == DBNull.Value)
-                {
-                    throw new InvalidOperationException("Workflow step 'TestingApproval' was not found or is inactive.");
-                }
-
-                int testingApprovalStepId = Convert.ToInt32(testingApprovalStepIdObj);
-
-                var deptHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
-
-                if (deptHeadStepIdObj == null || deptHeadStepIdObj == DBNull.Value)
-                {
+                if (divisionHeadStepIdObj == null || divisionHeadStepIdObj == DBNull.Value)
                     throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
-                }
 
-                int deptHeadStepId = Convert.ToInt32(deptHeadStepIdObj);
+                int divisionHeadStepId = Convert.ToInt32(divisionHeadStepIdObj);
 
-                const string getDeptHeadAssignedToSql = @"
+                // AssignedTo of this CR's ORIGINAL (first) "Division Head Approval" row.
+                // This is read BEFORE the new row is inserted below.
+                const string getDivisionHeadAssignedToSql = @"
                     SELECT TOP 1 AssignedTo
                     FROM [CRManagementDB].[dbo].[Approval]
                     WHERE CRID = @CRID
                       AND StepID = @StepID
                       AND Active = 1
-                    ORDER BY AssignedDate DESC";
+                    ORDER BY ApprovalID ASC";
 
-                var deptHeadAssignedToObj = _connectionService.ExecuteScalar(getDeptHeadAssignedToSql, new { CRID = crId, StepID = deptHeadStepId });
+                var divisionHeadAssignedToObj = _connectionService.ExecuteScalar(
+                    getDivisionHeadAssignedToSql, new { CRID = crId, StepID = divisionHeadStepId });
 
-                if (deptHeadAssignedToObj == null || deptHeadAssignedToObj == DBNull.Value)
-                {
-                    throw new InvalidOperationException("Could not determine the Division Head Approval assignee for this Change Request.");
-                }
+                if (divisionHeadAssignedToObj == null || divisionHeadAssignedToObj == DBNull.Value)
+                    throw new InvalidOperationException("Could not determine the 'Division Head Approval' assignee for this Change Request.");
 
-                string departmentHeadAssignedTo = deptHeadAssignedToObj.ToString();
+                var approvalParams = new DynamicParameters();
+                approvalParams.Add("@CRID", crId);
+                approvalParams.Add("@StepID", divisionHeadStepId);
+                approvalParams.Add("@AssignedBy", empId);
+                approvalParams.Add("@AssignedTo", divisionHeadAssignedToObj.ToString());
+                approvalParams.Add("@AssignedDate", DateTime.Now);
+                approvalParams.Add("@Active", true);
 
-                const string insertTestingApprovalSql = @"
-                    INSERT INTO [CRManagementDB].[dbo].[Approval]
-                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                    VALUES
-                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
-
-                var testingApprovalParams = new DynamicParameters();
-                testingApprovalParams.Add("@CRID", crId);
-                testingApprovalParams.Add("@StepID", testingApprovalStepId);
-                testingApprovalParams.Add("@AssignedBy", empId);
-                testingApprovalParams.Add("@AssignedTo", departmentHeadAssignedTo);
-                testingApprovalParams.Add("@AssignedDate", DateTime.Now);
-                testingApprovalParams.Add("@Active", true);
-
-                _connectionService.ExecuteWithPara(insertTestingApprovalSql, testingApprovalParams);
+                _connectionService.ExecuteWithPara(insertApprovalSql, approvalParams);
             }
+            else
+            {
+                // Return to the developer: new approval on the developer's step, assigned to that developer
+                var devStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Developer Documentation" });
+
+                if (devStepIdObj == null || devStepIdObj == DBNull.Value)
+                    throw new InvalidOperationException("Workflow step 'Developer Documentation' was not found or is inactive.");
+
+                int devStepId = Convert.ToInt32(devStepIdObj);
+
+                const string getDeveloperSql = @"
+                    SELECT TOP 1 AssignedTo
+                    FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID
+                      AND StepID = @StepID
+                      AND Active = 1
+                    ORDER BY ApprovalID ASC";
+
+                var developerObj = _connectionService.ExecuteScalar(getDeveloperSql, new { CRID = crId, StepID = devStepId });
+
+                if (developerObj == null || developerObj == DBNull.Value)
+                    throw new InvalidOperationException("Could not determine the developer assigned to this Change Request.");
+
+                var approvalParams = new DynamicParameters();
+                approvalParams.Add("@CRID", crId);
+                approvalParams.Add("@StepID", devStepId);
+                approvalParams.Add("@AssignedBy", empId);
+                approvalParams.Add("@AssignedTo", developerObj.ToString());
+                approvalParams.Add("@AssignedDate", DateTime.Now);
+                approvalParams.Add("@Active", true);
+
+                _connectionService.ExecuteWithPara(insertApprovalSql, approvalParams);
+            }
+
+            // 6. Save test result attachments (saved for both Pass and Fail).
+            //    Uses the same helpers as the other forms: files go to
+            //    {AttachmentSettings:RootFolder}\{CRID}\ and the DB row gets the "QA Report" AttachmentTypeID.
+            await SaveAttachmentGroupAsync(
+                crId,
+                collection,
+                "TestResultFiles",
+                "QA Report",
+                userName);
 
             return true;
         }
-
         public async Task<bool> AssignFinalApproverAsync(int crId, int approverId, string approvedByEmpId)
         {
             if (crId <= 0)
@@ -3768,6 +3808,177 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
 
             return statusRowsAffected > 0;
+        }
+
+
+        public async Task<bool> ReturnToQAAsync(int crId, string reason, string empNo)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new ArgumentException("Please provide a reason for returning the Change Request to QA.");
+            if (string.IsNullOrWhiteSpace(empNo))
+                throw new ArgumentException("The logged-in user could not be determined.");
+
+            reason = reason.Trim();
+
+            // ---- 1. Resolve the status and both steps by NAME ----
+            const string getStatusIdSql = @"
+                SELECT TOP 1 StatusID
+                FROM [CRManagementDB].[dbo].[CRStatus]
+                WHERE StatusName = @StatusName AND Active = 1";
+
+            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = "DevReturn" });
+
+            if (statusIdObj == null || statusIdObj == DBNull.Value)
+                throw new InvalidOperationException("Status 'DevReturn' was not found or is inactive in CRStatus table.");
+
+            int qaReadyStatusId = Convert.ToInt32(statusIdObj);
+
+            const string getStepIdSql = @"
+                SELECT TOP 1 StepID
+                FROM [CRManagementDB].[dbo].[WorkflowStep]
+                WHERE StepName = @StepName
+                  AND Active = 1
+                ORDER BY StepOrder ASC";
+
+            var divisionHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
+
+            if (divisionHeadStepIdObj == null || divisionHeadStepIdObj == DBNull.Value)
+                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
+
+            int divisionHeadStepId = Convert.ToInt32(divisionHeadStepIdObj);
+
+            var testingStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Testing" });
+
+            if (testingStepIdObj == null || testingStepIdObj == DBNull.Value)
+                throw new InvalidOperationException("Workflow step 'Testing' was not found or is inactive.");
+
+            int testingStepId = Convert.ToInt32(testingStepIdObj);
+
+            // ---- 2. The logged-in user's pending Division Head Approval row.
+            //         Its AssignedBy is the QA user who passed the test. ----
+            const string findPendingSql = @"
+                SELECT TOP 1 ApprovalID, AssignedBy
+                FROM [CRManagementDB].[dbo].[Approval]
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND AssignedTo = @AssignedTo
+                  AND IsApproved IS NULL
+                  AND Active = 1
+                ORDER BY ApprovalID DESC";
+
+            var findParams = new DynamicParameters();
+            findParams.Add("@CRID", crId);
+            findParams.Add("@StepID", divisionHeadStepId);
+            findParams.Add("@AssignedTo", empNo);
+
+            var pendingTable = _connectionService.ReturnWithPara(findPendingSql, findParams);
+
+            if (pendingTable == null || pendingTable.Rows.Count == 0)
+                throw new InvalidOperationException(
+                    $"No pending Division Head Approval row found for CR {crId} and user {empNo}.");
+
+            int pendingApprovalId = Convert.ToInt32(pendingTable.Rows[0]["ApprovalID"]);
+            string qaUser = Convert.ToString(pendingTable.Rows[0]["AssignedBy"]);
+
+            if (string.IsNullOrWhiteSpace(qaUser))
+                throw new InvalidOperationException($"The QA user for CR {crId} could not be determined.");
+
+            // ---- 3. Update the CR status ----
+            const string updateStatusSql = @"
+                UPDATE ChangeRequest
+                SET StatusID = @StatusID
+                WHERE CRID = @CRID
+                  AND Active = 1";
+
+            var statusParams = new DynamicParameters();
+            statusParams.Add("@StatusID", qaReadyStatusId);
+            statusParams.Add("@CRID", crId);
+
+            int statusRows = await Task.Run(() => _connectionService.ExecuteWithPara(updateStatusSql, statusParams));
+
+            if (statusRows <= 0)
+                return false;
+
+            // ---- 4. Close the division head's pending row as returned (reason in Comments) ----
+            const string closeRowSql = @"
+                UPDATE Approval
+                SET IsApproved   = 0,
+                    Decision     = @Decision,
+                    Comments     = @Comments,
+                    ApprovalDate = @ApprovalDate
+                WHERE ApprovalID = @ApprovalID";
+
+            var closeParams = new DynamicParameters();
+            closeParams.Add("@Decision", "Returned to QA");
+            closeParams.Add("@Comments", reason);
+            closeParams.Add("@ApprovalDate", DateTime.Now);
+            closeParams.Add("@ApprovalID", pendingApprovalId);
+
+            await Task.Run(() => _connectionService.ExecuteWithPara(closeRowSql, closeParams));
+
+            // ---- 5. Close any old pending "Testing" rows (QA already finished that test),
+            //         then create a fresh pending one for the retest ----
+            const string closeOldTestingSql = @"
+                UPDATE Approval
+                SET IsApproved   = 1,
+                    ApprovalDate = @ApprovalDate
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND IsApproved IS NULL
+                  AND Active = 1";
+
+            var closeOldParams = new DynamicParameters();
+            closeOldParams.Add("@CRID", crId);
+            closeOldParams.Add("@StepID", testingStepId);
+            closeOldParams.Add("@ApprovalDate", DateTime.Now);
+
+            await Task.Run(() => _connectionService.ExecuteWithPara(closeOldTestingSql, closeOldParams));
+
+            const string insertApprovalSql = @"
+                INSERT INTO Approval
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+
+            var insertApprovalParams = new DynamicParameters();
+            insertApprovalParams.Add("@CRID", crId);
+            insertApprovalParams.Add("@StepID", testingStepId);
+            insertApprovalParams.Add("@AssignedBy", empNo);
+            insertApprovalParams.Add("@AssignedTo", qaUser);
+            insertApprovalParams.Add("@AssignedDate", DateTime.Now);
+            insertApprovalParams.Add("@Active", true);
+
+            int approvalRows = await Task.Run(() => _connectionService.ExecuteWithPara(insertApprovalSql, insertApprovalParams));
+
+            if (approvalRows <= 0)
+                return false;
+
+            // ---- 6. New Testing record for the retest: next cycle, same UAT link, no result yet ----
+            const string insertTestingSql = @"
+                INSERT INTO [CRManagementDB].[dbo].[Testing]
+                    (CRID, TestCycleNumber, TestResult, UATLink, TestingDate, Active, IsPassed)
+                SELECT
+                    @CRID,
+                    ISNULL(MAX(TestCycleNumber), 0) + 1,
+                    NULL,
+                    (SELECT TOP 1 UATLink
+                     FROM [CRManagementDB].[dbo].[Testing]
+                     WHERE CRID = @CRID
+                     ORDER BY TestCycleNumber DESC),
+                    NULL,
+                    1,
+                    NULL
+                FROM [CRManagementDB].[dbo].[Testing]
+                WHERE CRID = @CRID";
+
+            var testingParams = new DynamicParameters();
+            testingParams.Add("@CRID", crId);
+
+            int testingRows = await Task.Run(() => _connectionService.ExecuteWithPara(insertTestingSql, testingParams));
+
+            return testingRows > 0;
         }
 
     }

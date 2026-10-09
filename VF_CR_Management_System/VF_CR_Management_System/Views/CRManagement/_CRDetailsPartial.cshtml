@@ -131,21 +131,22 @@
     var isPastQaStatus = isTestingStatus || isTestingApprovedStatus;
 
     var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
-    var canApprove = !isApproved && !isRejected && CanActOn(deptHeadStep);
+    var canApprove = !isApproved && !isRejected && !isTestingApprovedStatus && CanActOn(deptHeadStep);
 
     // Developer = current user owns a still-open Developer Documentation row, or the Assessment step
     var isAssignedDeveloper = CanActOn(assessmentStep)
         || devDocRows.Any(r => r.IsApproved == null && IsCurrentUser(r.AssignedTo));
-
-    var canGoAssessment = isApproved && isAssignedDeveloper || isAssessmentReturned && isAssignedDeveloper;
 
     var canGoSecurity = (isAssessment || isSecurityStatus) && CanActOn(securityStep);
     var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
     // "Proceed to Development" is shown when the status is DevelopmentApproved, to the assigned developer.
     // Clicking it opens a popup asking for the UAT link (it no longer links to the Assessment page).
     var isDevelopmentApproved = StatusIs("DevelopmentApproved");
-    var canProceedToDevelopment = isDevelopmentApproved && isAssignedDeveloper;
+    var isQaReturned = StatusIs("QAReturn", "QAReturned", "ReturnedToQA");
 
+
+    var canProceedToDevelopment = isDevelopmentApproved && isAssignedDeveloper;
+    var canGoAssessment = (isApproved || isAssessmentReturned || isQaReturned) && isAssignedDeveloper;
     // "Approve to Development" is shown only when the status is SecurityApproved
     var canApproveToDevelopment = isSecurityApproved;
 
@@ -154,9 +155,11 @@
     var isDevReturn = StatusIs("DevReturn");
     var canGoQA = isDevReturn && CanActOn(testingStep);
     var canHandoverToTester = CanActOn(testerAssignmentStep) && !testerAlreadyAssigned;
-    var canHandoverToFinalApprover = isTestingStatus
+    // "Send to Final Approval": CR status is TestingApproved, and the logged-in user is the AssignedTo of the
+    // pending "Division Head Approval" approval row (created when QA passed), and no Final Approver is picked yet.
+    var canHandoverToFinalApprover = isTestingApprovedStatus
         && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
-        && CanActOn(testingApprovalStep);
+        && CanActOn(deptHeadStep);
     var canFinalApprove = isTestingApprovedStatus && CanActOn(finalApprovalStep);
     var isAssessmentSubmitted = StatusIs("Assessment", "AssessmentSubmitted");
 
@@ -473,7 +476,10 @@
     @if (canHandoverToFinalApprover)
     {
         <button type="button" id="modal-handover-final-btn" class="btn btn-success" data-id="@Model.CRID">
-            <i class="ri-user-shared-line me-1"></i>Handover to Final Approver
+            <i class="ri-send-plane-line me-1"></i>Send to Final Approval
+        </button>
+        <button type="button" id="modal-return-qa-btn" class="btn btn-danger" data-id="@Model.CRID">
+            <i class="ri-arrow-go-back-line me-1"></i>Reject - Return to QA
         </button>
     }
     @if (canFinalApprove)
@@ -942,6 +948,55 @@
                     error: function (xhr) {
                         var msg = (xhr.responseJSON && xhr.responseJSON.message)
                             || 'Failed to return the Change Request. Please try again.';
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            });
+        });
+
+            // ===== REJECT: RETURN TO QA (status = TestingApproved): reason required =====
+        $(document).off('click', '#modal-return-qa-btn')
+                   .on('click', '#modal-return-qa-btn', function () {
+
+            var crId = $(this).data('id');
+
+            Swal.fire({
+                title: 'Return to QA?',
+                input: 'textarea',
+                inputLabel: 'Reason for returning to QA',
+                inputPlaceholder: 'Explain what QA needs to re-test or fix...',
+                inputAttributes: { 'aria-label': 'Reason for returning to QA', maxlength: 1000 },
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, return to QA',
+                confirmButtonColor: '#dc3545',
+                cancelButtonText: 'Cancel',
+                focusConfirm: false,
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Please enter a reason.';
+                    }
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                var token = $('input[name="__RequestVerificationToken"]').val();
+
+                $.ajax({
+                    url: '@Url.Action("ReturnToQA", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crId, reason: result.value.trim() },
+                    headers: token ? { "RequestVerificationToken": token } : {},
+                    success: function (response) {
+                        if (response && response.success === false) {
+                            Swal.fire('Error', response.message || 'Failed to return the CR to QA.', 'error');
+                        } else {
+                            successAndClose((response && response.message) || 'Change Request returned to QA.');
+                        }
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            || 'Failed to return the Change Request to QA. Please try again.';
                         Swal.fire('Error', msg, 'error');
                     }
                 });

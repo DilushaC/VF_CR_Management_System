@@ -737,7 +737,7 @@ namespace VF_CR_Management_System.Controllers
                         message = isSubmit
                             ? "QA test results submitted successfully"
                             : "QA test saved as draft successfully",
-                        redirectUrl = Url.Action("TestingQueueTable", "CRManagement")
+                        redirectUrl = Url.Action("AssignedToMeTable", "CRManagement")
                     });
                 }
                 else
@@ -931,6 +931,34 @@ namespace VF_CR_Management_System.Controllers
             catch (Exception)
             {
                 return StatusCode(500, new { message = "An unexpected error occurred while rejecting the CR." });
+            }
+        }
+
+
+        [HttpPost]
+        public async Task<IActionResult> ReturnToQA(int id, string reason)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.ReturnToQAAsync(id, reason, empNo);
+
+                if (!success)
+                    return BadRequest(new { success = false, message = "Failed to return the Change Request to QA." });
+
+                return Ok(new { success = true, message = "Change Request returned to QA." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred while returning the CR to QA." });
             }
         }
     }

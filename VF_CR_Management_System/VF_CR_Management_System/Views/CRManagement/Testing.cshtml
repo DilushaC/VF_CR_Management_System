@@ -14,8 +14,6 @@
         .OrderByDescending(t => t.TestCycleNumber)
         .FirstOrDefault();
 
-    var nextCycleNumber = (latestTest?.TestCycleNumber ?? 0) + 1;
-
     // UAT link uploaded by the developer (read-only here)
     var uatLink = latestTest?.UATLink?.Trim() ?? string.Empty;
 
@@ -43,11 +41,17 @@
         })
         .ToList();
 
+    // Test result files uploaded by the tester (shown under the Test Plan uploader)
+    var testResultFiles = rawAttachments
+        .Where(a => string.Equals(AttachmentType(a), "QA Report", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
     // Any other type, so nothing is hidden
     var otherFiles = rawAttachments
         .Except(srsFiles)
         .Except(baFiles)
         .Except(vendorFiles)
+        .Except(testResultFiles)
         .ToList();
 
     var hasAnyAttachments = rawAttachments.Any();
@@ -203,11 +207,10 @@
 
             <div class="card-body">
 
-                <form id="testingForm">
+                <form id="testingForm" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
 
                     <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
-                    <input type="hidden" name="TestID" id="testIdField" value="@(latestTest?.TestID ?? 0)" />
-                    <input type="hidden" name="TestCycleNumber" id="testCycleField" value="@nextCycleNumber" />
 
                     <!-- Change Request details, bound directly from the model (same as Security Assessment view) -->
                     <div class="card border mb-4">
@@ -336,11 +339,17 @@
                         <div class="card-body">
                             @if (!string.IsNullOrWhiteSpace(uatLink))
                             {
-                                <div class="input-group">
-                                    <input type="text" id="uatLinkField" class="form-control" value="@uatLink" readonly />
-                                    <a href="@uatLink" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
-                                        <i class="ri-external-link-line me-1"></i>Open
-                                    </a>
+                                <!-- Half-width on desktop (col-md-6) and capped at 500px so the field is not stretched -->
+                                <div class="row">
+                                    <div class="col-12 col-md-6" style="max-width: 500px;">
+                                        <div class="input-group">
+                                            <input type="text" id="uatLinkField" class="form-control text-truncate"
+                                                   value="@uatLink" title="@uatLink" readonly />
+                                            <a href="@uatLink" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
+                                                <i class="ri-external-link-line me-1"></i>Open
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
                             }
                             else
@@ -352,59 +361,61 @@
 
                     <div class="row g-3">
 
-                        <!-- Left Column -->
-                        <div class="col-lg-6">
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Tester Name</label>
-                                    <input type="text" class="form-control" value="@username" disabled>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Designation</label>
-                                    <input type="text" class="form-control" value="@designation" disabled>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Department</label>
-                                    <input type="text" class="form-control" value="@department" disabled>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" class="form-control" value="@email" disabled>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Acceptance Date</label>
-                                    <input type="text" class="form-control"
-                                           value="@((latestTest?.TestingDate ?? DateTime.Now).ToString("dd/MM/yyyy"))" disabled>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label">Test Plan and Test Results</label>
-                                <textarea name="Test" id="testPlanResults" class="form-control" rows="6"
-                                          placeholder="The test plan and results shall be attached to this form:">@(latestTest?.TestResult)</textarea>
-                            </div>
+                        <!-- Tester details -->
+                        <div class="col-md-4">
+                            <label class="form-label">Tester Name</label>
+                            <input type="text" class="form-control" value="@username" disabled>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Designation</label>
+                            <input type="text" class="form-control" value="@designation" disabled>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Department</label>
+                            <input type="text" class="form-control" value="@department" disabled>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" value="@email" disabled>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Testing Date</label>
+                            <input type="text" class="form-control"
+                                   value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
                         </div>
 
-                        <!-- Right Column -->
-                        <div class="col-lg-6 d-flex flex-column">
-                            <div class="card border mb-3 flex-fill">
-                                <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Testing &amp; UAT</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label class="form-label">UAT Confirmation &amp; Comments</label>
-                                        <textarea name="UatComments" id="uatComments" class="form-control" rows="12"
-                                                  placeholder="Write the explanation here..."></textarea>
-                                    </div>
-                                </div>
+                        <!-- Test plan and results -->
+                        <div class="col-12">
+                            <label class="form-label">Test Plan and Test Results</label>
+                            <textarea name="Test" id="testPlanResults" class="form-control" rows="8"
+                                      placeholder="Describe the test plan and results (if the test failed, explain why):"></textarea>
+                        </div>
+
+                        <!-- Test results attachments -->
+                        <div class="col-12">
+                            <label class="form-label" for="testResultFiles">Test Results Attachments</label>
+                            <input type="file"
+                                   id="testResultFiles"
+                                   name="TestResultFiles"
+                                   class="form-control"
+                                   multiple
+                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.zip" />
+                            <div class="form-text">
+                                PDF, Word, Excel, CSV, text, images or ZIP. Max 10 MB per file, up to 10 files.
                             </div>
+
+                            <!-- Newly selected files (not yet uploaded) -->
+                            <ul id="selectedFilesList" class="list-unstyled mt-2 mb-0"></ul>
+
+                            <!-- Files already uploaded for this CR -->
+                            @if (testResultFiles.Any())
+                            {
+                                <div class="mt-3">
+                                    @{
+                                        RenderAttachmentGroup("Uploaded QA Report Files", testResultFiles);
+                                    }
+                                </div>
+                            }
                         </div>
 
                     </div>
@@ -412,22 +423,22 @@
                     <!-- Actions -->
                     <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
                         <button type="button"
-                                class="btn btn-outline-danger"
+                                class="btn btn-outline-secondary"
                                 onclick="window.location.href='@Url.Action("TestingQueueTable")'">
                             Cancel
                         </button>
                         <div class="d-flex gap-2">
                             <button type="button"
-                                    id="btn-save"
+                                    id="btn-fail"
                                     class="btn btn-danger"
-                                    data-status="1">
-                                Save
+                                    data-status="3">
+                                <i class="ri-arrow-go-back-line me-1"></i>Test Failed
                             </button>
-                            <button type="submit"
+                            <button type="button"
                                     id="submitBtn"
-                                    class="btn btn-primary"
+                                    class="btn btn-success"
                                     data-status="2">
-                                Submit
+                                <i class="ri-check-line me-1"></i>Test Passed
                             </button>
                         </div>
                     </div>
@@ -500,51 +511,156 @@
                 });
             });
 
-            // ---- Save / Submit testing form ----
-            var saveBtn = document.getElementById('btn-save');
-            var submitBtn = document.getElementById('submitBtn');
+            // ---- Test result attachments (select, validate, remove before upload) ----
+            var MAX_FILE_BYTES = 10 * 1024 * 1024;   // 10 MB per file
+            var MAX_FILES = 10;
+            var ALLOWED_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt',
+                               '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip'];
 
-            function handleTestingSubmission(btnElement, isSubmit) {
-                var crId = document.getElementById('crIdField').value;
+            var fileInput = document.getElementById('testResultFiles');
+            var selectedList = document.getElementById('selectedFilesList');
+            var selectedFiles = [];   // File objects currently chosen
 
-                if (!crId) {
+            function formatSize(bytes) {
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            }
+
+            function syncInputFiles() {
+                // Push the filtered list back into the real <input> so FormData sends it
+                var dt = new DataTransfer();
+                selectedFiles.forEach(function (f) { dt.items.add(f); });
+                fileInput.files = dt.files;
+            }
+
+            function renderSelectedFiles() {
+                selectedList.innerHTML = '';
+                selectedFiles.forEach(function (file, index) {
+                    var li = document.createElement('li');
+                    li.className = 'd-flex align-items-center justify-content-between border rounded px-2 py-1 mb-1';
+
+                    var label = document.createElement('span');
+                    label.className = 'text-truncate me-2';
+                    label.innerHTML = '<i class="ri-attachment-2 me-1"></i>';
+                    label.appendChild(document.createTextNode(file.name + ' (' + formatSize(file.size) + ')'));
+
+                    var removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'btn btn-sm btn-link text-danger p-0';
+                    removeBtn.title = 'Remove';
+                    removeBtn.innerHTML = '<i class="ri-close-line fs-18"></i>';
+                    removeBtn.addEventListener('click', function () {
+                        selectedFiles.splice(index, 1);
+                        syncInputFiles();
+                        renderSelectedFiles();
+                    });
+
+                    li.appendChild(label);
+                    li.appendChild(removeBtn);
+                    selectedList.appendChild(li);
+                });
+            }
+
+            fileInput.addEventListener('change', function () {
+                var rejected = [];
+
+                Array.prototype.forEach.call(fileInput.files, function (file) {
+                    var dot = file.name.lastIndexOf('.');
+                    var ext = dot >= 0 ? file.name.substring(dot).toLowerCase() : '';
+
+                    if (ALLOWED_EXT.indexOf(ext) === -1) {
+                        rejected.push(file.name + ' (file type not allowed)');
+                    } else if (file.size > MAX_FILE_BYTES) {
+                        rejected.push(file.name + ' (larger than 10 MB)');
+                    } else if (selectedFiles.length >= MAX_FILES) {
+                        rejected.push(file.name + ' (maximum ' + MAX_FILES + ' files)');
+                    } else if (!selectedFiles.some(function (f) { return f.name === file.name && f.size === file.size; })) {
+                        selectedFiles.push(file);
+                    }
+                });
+
+                syncInputFiles();
+                renderSelectedFiles();
+
+                if (rejected.length) {
                     Swal.fire({
-                        title: 'Could not submit',
-                        text: 'Missing Change Request ID. Cannot submit the testing form.',
-                        icon: 'error',
+                        title: 'Some files were not added',
+                        html: rejected.map(function (r) {
+                            var d = document.createElement('div');
+                            d.textContent = r;
+                            return d.outerHTML;
+                        }).join(''),
+                        icon: 'warning',
                         customClass: { confirmButton: 'btn btn-primary' },
                         buttonsStyling: false
                     });
+                }
+            });
+
+            // ---- Test Passed / Test Failed ----
+            var submitBtn = document.getElementById('submitBtn');   // Test Passed
+            var failBtn   = document.getElementById('btn-fail');    // Test Failed
+
+            // Per-button alert settings
+            var modeConfig = {
+                pass: {
+                    confirm: {
+                        title: 'Mark test as passed?',
+                        text: 'The Change Request will move to the next stage.',
+                        icon: 'question',
+                        confirmButtonText: 'Yes, test passed',
+                        confirmClass: 'btn btn-success me-2'
+                    },
+                    successTitle: 'Test Passed!',
+                    successText: 'Testing results submitted successfully.',
+                    requireTestPlan: true
+                },
+                fail: {
+                    confirm: {
+                        title: 'Mark test as failed?',
+                        text: 'The Change Request will be returned to the developer.',
+                        icon: 'warning',
+                        confirmButtonText: 'Yes, return to developer',
+                        confirmClass: 'btn btn-danger me-2'
+                    },
+                    successTitle: 'Returned to Developer',
+                    successText: 'The Change Request has been returned to the developer.',
+                    requireTestPlan: true
+                }
+            };
+
+            function showAlert(title, text, icon) {
+                Swal.fire({
+                    title: title,
+                    text: text,
+                    icon: icon,
+                    customClass: { confirmButton: 'btn btn-primary' },
+                    buttonsStyling: false
+                });
+            }
+
+            function handleTestingSubmission(btnElement, mode) {
+                var cfg = modeConfig[mode];
+                var crId = document.getElementById('crIdField').value;
+
+                if (!crId) {
+                    showAlert('Could not submit', 'Missing Change Request ID. Cannot submit the testing form.', 'error');
                     return;
                 }
 
-                // Client-side validation only on Submit; Save allows a partial draft.
-                if (isSubmit) {
-                    var testPlan = document.getElementById('testPlanResults').value.trim();
-                    var uatComments = document.getElementById('uatComments').value.trim();
+                // Validation per button
+                var testPlan = document.getElementById('testPlanResults').value.trim();
 
-                    if (!testPlan) {
-                        Swal.fire({
-                            title: 'Missing information',
-                            text: 'Please enter the Test Plan and Test Results.',
-                            icon: 'warning',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        });
-                        return;
-                    }
-
-                    if (!uatComments) {
-                        Swal.fire({
-                            title: 'Missing information',
-                            text: 'Please enter the UAT Confirmation & Comments.',
-                            icon: 'warning',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        });
-                        return;
-                    }
+                if (cfg.requireTestPlan && !testPlan) {
+                    showAlert('Missing information',
+                        mode === 'fail'
+                            ? 'Please enter the Test Plan and Test Results, including why the test failed.'
+                            : 'Please enter the Test Plan and Test Results.',
+                        'warning');
+                    return;
                 }
+
 
                 function performSubmission() {
                     var form = document.getElementById('testingForm');
@@ -554,8 +670,10 @@
                         formData.append('Status', statusValue);
                     }
 
-                    btnElement.disabled = true;
-                    var originalText = btnElement.textContent;
+                    // Disable both buttons while processing
+                    var allBtns = [submitBtn, failBtn];
+                    allBtns.forEach(function (b) { b.disabled = true; });
+                    var originalHtml = btnElement.innerHTML;
                     btnElement.textContent = 'Processing...';
 
                     $.ajax({
@@ -569,21 +687,13 @@
                         },
                         success: function (data) {
                             if (!data.success) {
-                                Swal.fire({
-                                    title: 'Could not save',
-                                    text: data.message || 'Failed to update the testing form.',
-                                    icon: 'error',
-                                    customClass: { confirmButton: 'btn btn-primary' },
-                                    buttonsStyling: false
-                                });
+                                showAlert('Could not save', data.message || 'Failed to update the testing form.', 'error');
                                 return;
                             }
 
                             Swal.fire({
-                                title: isSubmit ? 'Submitted!' : 'Saved!',
-                                text: data.message || (isSubmit
-                                    ? 'Testing results submitted successfully.'
-                                    : 'Testing results saved successfully.'),
+                                title: cfg.successTitle,
+                                text: data.message || cfg.successText,
                                 icon: 'success',
                                 customClass: { confirmButton: 'btn btn-primary' },
                                 buttonsStyling: false
@@ -596,52 +706,38 @@
                         error: function (xhr) {
                             var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
                                       'Failed to update the testing form. Please try again.';
-
-                            Swal.fire({
-                                title: 'Error',
-                                text: msg,
-                                icon: 'error',
-                                customClass: { confirmButton: 'btn btn-primary' },
-                                buttonsStyling: false
-                            });
+                            showAlert('Error', msg, 'error');
                         },
                         complete: function () {
-                            btnElement.disabled = false;
-                            btnElement.textContent = originalText;
+                            allBtns.forEach(function (b) { b.disabled = false; });
+                            btnElement.innerHTML = originalHtml;
                         }
                     });
                 }
 
-                if (isSubmit) {
-                    Swal.fire({
-                        title: 'Submit this testing form?',
-                        text: 'Once submitted, the Change Request will move to the next stage.',
-                        icon: 'question',
-                        showCancelButton: true,
-                        confirmButtonText: 'Yes, submit',
-                        cancelButtonText: 'Cancel',
-                        customClass: { confirmButton: 'btn btn-primary me-2', cancelButton: 'btn btn-outline-secondary' },
-                        buttonsStyling: false
-                    }).then(function (result) {
-                        if (result.isConfirmed) {
-                            performSubmission();
-                        }
-                    });
-                } else {
-                    performSubmission();
-                }
+                // Confirmation alert for every button
+                Swal.fire({
+                    title: cfg.confirm.title,
+                    text: cfg.confirm.text,
+                    icon: cfg.confirm.icon,
+                    showCancelButton: true,
+                    confirmButtonText: cfg.confirm.confirmButtonText,
+                    cancelButtonText: 'Cancel',
+                    customClass: {
+                        confirmButton: cfg.confirm.confirmClass,
+                        cancelButton: 'btn btn-outline-secondary'
+                    },
+                    buttonsStyling: false
+                }).then(function (result) {
+                    if (result.isConfirmed) {
+                        performSubmission();
+                    }
+                });
             }
 
-            // preventDefault stops the native form post that <button type="submit"> would trigger
-            submitBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                handleTestingSubmission(submitBtn, true);
-            });
-
-            saveBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                handleTestingSubmission(saveBtn, false);
-            });
+            // preventDefault stops any native form post
+            submitBtn.addEventListener('click', function (e) { e.preventDefault(); handleTestingSubmission(submitBtn, 'pass'); });
+            failBtn.addEventListener('click',   function (e) { e.preventDefault(); handleTestingSubmission(failBtn, 'fail'); });
         });
     </script>
 }
