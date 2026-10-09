@@ -38,5 +38,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<bool> ApproveToDevelopmentAsync(int crId, string empNo);
         Task<bool> ProceedToDevelopmentAsync(int crId, string uatLink, string empNo);
         Task<bool> ReturnToQAAsync(int crId, string reason, string empNo);
+        Task<bool> FinalApproval(int crId, string empNo);
     }
 }

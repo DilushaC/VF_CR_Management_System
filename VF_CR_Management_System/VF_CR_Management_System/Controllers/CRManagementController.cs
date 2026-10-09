@@ -961,5 +961,32 @@ namespace VF_CR_Management_System.Controllers
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while returning the CR to QA." });
             }
         }
+
+        [HttpPost]
+        public async Task<IActionResult> FinalApproval(int id)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.FinalApproval(id, empNo);
+
+                if (!success)
+                    return BadRequest(new { success = false, message = "Failed to approve the CR ." });
+
+                return Ok(new { success = true, message = "CR Final Approve Success." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred while accepting the CR." });
+            }
+        }
     }
 }

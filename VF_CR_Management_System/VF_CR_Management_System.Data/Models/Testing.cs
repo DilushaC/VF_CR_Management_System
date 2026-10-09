@@ -15,5 +15,6 @@ namespace VF_CR_Management_System.Data.Models
         public string UATLink { get; set; }
         public DateTime? TestingDate { get; set; }
         public bool Active { get; set; }
+        public string ReturnedFrom { get; set; }
     }
 }

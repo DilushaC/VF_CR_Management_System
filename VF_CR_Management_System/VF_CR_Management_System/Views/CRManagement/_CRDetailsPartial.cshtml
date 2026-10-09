@@ -76,6 +76,7 @@
     var securityStep = StepByName("Security");
     var testingStep = StepByName("Testing");
     var finalApprovalStep = StepByName("Final Approval");
+    var releaseClosureStep = StepByName("Release Closure");
     var testerAssignmentStep = StepByName("TesterAssignment");
     var testingApprovalStep = StepByName("TestingApproval");
 
@@ -137,16 +138,25 @@
     var isAssignedDeveloper = CanActOn(assessmentStep)
         || devDocRows.Any(r => r.IsApproved == null && IsCurrentUser(r.AssignedTo));
 
+    // The original developer (AssignedTo of the FIRST Developer Documentation row).
+    // Used for QAReturn, where the developer's old rows may already be closed.
+    var isOriginalDeveloper = IsCurrentUser(developerUser);
+
+    // "Go to Assessment": CR approved or returned from assessment, to the assigned developer
+    var canGoAssessment = (isApproved && isAssignedDeveloper) || (isAssessmentReturned && isAssignedDeveloper);
+
     var canGoSecurity = (isAssessment || isSecurityStatus) && CanActOn(securityStep);
     var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
-    // "Proceed to Development" is shown when the status is DevelopmentApproved, to the assigned developer.
-    // Clicking it opens a popup asking for the UAT link (it no longer links to the Assessment page).
+
+    // "Proceed to Development" (opens the UAT link popup) is shown to the developer when the status is
+    //   - DevelopmentApproved, or
+    //   - QAReturn (QA sent it back, so the developer fixes it and uploads a new UAT link)
     var isDevelopmentApproved = StatusIs("DevelopmentApproved");
     var isQaReturned = StatusIs("QAReturn", "QAReturned", "ReturnedToQA");
+    var canProceedToDevelopment =
+        (isDevelopmentApproved || isQaReturned)
+        && (isAssignedDeveloper || isOriginalDeveloper);
 
-
-    var canProceedToDevelopment = isDevelopmentApproved && isAssignedDeveloper;
-    var canGoAssessment = (isApproved || isAssessmentReturned || isQaReturned) && isAssignedDeveloper;
     // "Approve to Development" is shown only when the status is SecurityApproved
     var canApproveToDevelopment = isSecurityApproved;
 
@@ -160,8 +170,15 @@
     var canHandoverToFinalApprover = isTestingApprovedStatus
         && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
         && CanActOn(deptHeadStep);
+
+    // "Final Approval" button (SweetAlert confirm): status TestingApproved and the logged-in user
+    // owns the pending "Final Approval" row.
     var canFinalApprove = isTestingApprovedStatus && CanActOn(finalApprovalStep);
     var isAssessmentSubmitted = StatusIs("Assessment", "AssessmentSubmitted");
+
+    // "Add Live Link" (popup): status FinalApproved and the logged-in user owns the pending "Release Closure" row.
+    var isFinalApproved = StatusIs("FinalApproved");
+    var canSubmitLiveLink = isFinalApproved && CanActOn(releaseClosureStep);
 
     // Accept / Return must act on the PENDING Developer Documentation row (assigned back to the approver)
     var canDevDocDecide = isAssessmentSubmitted && CanActOn(pendingDevDocStep);
@@ -430,10 +447,10 @@
 {
     <div class="px-3 pb-2">
         <small class="text-muted d-block" style="font-size:11px; word-break:break-all;">
-            DEBUG | status=[@Model.Status] | testingApproved=[@isTestingApprovedStatus] | finalApprover=[@Model.FinalApproverUserName] |
+            DEBUG | status=[@Model.Status] | qaReturned=[@isQaReturned] | testingApproved=[@isTestingApprovedStatus] | finalApprover=[@Model.FinalApproverUserName] |
             me=[@dbgMe] | isFinalApprover=[@isAssignedFinalApprover] |
-            developer=[@developerUser] | devDocRows=[@dbgDevDoc] |
-            canApprove=[@canApprove] | canGoAssessment=[@canGoAssessment] | canDevDocDecide=[@canDevDocDecide] | canFinalApprove=[@canFinalApprove] | steps=[@dbgSteps]
+            developer=[@developerUser] | isAssignedDev=[@isAssignedDeveloper] | isOriginalDev=[@isOriginalDeveloper] | devDocRows=[@dbgDevDoc] |
+            canApprove=[@canApprove] | canGoAssessment=[@canGoAssessment] | canProceedToDevelopment=[@canProceedToDevelopment] | canDevDocDecide=[@canDevDocDecide] | canFinalApprove=[@canFinalApprove] | canSubmitLiveLink=[@canSubmitLiveLink] | steps=[@dbgSteps]
         </small>
     </div>
 }
@@ -484,9 +501,9 @@
     }
     @if (canFinalApprove)
     {
-        <a href="@Url.Action("FinalApproval", "CRManagement", new { id = Model.CRID })" class="btn btn-success">
+        <button type="button" id="modal-final-approve-btn" class="btn btn-success" data-id="@Model.CRID">
             <i class="ri-check-double-line me-1"></i>Final Approval
-        </a>
+        </button>
     }
     @if (canGoQA)
     {
@@ -509,6 +526,12 @@
             <i class="ri-arrow-go-back-line me-1"></i>Return
         </button>
     }
+    @if (canSubmitLiveLink)
+    {
+        <button type="button" id="modal-live-link-btn" class="btn btn-success" data-id="@Model.CRID">
+            <i class="ri-links-line me-1"></i>Add Live Link
+        </button>
+    }
     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
 </div>
 
@@ -519,13 +542,13 @@
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                            foreach (var user in ViewBag.Users)
-                            {
-                                            string uId = user.UserName;
-                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                            if (string.IsNullOrEmpty(uId)) { continue; }
-                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                            }
+                    foreach (var user in ViewBag.Users)
+                    {
+                            string uId = user.UserName;
+                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                            if (string.IsNullOrEmpty(uId)) { continue; }
+                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                    }
             }
         ];
 
@@ -756,7 +779,7 @@
                 });
         });
 
-        // ===== HANDOVER TO FINAL APPROVER (TestingSubmitted status) =====
+        // ===== HANDOVER TO FINAL APPROVER (TestingApproved status) =====
         $(document).off('click', '#modal-handover-final-btn')
                    .on('click', '#modal-handover-final-btn', function () {
 
@@ -788,6 +811,46 @@
                         }
                     });
                 });
+        });
+
+        // ===== FINAL APPROVAL (status = TestingApproved): confirm first =====
+        $(document).off('click', '#modal-final-approve-btn')
+                   .on('click', '#modal-final-approve-btn', function () {
+
+            var crId = $(this).data('id');
+
+            Swal.fire({
+                title: 'Final Approval?',
+                text: 'Are you sure you want to give the final approval for this Change Request?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, approve',
+                confirmButtonColor: '#198754',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                var token = $('input[name="__RequestVerificationToken"]').val();
+
+                $.ajax({
+                    url: '@Url.Action("FinalApproval", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crId },
+                    headers: token ? { "RequestVerificationToken": token } : {},
+                    success: function (response) {
+                        if (response && response.success === false) {
+                            Swal.fire('Error', response.message || 'Failed to give the final approval.', 'error');
+                        } else {
+                            successAndClose((response && response.message) || 'Final approval completed.');
+                        }
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            || 'Failed to give the final approval. Please try again.';
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            });
         });
 
         // ===== APPROVE TO DEVELOPMENT (status = SecurityApproved): confirm first =====
@@ -830,7 +893,7 @@
             });
         });
 
-        // ===== PROCEED TO DEVELOPMENT (status = DevelopmentApproved): ask for the UAT link =====
+        // ===== PROCEED TO DEVELOPMENT (status = DevelopmentApproved or QAReturn): ask for the UAT link =====
         $(document).off('click', '#modal-proceed-dev-btn')
                    .on('click', '#modal-proceed-dev-btn', function () {
 
@@ -875,6 +938,57 @@
                     error: function (xhr) {
                         var msg = (xhr.responseJSON && xhr.responseJSON.message)
                             || 'Failed to save the UAT link. Please try again.';
+                        Swal.fire('Error', msg, 'error');
+                    }
+                });
+            });
+        });
+
+        // ===== RELEASE CLOSURE (status = FinalApproved): ask for the live link =====
+        $(document).off('click', '#modal-live-link-btn')
+                   .on('click', '#modal-live-link-btn', function () {
+
+            var crId = $(this).data('id');
+
+            Swal.fire({
+                title: 'Add Live Link',
+                input: 'url',
+                inputLabel: 'Live Link',
+                inputPlaceholder: 'https://live.example.com/...',
+                inputAttributes: { 'aria-label': 'Live Link', maxlength: 500 },
+                showCancelButton: true,
+                confirmButtonText: 'Submit',
+                confirmButtonColor: '#198754',
+                cancelButtonText: 'Cancel',
+                focusConfirm: false,
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Please enter the live link.';
+                    }
+                    if (!/^https?:\/\/\S+$/i.test(value.trim())) {
+                        return 'Please enter a valid link starting with http:// or https://';
+                    }
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                var token = $('input[name="__RequestVerificationToken"]').val();
+
+                $.ajax({
+                    url: '@Url.Action("SubmitLiveLink", "CRManagement")',
+                    type: 'POST',
+                    data: { id: crId, liveLink: result.value.trim() },
+                    headers: token ? { "RequestVerificationToken": token } : {},
+                    success: function (response) {
+                        if (response && response.success === false) {
+                            Swal.fire('Error', response.message || 'Failed to save the live link.', 'error');
+                        } else {
+                            successAndClose((response && response.message) || 'Live link saved.');
+                        }
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            || 'Failed to save the live link. Please try again.';
                         Swal.fire('Error', msg, 'error');
                     }
                 });
@@ -954,7 +1068,7 @@
             });
         });
 
-            // ===== REJECT: RETURN TO QA (status = TestingApproved): reason required =====
+        // ===== REJECT: RETURN TO QA (status = TestingApproved): reason required =====
         $(document).off('click', '#modal-return-qa-btn')
                    .on('click', '#modal-return-qa-btn', function () {
 
