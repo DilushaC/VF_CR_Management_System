@@ -4168,6 +4168,154 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return true;
         }
 
+        public async Task<bool> SubmitLiveLink(int crId, string liveLink, string empNo)
+        {
+            if (crId <= 0)
+                throw new ArgumentException("Invalid Change Request.");
+
+            liveLink = (liveLink ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(liveLink))
+                throw new ArgumentException("Live link is required.");
+
+            if (!Uri.TryCreate(liveLink, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                throw new ArgumentException("Live link must be a valid http/https URL.");
+
+            // Keeps only the employee number: "DOMAIN\4514" or "4514 - Name" -> "4514"
+            static string CleanId(string? v)
+            {
+                v = (v ?? string.Empty).Trim();
+                var slash = v.LastIndexOf('\\');
+                if (slash >= 0) v = v.Substring(slash + 1);
+                var dash = v.IndexOf(" - ", StringComparison.Ordinal);
+                if (dash >= 0) v = v.Substring(0, dash);
+                return v.Trim();
+            }
+
+            empNo = CleanId(empNo);
+            if (string.IsNullOrWhiteSpace(empNo))
+                throw new ArgumentException("The logged-in user could not be determined.");
+
+            // ---- 1. StepID of "Release Closure" ----
+            const string stepSql = @"
+                SELECT TOP (1) StepID
+                FROM [CRManagementDB].[dbo].[WorkflowStep]
+                WHERE Active = 1
+                  AND (StepName = @StepName OR StepName LIKE @StepLike)
+                ORDER BY CASE WHEN StepName = @StepName THEN 0 ELSE 1 END, StepOrder ASC";
+
+            var stepParams = new DynamicParameters();
+            stepParams.Add("@StepName", "Release Closure");
+            stepParams.Add("@StepLike", "%Release Closure%");
+
+            var stepTable = _connectionService.ReturnWithPara(stepSql, stepParams);
+            if (stepTable == null || stepTable.Rows.Count == 0)
+                throw new InvalidOperationException("Workflow step 'Release Closure' was not found or is inactive.");
+
+            int releaseClosureStepId = Convert.ToInt32(stepTable.Rows[0]["StepID"]);
+
+            // ---- 2. The logged-in user's pending Release Closure row ----
+            const string findPendingSql = @"
+                SELECT TOP (1) ApprovalID
+                FROM Approval
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1
+                  AND IsApproved IS NULL
+                  AND (Decision IS NULL OR Decision = '' OR Decision = 'Pending')
+                  AND (   AssignedTo = @AssignedTo
+                       OR AssignedTo LIKE @AssignedTo + ' - %'
+                       OR AssignedTo LIKE '%\' + @AssignedTo)
+                ORDER BY ApprovalID DESC";
+
+            var findParams = new DynamicParameters();
+            findParams.Add("@CRID", crId);
+            findParams.Add("@StepID", releaseClosureStepId);
+            findParams.Add("@AssignedTo", empNo);
+
+            var pendingTable = _connectionService.ReturnWithPara(findPendingSql, findParams);
+            if (pendingTable == null || pendingTable.Rows.Count == 0)
+                throw new InvalidOperationException(
+                    $"No pending Release Closure approval found for CR {crId} and user {empNo}.");
+
+            int pendingApprovalId = Convert.ToInt32(pendingTable.Rows[0]["ApprovalID"]);
+
+            // ---- 3. Save the live link in the Deployment table.
+            //         Done BEFORE closing the approval: if this fails, the approval stays pending and can be retried. ----
+            const string findDeploymentSql = @"
+                SELECT TOP (1) DeploymentID
+                FROM [CRManagementDB].[dbo].[Deployment]
+                WHERE CRID = @CRID
+                  AND Active = 1
+                ORDER BY DeploymentID DESC";
+
+            var depFind = new DynamicParameters();
+            depFind.Add("@CRID", crId);
+
+            var depTable = _connectionService.ReturnWithPara(findDeploymentSql, depFind);
+
+            if (depTable != null && depTable.Rows.Count > 0)
+            {
+                // Deployment record exists -> update it with the live link
+                int deploymentId = Convert.ToInt32(depTable.Rows[0]["DeploymentID"]);
+
+                const string updateDepSql = @"
+                    UPDATE [CRManagementDB].[dbo].[Deployment]
+                    SET LiveLink       = @LiveLink,
+                        DeploymentDate = @DeploymentDate
+                    WHERE DeploymentID = @DeploymentID";
+
+                var depUpdate = new DynamicParameters();
+                depUpdate.Add("@LiveLink", liveLink);
+                depUpdate.Add("@DeploymentDate", DateTime.Now);
+                depUpdate.Add("@DeploymentID", deploymentId);
+
+                int depRows = await Task.Run(() => _connectionService.ExecuteWithPara(updateDepSql, depUpdate));
+                if (depRows <= 0)
+                    throw new InvalidOperationException("The live link could not be saved to the Deployment record.");
+            }
+            else
+            {
+                // No deployment record yet -> insert one with the live link
+                const string insertDepSql = @"
+                    INSERT INTO [CRManagementDB].[dbo].[Deployment]
+                        (CRID, LiveLink, DeploymentDate, DeploymentStatus, Active)
+                    VALUES
+                        (@CRID, @LiveLink, @DeploymentDate, @DeploymentStatus, @Active)";
+
+                var depInsert = new DynamicParameters();
+                depInsert.Add("@CRID", crId);
+                depInsert.Add("@LiveLink", liveLink);
+                depInsert.Add("@DeploymentDate", DateTime.Now);
+                depInsert.Add("@DeploymentStatus", "Deployed");
+                depInsert.Add("@Active", true);
+
+                int depRows = await Task.Run(() => _connectionService.ExecuteWithPara(insertDepSql, depInsert));
+                if (depRows <= 0)
+                    throw new InvalidOperationException("The Deployment record could not be created.");
+            }
+
+            // ---- 4. Close the Release Closure row: IsApproved = 1 + approval date/time ----
+            const string closeRowSql = @"
+                UPDATE Approval
+                SET IsApproved   = 1,
+                    Decision     = @Decision,
+                    ApprovalDate = @ApprovalDate
+                WHERE ApprovalID = @ApprovalID
+                  AND IsApproved IS NULL";
+
+            var closeParams = new DynamicParameters();
+            closeParams.Add("@Decision", "Approved");
+            closeParams.Add("@ApprovalDate", DateTime.Now);
+            closeParams.Add("@ApprovalID", pendingApprovalId);
+
+            int closeRows = await Task.Run(() => _connectionService.ExecuteWithPara(closeRowSql, closeParams));
+            if (closeRows <= 0)
+                throw new InvalidOperationException("The Release Closure approval could not be updated.");
+
+            return true;
+        }
+
 
     }
 }

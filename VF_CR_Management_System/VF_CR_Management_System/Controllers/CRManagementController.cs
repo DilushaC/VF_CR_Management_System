@@ -988,5 +988,28 @@ namespace VF_CR_Management_System.Controllers
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while accepting the CR." });
             }
         }
+
+        [HttpPost]
+        public async Task<IActionResult> SubmitLiveLink(int id, string liveLink)
+        {
+            try
+            {
+                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+                var success = await _changeRequestService.SubmitLiveLink(id, liveLink, empNo);
+
+                if (!success)
+                    return BadRequest(new { message = "Failed to send UAT Link." });
+
+                return Ok(new { message = "Live link Deployed" });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { message = "An unexpected error occurred while rejecting the CR." });
+            }
+        }
     }
 }
