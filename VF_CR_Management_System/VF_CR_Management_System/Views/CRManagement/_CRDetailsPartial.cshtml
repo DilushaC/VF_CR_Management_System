@@ -15,6 +15,7 @@
         .Where(a => string.Equals(a.AttachmentTypeName, "BA", StringComparison.OrdinalIgnoreCase))
         .ToList();
 
+    // QA / Testing attachments (add any other type names your QA upload uses)
     var qaTypeNames = new[] { "QA", "QA Report", "Testing" };
 
     var qaFiles = allAttachments
@@ -266,7 +267,14 @@
             font-weight: 700;
         }
 
-    /* Attachment groups (SRS / BA / Vendor) */
+            /* First heading: no divider line at the top of the modal body */
+            .cr-detail-grid .cr-section-title.cr-section-first {
+                border-top: 0;
+                padding-top: 0;
+                margin-top: 0;
+            }
+
+    /* Attachment groups (SRS / BA / QA / Vendor) */
     .cr-attachment-group {
         grid-column: 1 / -1;
     }
@@ -346,10 +354,10 @@
 }
 
 <div class="modal-header">
-    <h5 class="modal-title">Change Request Details</h5>
-    <div class="ms-auto d-flex align-items-center">
+    <div class="ms-auto d-flex align-items-center"><h4>
         <label class="col-form-label fw-semibold me-2">CR Number:</label>
-        <span class="fw-bold">@Model.CRNumber</span>
+            <span class="fw-bold">@Model.CRNumber</span>
+        </h4>
     </div>
     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
 </div>
@@ -358,11 +366,14 @@
 
     <div class="cr-detail-grid">
 
+        @* ===== CR Request ===== *@
+        <div class="cr-section-title cr-section-first"><h4><i>CR Request Details</i></h4></div>
+
         @{
-            DetailField("Title", Model.ChangeTitle, wide: true);
+            DetailField("Change Request Title", Model.ChangeTitle, wide: true);
         }
         @{
-            DetailField("Status", Model.Status);
+            DetailField("Change Summary & Business Justification", Model.Summary, wide: true);
         }
         @{
             DetailField("Change Type", Model.ChangeType);
@@ -371,13 +382,20 @@
             DetailField("Other Change Type", Model.OtherChangeType);
         }
         @{
-            DetailField("Priority", Model.Priority);
+            DetailField("Change Priority", Model.Priority);
         }
         @{
             DetailField("Division", Model.Division);
         }
         @{
             DetailField("Module", Model.Module);
+        }
+
+        @* ===== Change Details ===== *@
+        <div class="cr-section-title"><h4><i>Developer Assessment Details</i></h4></div>
+
+        @{
+            DetailField("Status", Model.Status);
         }
         @{
             DetailField("Change Impact", Model.ChangeImpact);
@@ -398,9 +416,6 @@
             DetailField("Completed Date", Model.CompletedDate?.ToString("yyyy/MM/dd"));
         }
 
-        @{
-            DetailField("Summary & Business Justification", Model.Summary, wide: true);
-        }
         @{
             DetailField("Business Impact", Model.BusinessImpact, wide: true);
         }
@@ -550,13 +565,13 @@
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                    foreach (var user in ViewBag.Users)
-                    {
-                            string uId = user.UserName;
-                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                            if (string.IsNullOrEmpty(uId)) { continue; }
-                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                    }
+                        foreach (var user in ViewBag.Users)
+                        {
+                                    string uId = user.UserName;
+                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                    if (string.IsNullOrEmpty(uId)) { continue; }
+                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                        }
             }
         ];
 
