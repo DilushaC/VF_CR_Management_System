@@ -15,13 +15,20 @@
         .Where(a => string.Equals(a.AttachmentTypeName, "BA", StringComparison.OrdinalIgnoreCase))
         .ToList();
 
+    var qaTypeNames = new[] { "QA", "QA Report", "Testing" };
+
+    var qaFiles = allAttachments
+        .Where(a => !string.IsNullOrWhiteSpace(a.AttachmentTypeName)
+                    && qaTypeNames.Contains(a.AttachmentTypeName.Trim(), StringComparer.OrdinalIgnoreCase))
+        .ToList();
+
     // Vendor Report files (also catches older uploads that have no type recorded)
     var vendorFiles = allAttachments
         .Where(a => string.IsNullOrWhiteSpace(a.AttachmentTypeName)
                     || string.Equals(a.AttachmentTypeName, "Vendor Report", StringComparison.OrdinalIgnoreCase))
         .ToList();
 
-    var hasAnyAttachments = srsFiles.Any() || baFiles.Any() || vendorFiles.Any();
+    var hasAnyAttachments = srsFiles.Any() || baFiles.Any() || qaFiles.Any() || vendorFiles.Any();
 
     // Strips a DOMAIN\ prefix and whitespace so both sides compare cleanly.
     string Normalize(string? u)
@@ -423,6 +430,7 @@
 
             RenderAttachmentGroup("SRS Document", srsFiles);
             RenderAttachmentGroup("BA Document", baFiles);
+            RenderAttachmentGroup("QA Attachments", qaFiles);
             RenderAttachmentGroup("Vendor Attachments", vendorFiles);
         }
 

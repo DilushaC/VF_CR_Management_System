@@ -998,7 +998,7 @@ namespace VF_CR_Management_System.Controllers
                 var success = await _changeRequestService.SubmitLiveLink(id, liveLink, empNo);
 
                 if (!success)
-                    return BadRequest(new { message = "Failed to send UAT Link." });
+                    return BadRequest(new { message = "Failed to send LIVE Link." });
 
                 return Ok(new { message = "Live link Deployed" });
             }
