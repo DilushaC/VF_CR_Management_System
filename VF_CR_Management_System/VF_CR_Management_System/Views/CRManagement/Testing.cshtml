@@ -1,7 +1,7 @@
 ﻿@using VF_CR_Management_System.Data.Models
 @model VF_CR_Management_System.Data.Models.ChangeRequest
 @{
-    ViewData["Title"] = "CR Assessment - Testing";
+    ViewData["Title"] = "CR Assesment - Testing";
 }
 @{
     var username = Context.Session.GetString("UserName");
@@ -20,10 +20,9 @@
     // ===== Attachments grouped by type =====
     var rawAttachments = ((IEnumerable<object>?)ViewBag.Attachments)?.ToList() ?? new List<object>();
 
-    // Reads a property from whatever object type the controller put in ViewBag.Attachments
-    object? Prop(object a, string name) => a.GetType().GetProperty(name)?.GetValue(a);
-
-    string AttachmentType(object a) => ((Prop(a, "AttachmentTypeName") as string) ?? string.Empty).Trim();
+    // Reads AttachmentTypeName from whatever object type the controller put in ViewBag.Attachments
+    string AttachmentType(object a) =>
+        (a.GetType().GetProperty("AttachmentTypeName")?.GetValue(a) as string ?? string.Empty).Trim();
 
     var srsFiles = rawAttachments
         .Where(a => string.Equals(AttachmentType(a), "SRS", StringComparison.OrdinalIgnoreCase))
@@ -56,7 +55,6 @@
         .ToList();
 
     var hasAnyAttachments = rawAttachments.Any();
-    var requestFileCount = srsFiles.Count + baFiles.Count + vendorFiles.Count + otherFiles.Count;
 
     // ===== User display helpers (full name - UserName), same logic as the details popup =====
     string Normalize(string? u)
@@ -138,11 +136,10 @@
     string PriorityTone(string? p)
     {
         var v = (p ?? string.Empty).Trim().ToLowerInvariant();
-        if (v.Contains("emergency") || v.Contains("urgent") || v.Contains("critical")) return "bad";
-        if (v.Contains("high")) return "warn";
-        if (v.Contains("medium")) return "info";
+        if (v.Contains("high") || v.Contains("urgent") || v.Contains("critical")) return "bad";
+        if (v.Contains("medium")) return "warn";
         if (v.Contains("low")) return "ok";
-        return "neutral";
+        return "muted";
     }
 
     string StatusTone(string? s)
@@ -151,13 +148,8 @@
         if (v.Contains("pass") || v.Contains("approved") || v.Contains("complete")) return "ok";
         if (v.Contains("fail") || v.Contains("reject") || v.Contains("return")) return "bad";
         if (v.Contains("test") || v.Contains("progress") || v.Contains("pending")) return "info";
-        return "neutral";
+        return "muted";
     }
-
-    string Pretty(string? s) =>
-        string.IsNullOrWhiteSpace(s)
-            ? string.Empty
-            : System.Text.RegularExpressions.Regex.Replace(s.Trim(), "(?<=[a-z])(?=[A-Z])", " ");
 
     string Initials(string? displayName)
     {
@@ -169,222 +161,69 @@
         return (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpper();
     }
 
-    // (icon class, colour kind) for a file name
-    (string Icon, string Kind) FileIcon(string fileName)
+    string FileIconClass(string fileName)
     {
         var ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
         return ext switch
         {
-            ".pdf" => ("ri-file-pdf-2-line", "pdf"),
-            ".doc" or ".docx" => ("ri-file-word-2-line", "word"),
-            ".xls" or ".xlsx" or ".csv" => ("ri-file-excel-2-line", "excel"),
-            ".zip" => ("ri-file-zip-line", "zip"),
-            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" => ("ri-image-2-line", "image"),
-            _ => ("ri-file-3-line", "default")
+            ".pdf" => "ri-file-pdf-2-line ctst-file-ic-pdf",
+            ".doc" or ".docx" => "ri-file-word-2-line ctst-file-ic-word",
+            ".xls" or ".xlsx" or ".csv" => "ri-file-excel-2-line ctst-file-ic-excel",
+            ".zip" => "ri-file-zip-line ctst-file-ic-zip",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" => "ri-image-2-line ctst-file-ic-image",
+            _ => "ri-file-3-line ctst-file-ic-default"
         };
-    }
-
-    // Due date text + tone
-    var dueText = string.Empty;
-    var dueTone = "neutral";
-    if (Model.DueDate.HasValue)
-    {
-        var daysLeft = (Model.DueDate.Value.Date - DateTime.Today).Days;
-        if (daysLeft < 0) { dueText = $"Overdue by {-daysLeft} day{(-daysLeft == 1 ? "" : "s")}"; dueTone = "bad"; }
-        else if (daysLeft == 0) { dueText = "Due today"; dueTone = "warn"; }
-        else { dueText = $"Due in {daysLeft} day{(daysLeft == 1 ? "" : "s")}"; dueTone = daysLeft <= 3 ? "warn" : "ok"; }
-    }
-
-    var hasUat = !string.IsNullOrWhiteSpace(uatLink);
-    var statusLabel = Pretty(Model.Status);
-
-    // ===== Markup helpers =====
-    void Fact(string icon, string label, string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) { return; }
-        <div class="crt-fact">
-            <span class="crt-fact-ico"><i class="@icon"></i></span>
-            <div class="crt-fact-text">
-                <div class="crt-fact-label">@label</div>
-                <div class="crt-fact-value">@value</div>
-            </div>
-        </div>
-    }
-
-    void TextBlock(string icon, string title, string? value, bool highlight = false)
-    {
-        if (string.IsNullOrWhiteSpace(value)) { return; }
-        <section class="crt-block @(highlight ? "crt-block-hl" : "")">
-            <h6 class="crt-block-title"><i class="@icon"></i>@title</h6>
-            <p class="crt-block-text">@value</p>
-        </section>
-    }
-
-    // One person card in the People section. Nothing is rendered when the value is empty.
-    void Person(string role, string icon, string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) { return; }
-        var sep = value.LastIndexOf(" - ", StringComparison.Ordinal);
-        var pName = sep > 0 ? value.Substring(0, sep).Trim() : value;
-        var pId = sep > 0 ? value.Substring(sep + 3).Trim() : string.Empty;
-        var hue = Math.Abs(pName.Sum(c => (int)c)) % 6;
-
-        <div class="crt-person">
-            <span class="crt-avatar crt-hue-@hue">@Initials(value)</span>
-            <div class="crt-person-text">
-                <div class="crt-person-name">@pName</div>
-                <div class="crt-person-role"><i class="@icon"></i>@role</div>
-            </div>
-            @if (pId.Length > 0)
-            {
-                <span class="crt-person-id">@pId</span>
-            }
-        </div>
-    }
-
-    // Renders one attachment group (heading + file cards). Nothing is rendered when the group is empty.
-    void RenderAttachmentGroup(string title, string groupIcon, List<object> items)
-    {
-        if (items == null || items.Count == 0)
-        {
-            return;
-        }
-
-        <div class="crt-file-group">
-            <h6 class="crt-block-title"><i class="@groupIcon"></i>@title <span class="crt-count">@items.Count</span></h6>
-            <div class="crt-file-list">
-                @foreach (var item in items)
-                {
-                    int attachmentId = Convert.ToInt32(Prop(item, "AttachmentID") ?? 0);
-                    string fileName = (Prop(item, "FileName") as string) ?? string.Empty;
-                    string ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
-                    bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(ext);
-                    bool isPdf = ext == ".pdf";
-                    string previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachmentId });
-                    string downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachmentId });
-                    var fi = FileIcon(fileName);
-                    var actIcon = isImage ? "ri-eye-line" : isPdf ? "ri-external-link-line" : "ri-download-2-line";
-
-                    var uploadedBy = Prop(item, "UploadedBy") as string;
-                    var uploadedDate = Prop(item, "UploadedDate") is DateTime ud && ud != default ? ud.ToString("yyyy/MM/dd") : string.Empty;
-                    var sub = string.Join(" · ", new[] { uploadedBy, uploadedDate }.Where(x => !string.IsNullOrWhiteSpace(x)));
-
-                    if (isImage)
-                    {
-                        <a href="javascript:void(0);" class="crt-file attachment-link"
-                           data-type="image"
-                           data-preview-url="@previewUrl"
-                           data-download-url="@downloadUrl"
-                           data-name="@fileName">
-                            <span class="crt-file-ico crt-file-@fi.Kind"><i class="@fi.Icon"></i></span>
-                            <span class="crt-file-main">
-                                <span class="crt-file-name">@fileName</span>
-                                @if (sub.Length > 0)
-                                {
-                                    <span class="crt-file-sub">@sub</span>
-                                }
-                            </span>
-                            <i class="crt-file-act @actIcon"></i>
-                        </a>
-                    }
-                    else if (isPdf)
-                    {
-                        <a href="@previewUrl" target="_blank" rel="noopener" class="crt-file">
-                            <span class="crt-file-ico crt-file-@fi.Kind"><i class="@fi.Icon"></i></span>
-                            <span class="crt-file-main">
-                                <span class="crt-file-name">@fileName</span>
-                                @if (sub.Length > 0)
-                                {
-                                    <span class="crt-file-sub">@sub</span>
-                                }
-                            </span>
-                            <i class="crt-file-act @actIcon"></i>
-                        </a>
-                    }
-                    else
-                    {
-                        <a href="@downloadUrl" download class="crt-file">
-                            <span class="crt-file-ico crt-file-@fi.Kind"><i class="@fi.Icon"></i></span>
-                            <span class="crt-file-main">
-                                <span class="crt-file-name">@fileName</span>
-                                @if (sub.Length > 0)
-                                {
-                                    <span class="crt-file-sub">@sub</span>
-                                }
-                            </span>
-                            <i class="crt-file-act @actIcon"></i>
-                        </a>
-                    }
-                }
-            </div>
-        </div>
     }
 }
 
 <style>
-    .crt-page {
-        --crt-ink: #451423;
-        --crt-accent: #3b5bdb;
-        --crt-ok: #1f9d6b;
-        --crt-line: var(--bs-border-color, #e3e6ec);
-        --crt-muted: var(--bs-secondary-color, #6b7385);
-        --crt-surface: var(--bs-tertiary-bg, #f5f7fb);
-        --crt-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+    .ctst-page {
+        --ctst-accent: rgb(89, 17, 32);
+        --ctst-accent-soft: rgba(89, 17, 32, .1);
+        --ctst-progress: #3b5bdb;
+        --ctst-ok: #1f9d6b;
+        --ctst-line: var(--bs-border-color, #e3e6ec);
+        --ctst-muted: var(--bs-secondary-color, #6b7385);
+        --ctst-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
     }
 
-        .crt-page .tone-ok {
+        .ctst-page .tone-ok {
             --t: #1f9d6b;
             --t-bg: rgba(31,157,107,.14);
         }
 
-        .crt-page .tone-warn {
+        .ctst-page .tone-warn {
             --t: #b57600;
             --t-bg: rgba(255,176,32,.2);
         }
 
-        .crt-page .tone-bad {
+        .ctst-page .tone-bad {
             --t: #d6384a;
             --t-bg: rgba(255,93,108,.16);
         }
 
-        .crt-page .tone-info {
+        .ctst-page .tone-info {
             --t: #4a63d6;
             --t-bg: rgba(59,91,219,.13);
         }
 
-        .crt-page .tone-neutral {
-            --t: var(--crt-muted);
-            --t-bg: var(--crt-surface);
+        .ctst-page .tone-muted {
+            --t: #6b7385;
+            --t-bg: #eef0f6;
         }
 
-    [data-bs-theme="dark"] .crt-page .tone-ok {
-        --t: #3ddc97;
-    }
-
-    [data-bs-theme="dark"] .crt-page .tone-warn {
-        --t: #ffc247;
-    }
-
-    [data-bs-theme="dark"] .crt-page .tone-bad {
-        --t: #ff7b88;
-    }
-
-    [data-bs-theme="dark"] .crt-page .tone-info {
-        --t: #9db0ff;
-    }
-
     /* ===== Hero ===== */
-    .crt-hero {
+    .ctst-hero {
         position: relative;
         overflow: hidden;
         margin-bottom: 1.25rem;
         padding: 1.5rem 1.75rem;
         border-radius: .9rem;
         color: #fff;
-        background: var(--crt-ink);
+        background: #451423;
     }
 
-        .crt-hero::after {
+        .ctst-hero::after {
             content: "";
             position: absolute;
             right: -60px;
@@ -396,7 +235,7 @@
             pointer-events: none;
         }
 
-    .crt-hero-row {
+    .ctst-hero-row {
         position: relative;
         z-index: 1;
         display: flex;
@@ -406,17 +245,11 @@
         gap: 1rem;
     }
 
-    .crt-hero-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .5rem;
-        margin-bottom: .55rem;
-    }
-
-    .crt-hero-chip {
+    .ctst-hero-chip {
         display: inline-flex;
         align-items: center;
         gap: .4rem;
+        margin-bottom: .5rem;
         padding: .25rem .7rem;
         border-radius: 999px;
         font-size: .82rem;
@@ -424,41 +257,27 @@
         background: rgba(255,255,255,.12);
     }
 
-    .crt-hero h3 {
+    .ctst-hero h3 {
         margin: 0;
         color: #fff;
-        font-size: 1.6rem;
+        font-size: 1.55rem;
         font-weight: 700;
-        font-variant-numeric: tabular-nums;
     }
 
-    .crt-hero p {
+    .ctst-hero p {
         margin: .25rem 0 0;
-        color: rgba(255,255,255,.75);
-        font-size: .95rem;
-        max-width: 70ch;
+        color: rgba(255,255,255,.7);
+        font-size: .92rem;
     }
 
-    .crt-hero-side {
+    .ctst-hero-badges {
         display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: .6rem;
-    }
-
-    .crt-hero-pills {
-        display: flex;
-        flex-wrap: wrap;
         gap: .5rem;
-        justify-content: flex-end;
+        flex-wrap: wrap;
+        margin-top: .6rem;
     }
 
-    .crt-hero .crt-pill {
-        background: rgba(255,255,255,.14);
-        color: #fff;
-    }
-
-    .crt-back {
+    .ctst-back {
         color: rgba(255,255,255,.85);
         text-decoration: none;
         font-weight: 600;
@@ -471,20 +290,20 @@
         border: 1px solid rgba(255,255,255,.3);
     }
 
-        .crt-back:hover {
+        .ctst-back:hover {
             background: rgba(255,255,255,.12);
             color: #fff;
         }
 
     /* ===== Layout ===== */
-    .crt-grid {
+    .ctst-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 340px;
+        grid-template-columns: minmax(0, 1fr) 360px;
         gap: 1.25rem;
         align-items: start;
     }
 
-    .crt-aside {
+    .ctst-aside {
         position: sticky;
         top: 90px;
         display: grid;
@@ -492,60 +311,60 @@
     }
 
     @@media (max-width: 991px) {
-        .crt-grid {
+        .ctst-grid {
             grid-template-columns: 1fr;
         }
 
-        .crt-aside {
+        .ctst-aside {
             position: static;
         }
     }
 
     /* ===== Section cards ===== */
-    .crt-sec {
+    .ctst-sec {
         margin-bottom: 1.1rem;
-        border: 1px solid var(--crt-line);
+        border: 1px solid var(--ctst-line);
         border-radius: .9rem;
-        background: var(--crt-card);
-        animation: crt-rise .4s ease-out backwards;
+        background: var(--ctst-card);
+        animation: ctst-rise .4s ease-out backwards;
     }
 
-        .crt-sec:nth-of-type(1) {
+        .ctst-sec:nth-of-type(1) {
             animation-delay: .00s;
         }
 
-        .crt-sec:nth-of-type(2) {
+        .ctst-sec:nth-of-type(2) {
             animation-delay: .06s;
         }
 
-        .crt-sec:nth-of-type(3) {
+        .ctst-sec:nth-of-type(3) {
             animation-delay: .12s;
         }
 
-        .crt-sec:nth-of-type(4) {
+        .ctst-sec:nth-of-type(4) {
             animation-delay: .18s;
         }
 
-        .crt-sec:nth-of-type(5) {
+        .ctst-sec:nth-of-type(5) {
             animation-delay: .24s;
         }
 
-    @@keyframes crt-rise {
+    @@keyframes ctst-rise {
         from {
             opacity: 0;
             transform: translateY(10px);
         }
     }
 
-    .crt-sec-head {
+    .ctst-sec-head {
         display: flex;
         align-items: center;
         gap: .85rem;
         padding: 1rem 1.25rem;
-        border-bottom: 1px solid var(--crt-line);
+        border-bottom: 1px solid var(--ctst-line);
     }
 
-    .crt-step {
+    .ctst-step {
         flex: 0 0 auto;
         width: 32px;
         height: 32px;
@@ -554,561 +373,315 @@
         border-radius: 50%;
         font-weight: 700;
         font-size: .9rem;
-        color: var(--crt-accent);
-        background: rgba(59,91,219,.12);
-        transition: background .25s, color .25s;
+        color: var(--ctst-accent);
+        background: var(--ctst-accent-soft);
     }
 
-        .crt-step .crt-step-ck {
-            display: none;
-            font-size: 1.1rem;
-        }
-
-    .crt-sec.is-done .crt-step {
-        background: var(--crt-ok);
-        color: #fff;
-    }
-
-        .crt-sec.is-done .crt-step .crt-step-no {
-            display: none;
-        }
-
-        .crt-sec.is-done .crt-step .crt-step-ck {
-            display: block;
-        }
-
-    .crt-sec-title {
+    .ctst-sec-title {
         margin: 0;
         font-size: 1.02rem;
         font-weight: 700;
     }
 
-    .crt-sec-sub {
+    .ctst-sec-sub {
         margin: 0;
         font-size: .83rem;
-        color: var(--crt-muted);
+        color: var(--ctst-muted);
     }
 
-    .crt-sec-body {
+    .ctst-sec-body {
         padding: 1.25rem;
     }
 
-    /* ===== Facts and text blocks ===== */
-    .crt-facts {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: .75rem;
-        margin-bottom: 1.25rem;
-    }
-
-    .crt-fact {
-        display: flex;
-        align-items: center;
-        gap: .75rem;
-        padding: .7rem .85rem;
-        border: 1px solid var(--crt-line);
-        border-radius: .6rem;
-    }
-
-    .crt-fact-ico {
-        flex: 0 0 auto;
-        width: 36px;
-        height: 36px;
-        display: grid;
-        place-items: center;
-        border-radius: .5rem;
-        font-size: 1.1rem;
-        color: var(--crt-accent);
-        background: rgba(59,91,219,.1);
-    }
-
-    .crt-fact-label {
-        font-size: .78rem;
-        color: var(--crt-muted);
-    }
-
-    .crt-fact-value {
-        font-weight: 600;
-        word-break: break-word;
-    }
-
-    .crt-block {
-        padding: 1rem 0;
-        border-top: 1px solid var(--crt-line);
-    }
-
-        .crt-block:first-of-type {
-            border-top: 0;
-            padding-top: 0;
-        }
-
-    .crt-block-hl {
-        padding: 1rem 1.1rem;
-        border: 0;
-        border-left: 4px solid var(--crt-accent);
-        border-radius: .4rem;
-        background: var(--crt-surface);
-        margin-bottom: .75rem;
-    }
-
-    .crt-block-title {
-        display: flex;
-        align-items: center;
-        gap: .5rem;
-        margin: 0 0 .4rem;
-        font-weight: 700;
-        font-size: .95rem;
-    }
-
-        .crt-block-title i {
-            color: var(--crt-accent);
-            font-size: 1.1rem;
-        }
-
-    .crt-block-text {
-        margin: 0;
-        max-width: 78ch;
-        line-height: 1.6;
-        white-space: pre-line;
-        word-break: break-word;
-    }
-
-    .crt-count {
-        min-width: 1.35rem;
-        padding: .05rem .4rem;
-        border-radius: 999px;
-        font-size: .72rem;
-        font-weight: 700;
-        text-align: center;
-        background: var(--crt-surface);
-        color: var(--crt-muted);
-    }
-
-    .crt-empty {
-        text-align: center;
-        padding: 1.5rem 1rem;
-        color: var(--crt-muted);
-    }
-
-        .crt-empty i {
-            font-size: 2rem;
-            display: block;
-            margin-bottom: .35rem;
-            opacity: .6;
-        }
-
-    /* ===== File cards ===== */
-    .crt-file-group + .crt-file-group {
-        margin-top: 1.25rem;
-    }
-
-    .crt-file-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-        gap: .6rem;
-    }
-
-    .crt-file {
-        display: flex;
-        align-items: center;
-        gap: .75rem;
-        padding: .65rem .8rem;
-        border: 1px solid var(--crt-line);
-        border-radius: .6rem;
-        color: inherit;
-        text-decoration: none;
-        transition: border-color .15s, transform .15s;
-    }
-
-        .crt-file:hover {
-            border-color: var(--crt-accent);
-            transform: translateY(-1px);
-            color: inherit;
-        }
-
-    .crt-file-ico {
-        flex: 0 0 auto;
-        width: 40px;
-        height: 40px;
-        display: grid;
-        place-items: center;
-        border-radius: .5rem;
-        font-size: 1.3rem;
-    }
-
-    .crt-file-pdf {
-        background: rgba(255,93,108,.14);
-        color: #d6384a;
-    }
-
-    .crt-file-word {
-        background: rgba(43,87,154,.14);
-        color: #2b579a;
-    }
-
-    .crt-file-excel {
-        background: rgba(29,111,66,.14);
-        color: #1d6f42;
-    }
-
-    .crt-file-zip {
-        background: rgba(176,137,0,.16);
-        color: #b08900;
-    }
-
-    .crt-file-image {
-        background: rgba(61,184,220,.16);
-        color: #1a8aa8;
-    }
-
-    .crt-file-default {
-        background: rgba(59,91,219,.12);
-        color: var(--crt-accent);
-    }
-
-    .crt-file-main {
-        flex: 1 1 auto;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .crt-file-name {
-        font-weight: 600;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .crt-file-sub {
-        font-size: .78rem;
-        color: var(--crt-muted);
-    }
-
-    .crt-file-act {
-        color: var(--crt-muted);
-        font-size: 1.15rem;
-    }
-
-    /* ===== People ===== */
-    .crt-people {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: .75rem;
-    }
-
-    .crt-person {
-        display: flex;
-        align-items: center;
-        gap: .8rem;
-        padding: .7rem .85rem;
-        border: 1px solid var(--crt-line);
-        border-radius: .6rem;
-    }
-
-    .crt-avatar {
-        flex: 0 0 auto;
-        width: 42px;
-        height: 42px;
-        display: grid;
-        place-items: center;
-        border-radius: 50%;
-        font-weight: 700;
-        color: #fff;
-        background: var(--crt-accent);
-    }
-
-    .crt-hue-0 {
-        background: #3b5bdb;
-    }
-
-    .crt-hue-1 {
-        background: #0ca678;
-    }
-
-    .crt-hue-2 {
-        background: #d9480f;
-    }
-
-    .crt-hue-3 {
-        background: #7048e8;
-    }
-
-    .crt-hue-4 {
-        background: #1c7ed6;
-    }
-
-    .crt-hue-5 {
-        background: #c2255c;
-    }
-
-    .crt-person-text {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    .crt-person-name {
-        font-weight: 600;
-        word-break: break-word;
-    }
-
-    .crt-person-role {
-        font-size: .8rem;
-        color: var(--crt-muted);
-        display: flex;
-        align-items: center;
-        gap: .3rem;
-    }
-
-    .crt-person-id {
-        font-size: .78rem;
-        font-variant-numeric: tabular-nums;
-        color: var(--crt-muted);
-    }
-
-    /* ===== UAT link ===== */
-    .crt-uat {
-        display: flex;
-        align-items: center;
-        gap: .85rem;
-        flex-wrap: wrap;
-        padding: .9rem 1rem;
-        border: 1.5px dashed rgba(59,91,219,.45);
-        border-radius: .8rem;
-        background: rgba(59,91,219,.06);
-    }
-
-    .crt-uat-ico {
-        flex: 0 0 auto;
-        width: 44px;
-        height: 44px;
-        display: grid;
-        place-items: center;
-        border-radius: .7rem;
-        font-size: 1.35rem;
-        color: #fff;
-        background: var(--crt-accent);
-    }
-
-    .crt-uat-url {
-        flex: 1 1 220px;
-        min-width: 0;
-    }
-
-        .crt-uat-url .form-control {
-            font-variant-numeric: tabular-nums;
-        }
-
-    .crt-uat-actions {
-        display: flex;
-        gap: .5rem;
-    }
-
-    .crt-pillbtn {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
-        padding: .45rem 1rem;
-        border-radius: 999px;
-        font-weight: 600;
-        font-size: .88rem;
-        border: 1px solid var(--crt-accent);
-        color: var(--crt-accent);
-        background: transparent;
-        text-decoration: none;
-        cursor: pointer;
-        transition: background .15s, color .15s;
-    }
-
-        .crt-pillbtn:hover {
-            background: var(--crt-accent);
-            color: #fff;
-        }
-
-        .crt-pillbtn.is-solid {
-            background: var(--crt-accent);
-            color: #fff;
-        }
-
-    /* ===== Test execution ===== */
-    .crt-who {
+    /* ===== Tester strip ===== */
+    .ctst-who {
         display: flex;
         align-items: center;
         gap: 1rem;
         flex-wrap: wrap;
-        margin-bottom: 1.25rem;
     }
 
-        .crt-who .crt-avatar {
-            width: 52px;
-            height: 52px;
-            font-size: 1.15rem;
-        }
+    .ctst-avatar {
+        flex: 0 0 auto;
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #fff;
+        background: var(--ctst-accent);
+    }
 
-    .crt-who-name {
+    .ctst-who-name {
         font-weight: 700;
         font-size: 1.05rem;
     }
 
-    .crt-who-meta {
+    .ctst-who-meta {
         display: flex;
         flex-wrap: wrap;
         gap: .3rem 1.25rem;
         margin-top: .15rem;
         font-size: .85rem;
-        color: var(--crt-muted);
+        color: var(--ctst-muted);
     }
 
-        .crt-who-meta span {
+        .ctst-who-meta span {
             display: inline-flex;
             align-items: center;
             gap: .35rem;
         }
 
-    .crt-label {
+        .ctst-who-meta i {
+            color: var(--ctst-accent);
+        }
+
+    /* ===== Inputs ===== */
+    .ctst-label {
         font-weight: 600;
         margin-bottom: .35rem;
         display: block;
     }
 
-    .crt-page .form-control {
+    .ctst-label-sm {
+        font-weight: 700;
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--ctst-muted);
+        display: block;
+        margin-bottom: .5rem;
+    }
+
+    .ctst-page .form-control,
+    .ctst-page .form-select {
         border-radius: .6rem;
     }
 
-        .crt-page .form-control:focus {
-            border-color: var(--crt-accent);
-            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        .ctst-page .form-control:focus,
+        .ctst-page .form-select:focus {
+            border-color: var(--ctst-accent) !important;
+            box-shadow: 0 0 0 3px var(--ctst-accent-soft) !important;
         }
 
-    .crt-counter {
+    .ctst-counter {
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         margin-top: .35rem;
         font-size: .8rem;
-        color: var(--crt-muted);
+        color: var(--ctst-muted);
     }
 
-    .crt-drop {
-        position: relative;
-        padding: 1.25rem 1rem;
-        text-align: center;
-        border: 2px dashed var(--crt-line);
-        border-radius: .8rem;
-        background: var(--crt-surface);
-        transition: border-color .2s, background .2s;
+    /* ===== Attachments ===== */
+    .ctst-attgroup + .ctst-attgroup {
+        margin-top: 1.1rem;
     }
 
-        .crt-drop:hover,
-        .crt-drop:focus-within,
-        .crt-drop.is-over {
-            border-color: var(--crt-accent);
-            background: rgba(59,91,219,.07);
-        }
-
-    .crt-drop-ico {
-        font-size: 2rem;
-        color: var(--crt-accent);
-        display: block;
-        margin-bottom: .2rem;
-    }
-
-    .crt-drop strong {
-        display: block;
-    }
-
-    .crt-drop small {
-        color: var(--crt-muted);
-    }
-
-    .crt-drop input[type="file"] {
-        max-width: 360px;
-        margin: .75rem auto 0;
-    }
-
-    .crt-chosen {
+    .ctst-filelist {
         list-style: none;
-        margin: .75rem 0 0;
+        margin: 0;
         padding: 0;
         display: grid;
-        gap: .45rem;
+        gap: .5rem;
     }
 
-        .crt-chosen li {
+        .ctst-filelist li {
             display: flex;
             align-items: center;
-            justify-content: space-between;
             gap: .6rem;
-            padding: .45rem .7rem;
-            border: 1px solid var(--crt-line);
+            padding: .5rem .7rem;
+            border: 1px solid var(--ctst-line);
             border-radius: .6rem;
-            background: var(--crt-card);
-            animation: crt-rise .25s ease both;
+            background: var(--ctst-card);
         }
 
-            .crt-chosen li span {
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+    .ctst-file-ico {
+        flex: 0 0 auto;
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border-radius: .5rem;
+        background: var(--ctst-accent-soft);
+    }
+
+    .ctst-file-ic-pdf {
+        color: #e23744;
+    }
+
+    .ctst-file-ic-word {
+        color: #2b579a;
+    }
+
+    .ctst-file-ic-excel {
+        color: #1d6f42;
+    }
+
+    .ctst-file-ic-zip {
+        color: #b08900;
+    }
+
+    .ctst-file-ic-image {
+        color: #8a4fff;
+    }
+
+    .ctst-file-ic-default {
+        color: var(--ctst-accent);
+    }
+
+    .ctst-file-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: .88rem;
+    }
+
+        .ctst-file-name a {
+            color: inherit;
+            text-decoration: none;
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+            .ctst-file-name a:hover {
+                color: var(--ctst-accent);
+                text-decoration: underline;
             }
 
-            .crt-chosen li button {
-                border: 0;
-                background: transparent;
-                color: #d6384a;
-                padding: 0 .2rem;
-                font-size: 1.2rem;
-                line-height: 1;
-            }
+    .ctst-empty {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: .88rem;
+        color: var(--ctst-muted);
+    }
 
-    /* ===== Aside ===== */
-    .crt-card {
-        border: 1px solid var(--crt-line);
+    /* ===== Assigned users ===== */
+    .ctst-users {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: .5rem;
+    }
+
+    .ctst-user-row {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        padding: .5rem .6rem;
+        border: 1px solid var(--ctst-line);
+        border-radius: .7rem;
+    }
+
+    .ctst-user-name {
+        font-size: .88rem;
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    /* ===== UAT link ===== */
+    .ctst-uat-box {
+        border: 1.5px dashed var(--ctst-line);
+        background: var(--ctst-accent-soft);
+        border-radius: .8rem;
+        padding: .9rem 1rem;
+        max-width: 560px;
+    }
+
+    /* ===== Dropzone ===== */
+    .ctst-dropzone {
+        border: 1.5px dashed var(--ctst-line);
+        border-radius: .8rem;
+        padding: 1rem;
+        transition: border-color .15s ease, background .15s ease;
+    }
+
+        .ctst-dropzone:hover,
+        .ctst-dropzone:focus-within {
+            border-color: var(--ctst-accent);
+            background: var(--ctst-accent-soft);
+        }
+
+    #selectedFilesList li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+        padding: .5rem .7rem;
+        border: 1px solid var(--ctst-line);
+        border-radius: .6rem;
+        background: var(--ctst-card);
+        margin-bottom: .4rem;
+        animation: ctst-rise .25s ease both;
+    }
+
+    /* ===== Pills / badges ===== */
+    .ctst-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .2rem .65rem;
+        border-radius: 999px;
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--t, var(--ctst-accent));
+        background: var(--t-bg, var(--ctst-accent-soft));
+    }
+
+    .ctst-hero .ctst-pill {
+        background: rgba(255,255,255,.14);
+        color: #fff;
+    }
+
+    /* ===== Aside: progress ring + checklist ===== */
+    .ctst-card {
+        border: 1px solid var(--ctst-line);
         border-radius: .9rem;
-        background: var(--crt-card);
+        background: var(--ctst-card);
         padding: 1.1rem 1.15rem;
     }
 
-        .crt-card h6 {
-            margin: 0 0 .75rem;
+        .ctst-card h6 {
+            margin: 0 0 .85rem;
             font-weight: 700;
             display: flex;
             align-items: center;
             gap: .45rem;
         }
 
-            .crt-card h6 i {
-                color: var(--crt-accent);
+            .ctst-card h6 i {
+                color: var(--ctst-accent);
             }
 
-    .crt-progress {
+    .ctst-progress {
         display: flex;
         align-items: center;
         gap: 1rem;
     }
 
-    .crt-ring-wrap {
+    .ctst-ring-wrap {
         position: relative;
         flex: 0 0 auto;
         width: 92px;
         height: 92px;
     }
 
-    .crt-ring {
+    .ctst-ring {
         width: 100%;
         height: 100%;
     }
 
-        .crt-ring circle {
+        .ctst-ring circle {
             fill: none;
             stroke-width: 9;
         }
 
-        .crt-ring .crt-ring-bg {
-            stroke: var(--crt-line);
+        .ctst-ring .ctst-ring-bg {
+            stroke: var(--ctst-line);
         }
 
-        .crt-ring .crt-ring-fg {
-            stroke: var(--crt-accent);
+        .ctst-ring .ctst-ring-fg {
+            stroke: var(--ctst-progress);
             stroke-linecap: round;
             stroke-dasharray: 276.46;
             stroke-dashoffset: 276.46;
@@ -1117,11 +690,11 @@
             transition: stroke-dashoffset .6s cubic-bezier(.3,.9,.3,1), stroke .3s;
         }
 
-    .crt-ring-wrap.is-full .crt-ring-fg {
-        stroke: var(--crt-ok);
+    .ctst-ring-wrap.is-full .ctst-ring-fg {
+        stroke: var(--ctst-ok);
     }
 
-    .crt-ring-num {
+    .ctst-ring-num {
         position: absolute;
         inset: 0;
         display: grid;
@@ -1129,26 +702,31 @@
         font-size: 1.35rem;
         font-weight: 700;
         font-variant-numeric: tabular-nums;
+        color: var(--ctst-progress);
     }
 
-        .crt-ring-num small {
+        .ctst-ring-num small {
             font-size: .7rem;
             font-weight: 600;
-            color: var(--crt-muted);
+            color: var(--ctst-muted);
             margin-left: 1px;
         }
 
-    .crt-progress-text strong {
+    .ctst-ring-wrap.is-full .ctst-ring-num {
+        color: var(--ctst-ok);
+    }
+
+    .ctst-progress-text strong {
         display: block;
         font-size: 1rem;
     }
 
-    .crt-progress-text span {
+    .ctst-progress-text span {
         font-size: .83rem;
-        color: var(--crt-muted);
+        color: var(--ctst-muted);
     }
 
-    .crt-checklist {
+    .ctst-checklist {
         list-style: none;
         margin: 1rem 0 0;
         padding: 0;
@@ -1156,138 +734,96 @@
         gap: .45rem;
     }
 
-        .crt-checklist li {
+        .ctst-checklist li {
             display: flex;
             align-items: center;
             gap: .55rem;
             font-size: .88rem;
-            color: var(--crt-muted);
+            color: var(--ctst-muted);
             transition: color .2s;
         }
 
-            .crt-checklist li i {
+            .ctst-checklist li i {
                 width: 20px;
                 height: 20px;
                 display: grid;
                 place-items: center;
                 border-radius: 50%;
                 font-size: .8rem;
-                border: 1.5px solid var(--crt-line);
+                border: 1.5px solid var(--ctst-line);
                 color: transparent;
                 transition: background .2s, border-color .2s, color .2s;
             }
 
-            .crt-checklist li.is-done {
+            .ctst-checklist li.is-done {
                 color: inherit;
             }
 
-                .crt-checklist li.is-done i {
-                    background: var(--crt-ok);
-                    border-color: var(--crt-ok);
+                .ctst-checklist li.is-done i {
+                    background: var(--ctst-ok);
+                    border-color: var(--ctst-ok);
                     color: #fff;
                 }
 
-    .crt-note {
-        margin: .85rem 0 0;
-        font-size: .8rem;
-        color: var(--crt-muted);
-    }
-
-    .crt-optional-title {
-        margin: 1rem 0 .1rem;
-        padding-top: .85rem;
-        border-top: 1px solid var(--crt-line);
-        font-size: .8rem;
-        font-weight: 600;
-        color: var(--crt-muted);
-    }
-
-    .crt-optional {
-        margin-top: .5rem;
-    }
-
-        .crt-optional li i {
-            border-style: dashed;
-        }
-
-        .crt-optional li.is-done i {
-            border-style: solid;
-        }
-
-    .crt-glance {
+    /* ===== Aside: request summary ===== */
+    .ctst-kv {
         display: grid;
+        grid-template-columns: 1fr;
         gap: .65rem;
+        margin-top: .9rem;
+        font-size: .86rem;
     }
 
-    .crt-glance-row {
+    .ctst-kv-row {
         display: flex;
-        align-items: center;
         justify-content: space-between;
         gap: .75rem;
-        font-size: .88rem;
+        padding-bottom: .55rem;
+        border-bottom: 1px dashed var(--ctst-line);
     }
 
-        .crt-glance-row > span:first-child {
-            color: var(--crt-muted);
-            display: inline-flex;
-            align-items: center;
-            gap: .4rem;
+        .ctst-kv-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
         }
 
-    .crt-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: .4rem;
-        padding: .2rem .65rem;
-        border-radius: 999px;
-        font-size: .78rem;
-        font-weight: 600;
-        white-space: nowrap;
-        color: var(--t);
-        background: var(--t-bg);
-    }
-
-    .crt-pill-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: currentColor;
-    }
-
-    .crt-next {
-        display: grid;
-        gap: .6rem;
-    }
-
-    .crt-next-row {
-        display: flex;
-        gap: .7rem;
-        align-items: flex-start;
-        font-size: .85rem;
-    }
-
-    .crt-next-ico {
+    .ctst-kv-label {
+        color: var(--ctst-muted);
         flex: 0 0 auto;
-        width: 32px;
-        height: 32px;
-        display: grid;
-        place-items: center;
-        border-radius: .5rem;
-        font-size: 1.1rem;
-        color: var(--t);
-        background: var(--t-bg);
     }
 
-    .crt-next-row strong {
-        display: block;
+    .ctst-kv-val {
+        font-weight: 600;
+        text-align: right;
+        word-break: break-word;
     }
 
-    .crt-next-row span {
-        color: var(--crt-muted);
+    .ctst-summary-text {
+        margin-top: .9rem;
+        padding-top: .85rem;
+        border-top: 1px solid var(--ctst-line);
+        font-size: .85rem;
+        line-height: 1.55;
+        color: var(--ctst-muted);
     }
+
+        .ctst-summary-text + .ctst-summary-text {
+            margin-top: .7rem;
+            padding-top: .7rem;
+        }
+
+        .ctst-summary-text strong {
+            display: block;
+            color: inherit;
+            font-weight: 700;
+            margin-bottom: .3rem;
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
 
     /* ===== Action bar ===== */
-    .crt-actions {
+    .ctst-actions {
         position: sticky;
         bottom: 0;
         z-index: 5;
@@ -1297,35 +833,41 @@
         gap: .75rem;
         margin-top: 1.25rem;
         padding: .85rem 1.1rem;
-        border: 1px solid var(--crt-line);
+        border: 1px solid var(--ctst-line);
         border-radius: .9rem;
-        background: var(--crt-card);
+        background: var(--ctst-card);
         box-shadow: 0 -6px 18px rgba(23,33,59,.08);
     }
 
-        .crt-actions .btn {
+        .ctst-actions .btn {
             border-radius: 999px;
             padding-left: 1.3rem;
             padding-right: 1.3rem;
-            font-weight: 600;
+            font-weight: 700;
+            border: none;
         }
 
     #submitBtn {
+        background: var(--ctst-accent);
+        box-shadow: 0 10px 20px -10px var(--ctst-accent-soft);
         color: #fff;
-        border: 0;
-        background: linear-gradient(135deg, #22c55e, #16a34a);
-        box-shadow: 0 10px 20px -12px rgba(34,197,94,.8);
     }
+
+        #submitBtn:hover {
+            background: #70121f;
+        }
 
     #btn-fail {
+        background: #d6384a;
+        box-shadow: 0 10px 20px -10px rgba(214,56,74,.5);
         color: #fff;
-        border: 0;
-        background: linear-gradient(135deg, #fb7185, #e11d48);
-        box-shadow: 0 10px 20px -12px rgba(225,29,72,.8);
     }
 
+        #btn-fail:hover {
+            background: #b92e3e;
+        }
+
         #submitBtn:hover, #btn-fail:hover {
-            color: #fff;
             transform: translateY(-2px);
         }
 
@@ -1335,45 +877,26 @@
         }
 
     @@media (prefers-reduced-motion: reduce) {
-        .crt-sec, .crt-chosen li {
+        .ctst-sec {
             animation: none;
-        }
-
-        .crt-file, .crt-ring .crt-ring-fg {
-            transition: none;
         }
     }
 </style>
 
-<div class="crt-page">
+<div class="ctst-page">
 
-    <!-- Hero -->
-    <div class="crt-hero">
-        <div class="crt-hero-row">
+    <div class="ctst-hero">
+        <div class="ctst-hero-row">
             <div>
-                <div class="crt-hero-chips">
-                    <span class="crt-hero-chip"><i class="ri-flask-line"></i>Section 3: Testing</span>
-                    @if (latestTest != null)
-                    {
-                        <span class="crt-hero-chip"><i class="ri-repeat-line"></i>Cycle @latestTest.TestCycleNumber</span>
-                    }
-                </div>
-                <h3>@Model.CRNumber</h3>
+                <span class="ctst-hero-chip"><i class="ri-flask-line"></i>Section 3 · Testing</span>
+                <h3>Testing — @Model.CRNumber</h3>
                 <p>@Model.ChangeTitle</p>
-            </div>
-            <div class="crt-hero-side">
-                <div class="crt-hero-pills">
-                    @if (!string.IsNullOrWhiteSpace(Model.Status))
-                    {
-                        <span class="crt-pill tone-@StatusTone(Model.Status)"><span class="crt-pill-dot"></span>@statusLabel</span>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(Model.Priority))
-                    {
-                        <span class="crt-pill tone-@PriorityTone(Model.Priority)"><i class="ri-flag-2-line"></i>@Model.Priority</span>
-                    }
+                <div class="ctst-hero-badges">
+                    <span class="ctst-pill"><i class="ri-git-commit-line"></i>@Model.Status</span>
+                    <span class="ctst-pill"><i class="ri-flashlight-line"></i>@Model.Priority</span>
                 </div>
-                <a class="crt-back" href="@Url.Action("TestingQueueTable")"><i class="ri-arrow-left-line"></i>Back to queue</a>
             </div>
+            <a class="ctst-back" href="@Url.Action("TestingQueueTable")"><i class="ri-arrow-left-line"></i>Back to testing queue</a>
         </div>
     </div>
 
@@ -1382,145 +905,26 @@
 
         <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
 
-        <div class="crt-grid">
+        <div class="ctst-grid">
 
-            <!-- ============ Left: details and test execution ============ -->
+            <!-- ============ Left: review + test execution ============ -->
             <div>
 
-                <!-- 1. Change request details -->
-                <section class="crt-sec" data-sec="1">
-                    <div class="crt-sec-head">
-                        <span class="crt-step"><span class="crt-step-no">1</span><i class="ri-check-line crt-step-ck"></i></span>
+                <!-- 1. Tester -->
+                <section class="ctst-sec">
+                    <div class="ctst-sec-head">
+                        <span class="ctst-step"><i class="ri-user-settings-line"></i></span>
                         <div>
-                            <h5 class="crt-sec-title">Change request details</h5>
-                            <p class="crt-sec-sub">Read what was requested before you start testing</p>
+                            <h5 class="ctst-sec-title">Tester</h5>
+                            <p class="ctst-sec-sub">Filled in automatically from your profile</p>
                         </div>
                     </div>
-                    <div class="crt-sec-body">
-                        <div class="crt-facts">
-                            @{
-                                Fact("ri-swap-box-line", "Change type", Model.ChangeType);
-                                Fact("ri-flag-2-line", "Priority", Model.Priority);
-                                Fact("ri-building-line", "Division", string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division);
-                                Fact("ri-apps-line", "Module", Model.Module);
-                                Fact("ri-git-commit-line", "Status", statusLabel);
-                                Fact("ri-calendar-line", "Requested", Model.RequestedDate.ToString("yyyy/MM/dd"));
-                                Fact("ri-time-line", "Estimated due date", Model.DueDate.HasValue ? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—");
-                                Fact("ri-hashtag", "Vendor proposal number", Model.ProposalNumber);
-                            }
-                        </div>
-
-                        @{
-                            TextBlock("ri-lightbulb-flash-line", "Summary and business justification", Model.Summary, highlight: true);
-                            TextBlock("ri-task-line", "Activities and tasks", Model.ActivitiesTasks);
-                            TextBlock("ri-computer-line", "Fixed assets", Model.FixedAssets);
-                            TextBlock("ri-alert-line", "Risk assessment", Model.RiskAssessment);
-                        }
-                    </div>
-                </section>
-
-                <!-- 2. Attachments -->
-                <section class="crt-sec" data-sec="2">
-                    <div class="crt-sec-head">
-                        <span class="crt-step"><span class="crt-step-no">2</span><i class="ri-check-line crt-step-ck"></i></span>
-                        <div>
-                            <h5 class="crt-sec-title">Attachments</h5>
-                            <p class="crt-sec-sub">Documents supplied with the request</p>
-                        </div>
-                    </div>
-                    <div class="crt-sec-body">
-                        @if (requestFileCount > 0)
-                        {
-                            RenderAttachmentGroup("SRS documents", "ri-file-text-line", srsFiles);
-                            RenderAttachmentGroup("BA documents", "ri-file-list-line", baFiles);
-                            RenderAttachmentGroup("Vendor attachments", "ri-store-2-line", vendorFiles);
-                            RenderAttachmentGroup("Other attachments", "ri-folder-2-line", otherFiles);
-                        }
-                        else
-                        {
-                            <div class="crt-empty"><i class="ri-folder-open-line"></i>No attachments found.</div>
-                        }
-                    </div>
-                </section>
-
-                <!-- 3. People -->
-                @if (hasAssignedUsers)
-                {
-                    <section class="crt-sec" data-sec="3">
-                        <div class="crt-sec-head">
-                            <span class="crt-step"><span class="crt-step-no">3</span><i class="ri-check-line crt-step-ck"></i></span>
+                    <div class="ctst-sec-body">
+                        <div class="ctst-who">
+                            <span class="ctst-avatar">@Initials(username)</span>
                             <div>
-                                <h5 class="crt-sec-title">People</h5>
-                                <p class="crt-sec-sub">Everyone involved with this change request</p>
-                            </div>
-                        </div>
-                        <div class="crt-sec-body">
-                            <div class="crt-people">
-                                @{
-                                    Person("Requested by", "ri-user-line", DisplayUser(Model.RequestedBy));
-                                    Person("CR approver", "ri-user-follow-line", DisplayUser(Model.ApproverUserName));
-                                    Person("Developer", "ri-code-s-slash-line", DisplayUser(developerUser));
-                                    Person("InfoSec officer", "ri-shield-user-line", DisplayUser(Model.SecurityUserName));
-                                    Person("QA tester", "ri-test-tube-line", DisplayUser(Model.TestingUserName));
-                                    Person("QA assigned by", "ri-user-shared-line", DisplayUser(Model.TesterUserName));
-                                    Person("QA approved by", "ri-user-star-line", DisplayUser(Model.TestingApproverUserName));
-                                    Person("Final CR approver", "ri-medal-line", DisplayUser(Model.FinalApproverUserName));
-                                }
-                            </div>
-                        </div>
-                    </section>
-                }
-
-                <!-- 4. UAT link -->
-                <section class="crt-sec @(hasUat ? "" : "is-done")" data-sec="4" id="crtSecUat">
-                    <div class="crt-sec-head">
-                        <span class="crt-step"><span class="crt-step-no">4</span><i class="ri-check-line crt-step-ck"></i></span>
-                        <div>
-                            <h5 class="crt-sec-title">UAT link</h5>
-                            <p class="crt-sec-sub">Uploaded by the developer. Open it to run your tests</p>
-                        </div>
-                    </div>
-                    <div class="crt-sec-body">
-                        @if (hasUat)
-                        {
-                            <div class="crt-uat">
-                                <span class="crt-uat-ico"><i class="ri-link-m"></i></span>
-                                <div class="crt-uat-url">
-                                    <input type="text" id="uatLinkField" class="form-control text-truncate"
-                                           value="@uatLink" title="@uatLink" readonly />
-                                </div>
-                                <div class="crt-uat-actions">
-                                    <button type="button" class="crt-pillbtn" id="crtCopyUat"><i class="ri-file-copy-line"></i><span>Copy</span></button>
-                                    <a href="@uatLink" target="_blank" rel="noopener noreferrer" class="crt-pillbtn is-solid" id="crtOpenUat">
-                                        <i class="ri-external-link-line"></i>Open UAT
-                                    </a>
-                                </div>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="crt-empty"><i class="ri-link-unlink-m"></i>No UAT link has been provided yet.</div>
-                        }
-                    </div>
-                </section>
-
-                <!-- 5. Test execution -->
-                <section class="crt-sec" data-sec="5" id="crtSecTest">
-                    <div class="crt-sec-head">
-                        <span class="crt-step"><span class="crt-step-no">5</span><i class="ri-check-line crt-step-ck"></i></span>
-                        <div>
-                            <h5 class="crt-sec-title">Test execution</h5>
-                            <p class="crt-sec-sub">Record your test plan, the results and any evidence</p>
-                        </div>
-                    </div>
-                    <div class="crt-sec-body">
-
-                        <!-- Tester details (read-only, from your profile) -->
-                        <div class="crt-who">
-                            <span class="crt-avatar">@Initials(username)</span>
-                            <div>
-                                <div class="crt-who-name">@(string.IsNullOrWhiteSpace(username) ? "Unknown tester" : username)</div>
-                                <div class="crt-who-meta">
+                                <div class="ctst-who-name">@(string.IsNullOrWhiteSpace(username) ? "Unknown user" : username)</div>
+                                <div class="ctst-who-meta">
                                     @if (!string.IsNullOrWhiteSpace(designation))
                                     {
                                         <span><i class="ri-briefcase-line"></i>@designation</span>
@@ -1533,43 +937,134 @@
                                     {
                                         <span><i class="ri-mail-line"></i>@email</span>
                                     }
-                                    <span><i class="ri-calendar-line"></i>Testing date @DateTime.Now.ToString("dd/MM/yyyy")</span>
+                                    <span><i class="ri-calendar-line"></i>@DateTime.Now.ToString("dd/MM/yyyy")</span>
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </section>
 
-                        <!-- Test plan and results -->
-                        <div class="mb-4">
-                            <label class="crt-label" for="testPlanResults">Test plan and test results</label>
+                <!-- 2. Attachments -->
+                <section class="ctst-sec">
+                    <div class="ctst-sec-head">
+                        <span class="ctst-step"><i class="ri-attachment-2"></i></span>
+                        <div>
+                            <h5 class="ctst-sec-title">Attachments</h5>
+                            <p class="ctst-sec-sub">Documents submitted earlier in this change request</p>
+                        </div>
+                    </div>
+                    <div class="ctst-sec-body">
+                        @if (hasAnyAttachments)
+                        {
+                            RenderAttachmentGroup("SRS Document", srsFiles);
+                            RenderAttachmentGroup("BA Document", baFiles);
+                            RenderAttachmentGroup("Vendor Attachments", vendorFiles);
+                            RenderAttachmentGroup("Other Attachments", otherFiles);
+                        }
+                        else
+                        {
+                            <p class="ctst-empty mb-0"><i class="ri-folder-open-line"></i>No attachments found.</p>
+                        }
+                    </div>
+                </section>
+
+                <!-- 3. Assigned users -->
+                @if (hasAssignedUsers)
+                {
+                    <section class="ctst-sec">
+                        <div class="ctst-sec-head">
+                            <span class="ctst-step"><i class="ri-team-line"></i></span>
+                            <div>
+                                <h5 class="ctst-sec-title">Assigned users</h5>
+                                <p class="ctst-sec-sub">Everyone involved in this change request so far</p>
+                            </div>
+                        </div>
+                        <div class="ctst-sec-body">
+                            <div class="ctst-users">
+                                @{
+                                    AssignedUserField("Requested By", DisplayUser(Model.RequestedBy));
+                                    AssignedUserField("CR Approver", DisplayUser(Model.ApproverUserName));
+                                    AssignedUserField("Developer", DisplayUser(developerUser));
+                                    AssignedUserField("InfoSec Officer", DisplayUser(Model.SecurityUserName));
+                                    AssignedUserField("QA Tester", DisplayUser(Model.TestingUserName));
+                                    AssignedUserField("QA Assigned By", DisplayUser(Model.TesterUserName));
+                                    AssignedUserField("QA Approved By", DisplayUser(Model.TestingApproverUserName));
+                                    AssignedUserField("Final CR Approver", DisplayUser(Model.FinalApproverUserName));
+                                }
+                            </div>
+                        </div>
+                    </section>
+                }
+
+                <!-- 4. UAT link -->
+                <section class="ctst-sec">
+                    <div class="ctst-sec-head">
+                        <span class="ctst-step"><i class="ri-link-m"></i></span>
+                        <div>
+                            <h5 class="ctst-sec-title">UAT link</h5>
+                            <p class="ctst-sec-sub">Provided by the developer, read-only here</p>
+                        </div>
+                    </div>
+                    <div class="ctst-sec-body">
+                        @if (!string.IsNullOrWhiteSpace(uatLink))
+                        {
+                            <div class="ctst-uat-box">
+                                <div class="input-group">
+                                    <input type="text" id="uatLinkField" class="form-control text-truncate"
+                                           value="@uatLink" title="@uatLink" readonly />
+                                    <a href="@uatLink" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
+                                        <i class="ri-external-link-line me-1"></i>Open
+                                    </a>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="ctst-empty mb-0"><i class="ri-link-unlink-m"></i>No UAT link has been provided yet.</p>
+                        }
+                    </div>
+                </section>
+
+                <!-- 5. Test execution -->
+                <section class="ctst-sec">
+                    <div class="ctst-sec-head">
+                        <span class="ctst-step"><i class="ri-clipboard-line"></i></span>
+                        <div>
+                            <h5 class="ctst-sec-title">Test execution</h5>
+                            <p class="ctst-sec-sub">Record the test plan, results and supporting evidence</p>
+                        </div>
+                    </div>
+                    <div class="ctst-sec-body">
+                        <div class="mb-3">
+                            <label class="ctst-label" for="testPlanResults">Test plan &amp; results</label>
                             <textarea name="Test" id="testPlanResults" class="form-control" rows="8"
                                       placeholder="Describe the test plan and results (if the test failed, explain why):"></textarea>
-                            <div class="crt-counter"><span>If the test failed, explain what went wrong so the developer can fix it.</span><span id="crtWords">0 words</span></div>
+                            <div class="ctst-counter"><span id="ctstWords">0 words</span></div>
                         </div>
 
-                        <!-- Test results attachments -->
-                        <div id="crtEvidence" data-existing="@testResultFiles.Count">
-                            <label class="crt-label" for="testResultFiles">Test results attachments</label>
-                            <div class="crt-drop" id="crtDrop">
-                                <i class="ri-upload-cloud-2-line crt-drop-ico"></i>
-                                <strong>Drag and drop files here</strong>
-                                <small>PDF, Word, Excel, CSV, text, images or ZIP. Max 10 MB per file, up to 10 files.</small>
+                        <div>
+                            <label class="ctst-label" for="testResultFiles">Test results attachments</label>
+                            <div class="ctst-dropzone">
                                 <input type="file"
                                        id="testResultFiles"
                                        name="TestResultFiles"
                                        class="form-control"
                                        multiple
                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.zip" />
+                                <div class="form-text">
+                                    <i class="ri-information-line me-1"></i>PDF, Word, Excel, CSV, text, images or ZIP. Max 10 MB per file, up to 10 files.
+                                </div>
                             </div>
 
                             <!-- Newly selected files (not yet uploaded) -->
-                            <ul id="selectedFilesList" class="crt-chosen"></ul>
+                            <ul id="selectedFilesList" class="list-unstyled mt-2 mb-0"></ul>
 
                             <!-- Files already uploaded for this CR -->
                             @if (testResultFiles.Any())
                             {
                                 <div class="mt-3">
                                     @{
-                                        RenderAttachmentGroup("Uploaded QA report files", "ri-test-tube-line", testResultFiles);
+                                        RenderAttachmentGroup("Uploaded QA report files", testResultFiles);
                                     }
                                 </div>
                             }
@@ -1578,74 +1073,84 @@
                 </section>
             </div>
 
-            <!-- ============ Right: progress, at a glance, what happens next ============ -->
-            <aside class="crt-aside">
-                <div class="crt-card">
+            <!-- ============ Right: progress + request summary ============ -->
+            <aside class="ctst-aside">
+
+                <div class="ctst-card">
                     <h6><i class="ri-checkbox-circle-line"></i>Your progress</h6>
-                    <div class="crt-progress">
-                        <div class="crt-ring-wrap" id="crtRingWrap">
-                            <svg class="crt-ring" viewBox="0 0 100 100" aria-hidden="true">
-                                <circle class="crt-ring-bg" cx="50" cy="50" r="44"></circle>
-                                <circle class="crt-ring-fg" id="crtRingFg" cx="50" cy="50" r="44"></circle>
+                    <div class="ctst-progress">
+                        <div class="ctst-ring-wrap" id="ctstRingWrap">
+                            <svg class="ctst-ring" viewBox="0 0 100 100" aria-hidden="true">
+                                <circle class="ctst-ring-bg" cx="50" cy="50" r="44"></circle>
+                                <circle class="ctst-ring-fg" id="ctstRingFg" cx="50" cy="50" r="44"></circle>
                             </svg>
-                            <div class="crt-ring-num"><span><span id="crtPct">0</span><small>%</small></span></div>
+                            <div class="ctst-ring-num"><span><span id="ctstPct">0</span><small>%</small></span></div>
                         </div>
-                        <div class="crt-progress-text">
-                            <strong id="crtHeadline">Add your test plan</strong>
-                            <span id="crtSubline">Test plan and results still needed</span>
+                        <div class="ctst-progress-text">
+                            <strong id="ctstHeadline">Let's get started</strong>
+                            <span id="ctstSubline">0 of 2 steps done</span>
                         </div>
                     </div>
-                    <ul class="crt-checklist" id="crtChecklist">
-                        <li data-key="plan"><i class="ri-check-line"></i>Write the test plan and results</li>
-                    </ul>
-                    <p class="crt-note">This is the only required step before you choose Passed or Failed.</p>
-                    <div class="crt-optional-title">Optional extras</div>
-                    <ul class="crt-checklist crt-optional" id="crtOptional">
-                        <li data-key="uat"><i class="ri-check-line"></i>@(hasUat ? "Open the UAT link" : "No UAT link provided")</li>
-                        <li data-key="evidence"><i class="ri-check-line"></i>Attach evidence files</li>
+                    <ul class="ctst-checklist" id="ctstChecklist">
+                        <li data-key="plan"><i class="ri-check-line"></i>Test plan &amp; results</li>
+                        <li data-key="attachments"><i class="ri-check-line"></i>Attachments added</li>
                     </ul>
                 </div>
 
-                <div class="crt-card">
-                    <h6><i class="ri-dashboard-line"></i>At a glance</h6>
-                    <div class="crt-glance">
-                        @if (latestTest != null)
-                        {
-                            <div class="crt-glance-row"><span><i class="ri-repeat-line"></i>Test cycle</span><strong>@latestTest.TestCycleNumber</strong></div>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(Model.Priority))
-                        {
-                            <div class="crt-glance-row"><span><i class="ri-flag-2-line"></i>Priority</span><span class="crt-pill tone-@PriorityTone(Model.Priority)">@Model.Priority</span></div>
-                        }
-                        @if (dueText.Length > 0)
-                        {
-                            <div class="crt-glance-row"><span><i class="ri-time-line"></i>Due</span><span class="crt-pill tone-@dueTone">@dueText</span></div>
-                        }
-                        <div class="crt-glance-row"><span><i class="ri-attachment-2"></i>Request files</span><strong>@requestFileCount</strong></div>
-                        <div class="crt-glance-row"><span><i class="ri-link-m"></i>UAT link</span><span class="crt-pill tone-@(hasUat ? "ok" : "neutral")">@(hasUat ? "Provided" : "Not provided")</span></div>
-                    </div>
-                </div>
+                <div class="ctst-card">
+                    <h6><i class="ri-file-list-3-line"></i>Request summary</h6>
+                    <span class="ctst-pill tone-@StatusTone(Model.Status)"><i class="ri-git-commit-line"></i>@Model.Status</span>
+                    <span class="ctst-pill tone-@PriorityTone(Model.Priority)"><i class="ri-flashlight-line"></i>@Model.Priority</span>
 
-                <div class="crt-card">
-                    <h6><i class="ri-route-line"></i>What happens next</h6>
-                    <div class="crt-next">
-                        <div class="crt-next-row tone-ok">
-                            <span class="crt-next-ico"><i class="ri-check-double-line"></i></span>
-                            <div><strong>Test passed</strong><span>The change request moves to the next stage.</span></div>
-                        </div>
-                        <div class="crt-next-row tone-bad">
-                            <span class="crt-next-ico"><i class="ri-arrow-go-back-line"></i></span>
-                            <div><strong>Test failed</strong><span>It goes back to the developer with your notes.</span></div>
-                        </div>
+                    <div class="ctst-kv">
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">CR Number</span><span class="ctst-kv-val">@Model.CRNumber</span></div>
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">Title</span><span class="ctst-kv-val">@Model.ChangeTitle</span></div>
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">Change type</span><span class="ctst-kv-val">@Model.ChangeType</span></div>
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">Division</span><span class="ctst-kv-val">@(string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division)</span></div>
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">Module</span><span class="ctst-kv-val">@Model.Module</span></div>
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">Requested by</span><span class="ctst-kv-val">@Model.RequestedBy</span></div>
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">Requested date</span><span class="ctst-kv-val">@Model.RequestedDate.ToString("yyyy/MM/dd")</span></div>
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">Approver</span><span class="ctst-kv-val">@Model.ApproverUserName</span></div>
+                        <div class="ctst-kv-row"><span class="ctst-kv-label">Due date</span><span class="ctst-kv-val">@(Model.DueDate.HasValue? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—")</span></div>
+                        @if (!string.IsNullOrWhiteSpace(Model.ProposalNumber))
+                        {
+                            <div class="ctst-kv-row"><span class="ctst-kv-label">Vendor proposal #</span><span class="ctst-kv-val">@Model.ProposalNumber</span></div>
+                        }
                     </div>
+
+                    <div class="ctst-summary-text">
+                        <strong>Business justification</strong>
+                        @Model.Summary
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(Model.ActivitiesTasks))
+                    {
+                        <div class="ctst-summary-text">
+                            <strong>Activities &amp; tasks</strong>
+                            @Model.ActivitiesTasks
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.FixedAssets))
+                    {
+                        <div class="ctst-summary-text">
+                            <strong>Fixed assets</strong>
+                            @Model.FixedAssets
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.RiskAssessment))
+                    {
+                        <div class="ctst-summary-text">
+                            <strong>Risk assessment</strong>
+                            @Model.RiskAssessment
+                        </div>
+                    }
                 </div>
             </aside>
         </div>
 
         <!-- Actions -->
-        <div class="crt-actions">
+        <div class="ctst-actions">
             <button type="button"
-                    class="btn btn-outline-secondary"
+                    class="btn btn-outline-danger"
                     onclick="window.location.href='@Url.Action("TestingQueueTable")'">
                 <i class="ri-arrow-left-line me-1"></i>Cancel
             </button>
@@ -1669,7 +1174,7 @@
     <!-- Image Preview Modal -->
     <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content" style="border-radius: 14px; overflow: hidden;">
+            <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1680,7 +1185,7 @@
                             <span class="visually-hidden">Loading...</span>
                         </div>
                     </div>
-                    <img id="modalPreviewImage" src="" alt="" class="img-fluid d-none" style="border-radius: 10px;" />
+                    <img id="modalPreviewImage" src="" alt="" class="img-fluid d-none" />
                 </div>
                 <div class="modal-footer">
                     <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
@@ -1692,6 +1197,77 @@
         </div>
     </div>
 </div>
+@{
+    // One "label: value" cell in the Assigned Users section. Nothing is rendered when the value is empty.
+    void AssignedUserField(string label, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            <div class="ctst-user-row">
+                <span class="ctst-avatar" style="width:36px;height:36px;font-size:.78rem;">@Initials(value)</span>
+                <div>
+                    <label class="ctst-label-sm mb-0">@label</label>
+                    <div class="ctst-user-name">@value</div>
+                </div>
+            </div>
+        }
+    }
+
+    // Renders one attachment group (heading + file list). Nothing is rendered when the group is empty.
+    void RenderAttachmentGroup(string title, List<object> items)
+    {
+        if (items == null || items.Count == 0)
+        {
+            return;
+        }
+
+        <div class="ctst-attgroup">
+            <label class="ctst-label-sm">@title</label>
+            <ul class="ctst-filelist">
+                @foreach (var item in items)
+                {
+                    dynamic attachment = item;
+                    int attachmentId = attachment.AttachmentID;
+                    string fileName = attachment.FileName;
+                    string ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
+                    bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(ext);
+                    bool isPdf = ext == ".pdf";
+                    string previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachmentId });
+                    string downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachmentId });
+                    string iconClass = FileIconClass(fileName);
+
+                    <li>
+                        <span class="ctst-file-ico"><i class="@iconClass"></i></span>
+                        <span class="ctst-file-name">
+                            @if (isImage)
+                            {
+                                <a href="javascript:void(0);" class="attachment-link"
+                                   data-type="image"
+                                   data-preview-url="@previewUrl"
+                                   data-download-url="@downloadUrl"
+                                   data-name="@fileName">
+                                    @fileName
+                                </a>
+                            }
+                            else if (isPdf)
+                            {
+                                <a href="@previewUrl" target="_blank" rel="noopener">
+                                    @fileName
+                                </a>
+                            }
+                            else
+                            {
+                                <a href="@downloadUrl" download>
+                                    @fileName
+                                </a>
+                            }
+                        </span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+}
 
 @section Scripts {
     <script>
@@ -1730,72 +1306,41 @@
                 });
             });
 
-            // ---- Progress ring + word counter ----
+            // ---- Progress ring + checklist ----
             var RING_LEN = 276.46;
-            var hasUat = @(hasUat ? "true" : "false");
-            var uatOpened = false;
-            var existingEvidence = parseInt(document.getElementById('crtEvidence').getAttribute('data-existing'), 10) || 0;
-            var planEl = document.getElementById('testPlanResults');
+            var testPlanInput = document.getElementById('testPlanResults');
+            var hasExistingQaFiles = @(testResultFiles.Any() ? "true" : "false");
 
             function refreshProgress() {
-                var plan = (planEl.value || '').trim();
+                var plan = (testPlanInput.value || '').trim();
                 var words = plan ? plan.split(/\s+/).length : 0;
-                document.getElementById('crtWords').textContent = words + (words === 1 ? ' word' : ' words');
+                document.getElementById('ctstWords').textContent = words + (words === 1 ? ' word' : ' words');
 
-                var planDone = plan.length > 0;
-
-                // Required: the test plan and results (the only thing the tester has to fill in)
-                document.querySelector('#crtChecklist li').classList.toggle('is-done', planDone);
-
-                // Optional extras only tick; they never move the ring
-                var optional = {
-                    uat: hasUat && uatOpened,
-                    evidence: selectedFiles.length > 0 || existingEvidence > 0
+                var state = {
+                    plan: plan.length > 0,
+                    attachments: hasExistingQaFiles || selectedFiles.length > 0
                 };
-                document.querySelectorAll('#crtOptional li').forEach(function (li) {
-                    li.classList.toggle('is-done', !!optional[li.getAttribute('data-key')]);
+
+                var done = 0, total = 0;
+                document.querySelectorAll('#ctstChecklist li').forEach(function (li) {
+                    total++;
+                    var ok = !!state[li.getAttribute('data-key')];
+                    li.classList.toggle('is-done', ok);
+                    if (ok) { done++; }
                 });
 
-                document.getElementById('crtPct').textContent = planDone ? 100 : 0;
-                document.getElementById('crtRingFg').style.strokeDashoffset = planDone ? 0 : RING_LEN;
-                document.getElementById('crtRingWrap').classList.toggle('is-full', planDone);
-                document.getElementById('crtSubline').textContent = planDone ? 'Test plan and results written' : 'Test plan and results still needed';
-                document.getElementById('crtHeadline').textContent = planDone ? 'Ready to decide' : 'Add your test plan';
-
-                // Section badges turn into check marks
-                document.getElementById('crtSecTest').classList.toggle('is-done', planDone);
-                var secUat = document.getElementById('crtSecUat');
-                if (secUat) { secUat.classList.toggle('is-done', !hasUat || uatOpened); }
+                var pct = total ? Math.round(done / total * 100) : 0;
+                document.getElementById('ctstPct').textContent = pct;
+                document.getElementById('ctstRingFg').style.strokeDashoffset = RING_LEN * (1 - done / total);
+                document.getElementById('ctstRingWrap').classList.toggle('is-full', done === total);
+                document.getElementById('ctstSubline').textContent = done + ' of ' + total + ' steps done';
+                document.getElementById('ctstHeadline').textContent =
+                    done === total ? 'Ready to submit' :
+                    done === 0 ? "Let's get started" : 'Almost there';
             }
 
-            planEl.addEventListener('input', refreshProgress);
-
-            // ---- UAT link: copy + remember that it was opened ----
-            var openUat = document.getElementById('crtOpenUat');
-            if (openUat) {
-                openUat.addEventListener('click', function () { uatOpened = true; refreshProgress(); });
-            }
-
-            var copyUat = document.getElementById('crtCopyUat');
-            if (copyUat) {
-                copyUat.addEventListener('click', function () {
-                    var field = document.getElementById('uatLinkField');
-                    var label = copyUat.querySelector('span');
-
-                    function copied() {
-                        label.textContent = 'Copied';
-                        setTimeout(function () { label.textContent = 'Copy'; }, 1500);
-                    }
-
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(field.value).then(copied);
-                    } else {
-                        field.select();
-                        document.execCommand('copy');
-                        copied();
-                    }
-                });
-            }
+            document.getElementById('testingForm').addEventListener('input', refreshProgress);
+            document.getElementById('testingForm').addEventListener('change', refreshProgress);
 
             // ---- Test result attachments (select, validate, remove before upload) ----
             var MAX_FILE_BYTES = 10 * 1024 * 1024;   // 10 MB per file
@@ -1826,24 +1371,26 @@
                     var li = document.createElement('li');
 
                     var label = document.createElement('span');
+                    label.className = 'text-truncate me-2';
                     label.innerHTML = '<i class="ri-attachment-2 me-1"></i>';
                     label.appendChild(document.createTextNode(file.name + ' (' + formatSize(file.size) + ')'));
 
                     var removeBtn = document.createElement('button');
                     removeBtn.type = 'button';
+                    removeBtn.className = 'btn btn-sm btn-link text-danger p-0';
                     removeBtn.title = 'Remove';
-                    removeBtn.innerHTML = '<i class="ri-close-line"></i>';
+                    removeBtn.innerHTML = '<i class="ri-close-line fs-18"></i>';
                     removeBtn.addEventListener('click', function () {
                         selectedFiles.splice(index, 1);
                         syncInputFiles();
                         renderSelectedFiles();
+                        refreshProgress();
                     });
 
                     li.appendChild(label);
                     li.appendChild(removeBtn);
                     selectedList.appendChild(li);
                 });
-                refreshProgress();
             }
 
             fileInput.addEventListener('change', function () {
@@ -1866,6 +1413,7 @@
 
                 syncInputFiles();
                 renderSelectedFiles();
+                refreshProgress();
 
                 if (rejected.length) {
                     Swal.fire({
@@ -1882,20 +1430,7 @@
                 }
             });
 
-            // Drag and drop onto the upload area (goes through the same checks as the file picker)
-            var drop = document.getElementById('crtDrop');
-            ['dragenter', 'dragover'].forEach(function (evt) {
-                drop.addEventListener(evt, function (e) { e.preventDefault(); drop.classList.add('is-over'); });
-            });
-            ['dragleave', 'drop'].forEach(function (evt) {
-                drop.addEventListener(evt, function (e) { e.preventDefault(); drop.classList.remove('is-over'); });
-            });
-            drop.addEventListener('drop', function (e) {
-                if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-                    fileInput.files = e.dataTransfer.files;
-                    fileInput.dispatchEvent(new Event('change'));
-                }
-            });
+            refreshProgress();
 
             // ---- Test Passed / Test Failed ----
             var submitBtn = document.getElementById('submitBtn');   // Test Passed
@@ -2037,9 +1572,6 @@
             // preventDefault stops any native form post
             submitBtn.addEventListener('click', function (e) { e.preventDefault(); handleTestingSubmission(submitBtn, 'pass'); });
             failBtn.addEventListener('click',   function (e) { e.preventDefault(); handleTestingSubmission(failBtn, 'fail'); });
-
-            // First paint of the progress ring
-            refreshProgress();
         });
     </script>
 }

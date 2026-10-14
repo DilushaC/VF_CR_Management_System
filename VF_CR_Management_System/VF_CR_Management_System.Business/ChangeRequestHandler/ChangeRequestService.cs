@@ -206,35 +206,29 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 return null;
 
             const string stepsQuery = @"
-                SELECT
-                    ws.StepID,
-                    ws.StepOrder,
-                    ws.StepName,
-                    ws.ApprovalRequired,
-                    a.AssignedTo,
-                    a.AssignedDate,
-                    a.TargetDate,
-                    a.Decision,
-                    a.IsApproved
-                FROM [CRManagementDB].[dbo].[WorkflowStep] ws
-                LEFT JOIN (
-                    SELECT ap.StepID, ap.AssignedTo, ap.AssignedDate, ap.TargetDate,
-                           ap.Decision, ap.IsApproved,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY ap.StepID
-                               ORDER BY CASE WHEN wsa.StepName = 'Assessment' THEN ap.ApprovalID END ASC,
-                                        ap.ApprovalID DESC) AS rn
-                    FROM [CRManagementDB].[dbo].[Approval] ap
-                    INNER JOIN [CRManagementDB].[dbo].[WorkflowStep] wsa ON wsa.StepID = ap.StepID
-                    WHERE ap.CRID = @CRID AND ap.Active = 1
-                ) a ON a.StepID = ws.StepID AND a.rn = 1
-                WHERE ws.Active = 1
-                  AND (ws.WorkflowID = @WorkflowID OR a.StepID IS NOT NULL)
-                ORDER BY ws.StepOrder";
+                        SELECT  
+                            A.ApprovalID,
+                            WS.StepID,
+                            WS.StepOrder,
+                            WS.StepName,
+                            WS.ApprovalRequired,
+                            A.AssignedTo,
+                            A.AssignedDate,
+                            A.TargetDate,
+                            A.Decision,
+                            A.IsApproved
+                        FROM Approval A
+                        INNER JOIN [WorkflowStep] WS ON WS.StepID = A.StepID
+                        INNER JOIN ChangeRequest CR ON CR.CRID = A.CRID
+                        WHERE A.CRID = @CRID
+                          AND A.Active = 1
+                        ORDER BY A.ApprovalID ASC";
+
+            var wflow = changeRequest.WorkflowID > 0 ? changeRequest.WorkflowID : 3;
 
             var stepParams = new DynamicParameters();
             stepParams.Add("@CRID", crId);
-            stepParams.Add("@WorkflowID", changeRequest.WorkflowID > 0 ? changeRequest.WorkflowID : 3);
+            //stepParams.Add("@WorkflowID", changeRequest.WorkflowID > 0 ? changeRequest.WorkflowID : 3);
 
             var stepsTable = _connectionService.ReturnWithPara(stepsQuery, stepParams);
 

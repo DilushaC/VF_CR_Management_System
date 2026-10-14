@@ -58,10 +58,35 @@
         return (i >= 0 ? x.Substring(0, i) : x).Trim();
     }
 
+    // SECURITY FIX: this used to compare EmpNoOf(v) against EmpNoOf(currentId) unconditionally.
+    // EmpNoOf falls back to returning the WHOLE normalized string when there is no " - " separator,
+    // so a bare username on one side (e.g. the logged-in user's raw AD name) could collide with an
+    // unrelated employee number or username on the other side and make the UI think the request was
+    // "assigned to you" (and expose the action buttons) when it was not.
+    //
+    // Fixed matching rules, safest first:
+    //   1. Exact match on the full normalized identifier (covers username == username, or
+    //      "empNo - name" == "empNo - name").
+    //   2. Only fall back to comparing employee numbers when BOTH sides are actually in the
+    //      "<empNo> - <name>" form, so a bare username can never be confused with someone else's
+    //      parsed employee number.
     bool IsCurrentUser(string? v)
     {
-        var id = EmpNoOf(v);
-        return id.Length > 0 && currentIds.Any(c => string.Equals(EmpNoOf(c), id, StringComparison.OrdinalIgnoreCase));
+        var raw = Normalize(v);
+        if (raw.Length == 0) { return false; }
+
+        if (currentIds.Any(c => string.Equals(c, raw, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        var vHasEmpNo = raw.IndexOf(" - ", StringComparison.Ordinal) > 0;
+        if (!vHasEmpNo) { return false; }
+
+        var id = EmpNoOf(raw);
+        return id.Length > 0 && currentIds.Any(c =>
+            c.IndexOf(" - ", StringComparison.Ordinal) > 0 &&
+            string.Equals(EmpNoOf(c), id, StringComparison.OrdinalIgnoreCase));
     }
 
     bool IsPending(WorkflowStepAssignment? step) =>
@@ -72,8 +97,15 @@
 
     string StepKey(string? s) => (s ?? string.Empty).Replace(" ", string.Empty);
 
+    // BUG FIX: a step name (e.g. "Division Head Approval", "Testing") can have more than one
+    // Approval row when the CR goes through a step more than once (returned, reassigned,
+    // re-approved). Model.StepAssignments is ordered ASC by ApprovalID, so FirstOrDefault was
+    // grabbing the OLDEST, already-closed row instead of the current one - which made CanActOn
+    // see an already-decided row (IsPending == false) and hide the action buttons, or attribute
+    // the step to the wrong (previous) assignee. LastOrDefault picks the most recent row, i.e.
+    // the live cycle, which is what every canApprove/canGoXxx flag below actually needs.
     WorkflowStepAssignment? StepByName(string stepName) =>
-        Model.StepAssignments?.FirstOrDefault(s =>
+        Model.StepAssignments?.LastOrDefault(s =>
             string.Equals(StepKey(s.StepName), StepKey(stepName), StringComparison.OrdinalIgnoreCase));
 
     bool CanActOn(WorkflowStepAssignment? step) =>
@@ -263,6 +295,24 @@
     var attachmentCount = srsFiles.Count + baFiles.Count + qaFiles.Count + vendorFiles.Count;
     var stepRows = Model.StepAssignments ?? new List<WorkflowStepAssignment>();
 
+    // BUG FIX: steps like "Division Head Approval" and "Testing" were showing up twice in the
+    // Workflow tab because the underlying data can legitimately contain more than one
+    // WorkflowStepAssignment row for the same step name over the life of the CR (e.g. a row
+    // created, then re-created on a handover). For display we only want the MOST RECENT row per
+    // step name, except "Developer Documentation" which is allowed multiple rows by design (see
+    // the comment above devDocRows) and must keep all of them. Original row order is preserved.
+    var devDocKey = StepKey("Developer Documentation");
+    var lastIndexByStep = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    for (var idx = 0; idx < stepRows.Count; idx++)
+    {
+        lastIndexByStep[StepKey(stepRows[idx].StepName)] = idx;
+    }
+    var displayStepRows = stepRows
+        .Where((s, idx) =>
+            string.Equals(StepKey(s.StepName), devDocKey, StringComparison.OrdinalIgnoreCase)
+            || lastIndexByStep[StepKey(s.StepName)] == idx)
+        .ToList();
+
     var hasAssessmentData = new[]
     {
         Model.ChangeImpact, Model.Vendor, Model.ProposalNumber, Model.BusinessImpact, Model.Reason,
@@ -346,10 +396,11 @@
         <div class="cr-person">
             <span class="cr-avatar cr-hue-@hue">@Initials(pName)</span>
             <div class="cr-person-text">
-                <div class="cr-person-name">@pName @if (isMe) {
-                <span class="cr-you">You</span>
-            }
-    </div>
+                <div class="cr-person-name">
+                    @pName @if (isMe) {
+                    <span class="cr-you">You</span>
+                }
+            </div>
             <div class="cr-person-role"><i class="@icon"></i>@role</div>
         </div>
         @if (pId.Length > 0)
@@ -403,7 +454,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
 <style>
     .cr-hero, .cr-body {
-        --cr-ink: #17213b;
+        --cr-ink: #451423;
         --cr-accent: #3b5bdb;
         --cr-ok: #3ddc97;
         --cr-warn: #ffb020;
@@ -1189,9 +1240,9 @@ void FileGroup(string title, string icon, List<Attachment> items)
         <li class="nav-item" role="presentation">
             <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#cr-tab-workflow" role="tab">
                 <i class="ri-route-line"></i>Workflow
-                @if (stepRows.Any())
+                @if (displayStepRows.Any())
                 {
-                    <span class="cr-tab-badge">@stepRows.Count</span>
+                    <span class="cr-tab-badge">@displayStepRows.Count</span>
                 }
             </button>
         </li>
@@ -1293,14 +1344,14 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
         @* ----- Workflow history ----- *@
         <div class="tab-pane fade" id="cr-tab-workflow" role="tabpanel">
-            @if (!stepRows.Any())
+            @if (!displayStepRows.Any())
             {
                 <div class="cr-empty"><i class="ri-route-line"></i>No workflow steps have been created yet.</div>
             }
             else
             {
                 <ol class="cr-timeline">
-                    @foreach (var step in stepRows)
+                    @foreach (var step in displayStepRows)
                     {
                         var state = StepState(step);
                         var waitingOnMe = IsPending(step) && IsCurrentUser(step.AssignedTo);
@@ -1433,13 +1484,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                            foreach (var user in ViewBag.Users)
-                            {
-                                            string uId = user.UserName;
-                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                            if (string.IsNullOrEmpty(uId)) { continue; }
-                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                            }
+                                foreach (var user in ViewBag.Users)
+                                {
+                                                    string uId = user.UserName;
+                                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                                    if (string.IsNullOrEmpty(uId)) { continue; }
+                                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                                }
             }
         ];
 
