@@ -235,234 +235,1102 @@
     var showDebug = false;
 }
 
-<style>
-    .cr-detail-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 1rem 1.5rem;
-        align-items: start;
+@{
+    // ---------- Workflow stepper (derived from the existing status flags) ----------
+    var stageNames = new[] { "Requested", "Approval", "Assessment", "Security", "Development", "QA", "Final approval", "Release" };
+    var stageIcons = new[] { "ri-file-add-line", "ri-user-follow-line", "ri-file-search-line", "ri-shield-check-line",
+                             "ri-code-s-slash-line", "ri-test-tube-line", "ri-check-double-line", "ri-rocket-line" };
+
+    var isReleased = Model.CompletedDate.HasValue
+        || StatusIs("Closed", "Released", "Completed", "ReleaseClosed", "LiveLinkSubmitted");
+    var isReturned = isAssessmentReturned || isQaReturned;
+
+    int activeStage =
+        isReleased ? stageNames.Length :
+        isFinalApproved ? 7 :
+        isTestingApprovedStatus ? 6 :
+        (isTestingStatus || isDevReturn) ? 5 :
+        (isDevelopmentApproved || isQaReturned || isSecurityApproved) ? 4 :
+        (isSecurityDraft || isSecurityStatus) ? 3 :
+        (isApproved || isAssessmentReturned || isAssessment) ? 2 :
+        1;
+
+    // Is anything waiting on the logged-in user? (same flags that drive the footer buttons)
+    var hasAction = canApprove || canGoAssessment || canProceedToDevelopment || canGoSecurity
+        || canEditSecurityDraft || canHandoverToTester || canHandoverToFinalApprover || canFinalApprove
+        || canGoQA || canApproveToDevelopment || canDevDocDecide || canSubmitLiveLink;
+
+    var attachmentCount = srsFiles.Count + baFiles.Count + qaFiles.Count + vendorFiles.Count;
+    var stepRows = Model.StepAssignments ?? new List<WorkflowStepAssignment>();
+
+    var hasAssessmentData = new[]
+    {
+        Model.ChangeImpact, Model.Vendor, Model.ProposalNumber, Model.BusinessImpact, Model.Reason,
+        Model.ExpectedBenefit, Model.RollbackPlan, Model.RiskAssessment, Model.ActivitiesTasks, Model.FixedAssets
+    }.Any(v => !string.IsNullOrWhiteSpace(v));
+
+    var isOverdue = Model.DueDate.HasValue && Model.DueDate.Value.Date < DateTime.Today && !isReleased && !isRejected;
+
+    // ---------- Small helpers ----------
+    string Pretty(string? s) =>
+        string.IsNullOrWhiteSpace(s)
+            ? string.Empty
+            : System.Text.RegularExpressions.Regex.Replace(s.Trim(), "(?<=[a-z])(?=[A-Z])", " ");
+
+    string PriorityCss(string? p)
+    {
+        var x = (p ?? string.Empty).ToLowerInvariant();
+        if (x.Contains("critical") || x.Contains("urgent") || x.Contains("high")) { return "bad"; }
+        if (x.Contains("medium") || x.Contains("normal")) { return "warn"; }
+        if (x.Contains("low")) { return "ok"; }
+        return "info";
     }
 
-        .cr-detail-grid .cr-field-wide {
-            grid-column: 1 / -1;
+    string StatusCss() =>
+        isRejected ? "bad" :
+        isReturned ? "warn" :
+        isReleased ? "ok" :
+        "info";
+
+    string Initials(string? name)
+    {
+        var letters = (name ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => char.IsLetter(p[0]))
+            .Select(p => char.ToUpperInvariant(p[0]))
+            .Take(2)
+            .ToArray();
+        return letters.Length > 0 ? new string(letters) : "?";
+    }
+
+    (string Label, string Css) StepState(WorkflowStepAssignment s)
+    {
+        if (s.IsApproved == true) { return ("Approved", "ok"); }
+        if (IsPending(s)) { return ("Pending", "wait"); }
+        var d = (s.Decision ?? string.Empty).Trim();
+        return (d, d.IndexOf("reject", StringComparison.OrdinalIgnoreCase) >= 0 ? "bad" : "warn");
+    }
+
+    // ---------- Markup helpers ----------
+    void Fact(string icon, string label, string? value, string valueCss = "")
+    {
+        if (string.IsNullOrWhiteSpace(value)) { return; }
+        <div class="cr-fact">
+            <span class="cr-fact-ico"><i class="@icon"></i></span>
+            <div class="cr-fact-text">
+                <div class="cr-fact-label">@label</div>
+                <div class="cr-fact-value @valueCss">@value</div>
+            </div>
+        </div>
+    }
+
+    void TextBlock(string icon, string title, string? value, bool highlight = false)
+    {
+        if (string.IsNullOrWhiteSpace(value)) { return; }
+        <section class="cr-block @(highlight ? "cr-block-hl" : "")">
+            <h6 class="cr-block-title"><i class="@icon"></i>@title</h6>
+            <p class="cr-block-text">@value</p>
+        </section>
+    }
+
+    void Person(string role, string icon, string? value)
+    {
+        var display = DisplayUser(value);
+        if (string.IsNullOrWhiteSpace(display)) { return; }
+        var sep = display.LastIndexOf(" - ", StringComparison.Ordinal);
+        var pName = sep > 0 ? display.Substring(0, sep).Trim() : display;
+        var pId = sep > 0 ? display.Substring(sep + 3).Trim() : string.Empty;
+        var hue = Math.Abs(pName.Sum(c => (int)c)) % 6;
+        var isMe = IsCurrentUser(value);
+
+        <div class="cr-person">
+            <span class="cr-avatar cr-hue-@hue">@Initials(pName)</span>
+            <div class="cr-person-text">
+                <div class="cr-person-name">@pName @if (isMe) {
+                <span class="cr-you">You</span>
+            }
+    </div>
+            <div class="cr-person-role"><i class="@icon"></i>@role</div>
+        </div>
+        @if (pId.Length > 0)
+        {
+            <span class="cr-person-id">@pId</span>
+        }
+    </div>
+}
+
+void FileGroup(string title, string icon, List<Attachment> items)
+{
+    if (items == null || !items.Any()) { return; }
+
+    <div class="cr-file-group">
+        <h6 class="cr-block-title"><i class="@icon"></i>@title <span class="cr-count">@items.Count</span></h6>
+        <div class="cr-file-list">
+            @foreach (var a in items)
+            {
+                var ext = System.IO.Path.GetExtension(a.FileName)?.ToLowerInvariant() ?? "";
+                var isImage = imageExt.Contains(ext);
+                var isPdf = ext == ".pdf";
+                var href = isImage ? "#"
+                : isPdf ? Url.Action("PreviewAttachment", "CRManagement", new { id = a.AttachmentID })
+                : Url.Action("DownloadAttachment", "CRManagement", new { id = a.AttachmentID });
+                var kind = isImage ? "img" : isPdf ? "pdf" : "file";
+                var fileIcon = isImage ? "ri-image-2-line" : isPdf ? "ri-file-pdf-2-line" : "ri-file-download-line";
+                var actIcon = isImage ? "ri-eye-line" : isPdf ? "ri-external-link-line" : "ri-download-2-line";
+
+                <a class="cr-file @(isImage ? "preview-image-link" : "")"
+                   href="@href"
+                   target="@(isPdf ? "_blank" : null)"
+                   rel="@(isPdf ? "noopener" : null)"
+                   download="@(kind == "file" ? "" : null)"
+                   data-attachment-id="@(isImage? a.AttachmentID.ToString() : null)"
+                   data-file-name="@(isImage? a.FileName: null)">
+                    <span class="cr-file-ico cr-file-@kind"><i class="@fileIcon"></i></span>
+                    <span class="cr-file-main">
+                        <span class="cr-file-name">@a.FileName</span>
+                        @if (!string.IsNullOrWhiteSpace(a.UploadedBy) || a.UploadedDate != default)
+                        {
+                            <span class="cr-file-sub">@a.UploadedBy &middot; @a.UploadedDate.ToString("yyyy/MM/dd")</span>
+                        }
+                    </span>
+                    <i class="cr-file-act @actIcon"></i>
+                </a>
+            }
+        </div>
+    </div>
+}
+}
+
+<style>
+    .cr-hero, .cr-body {
+        --cr-ink: #17213b;
+        --cr-accent: #3b5bdb;
+        --cr-ok: #3ddc97;
+        --cr-warn: #ffb020;
+        --cr-bad: #ff5d6c;
+        --cr-line: var(--bs-border-color, #e3e6ec);
+        --cr-muted: var(--bs-secondary-color, #6b7385);
+        --cr-surface: var(--bs-tertiary-bg, #f5f7fb);
+    }
+
+    /* ===== Hero header ===== */
+    .modal-header.cr-hero {
+        display: block;
+        padding: 0;
+        border: 0;
+        position: relative;
+        color: #fff;
+        background: var(--cr-ink);
+        border-top-left-radius: calc(var(--bs-modal-border-radius, .5rem) - 1px);
+        border-top-right-radius: calc(var(--bs-modal-border-radius, .5rem) - 1px);
+    }
+
+    .cr-close {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 3;
+        filter: invert(1) grayscale(1) brightness(2);
+        opacity: .8;
+    }
+
+    .cr-hero-top {
+        padding: 1.4rem 3.2rem 0 1.5rem;
+    }
+
+    .cr-hero-id {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .6rem;
+        margin-bottom: .5rem;
+    }
+
+    .cr-crnum {
+        font-size: 1.05rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .25rem .7rem;
+        border-radius: 999px;
+        background: rgba(255,255,255,.12);
+    }
+
+    .cr-hero-title {
+        margin: 0 0 .85rem;
+        color: #fff;
+        font-size: 1.45rem;
+        font-weight: 650;
+        line-height: 1.3;
+        max-width: 60ch;
+    }
+
+    .cr-hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem 1.25rem;
+        font-size: .85rem;
+        color: rgba(255,255,255,.75);
+    }
+
+        .cr-hero-meta .cr-meta-item {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
         }
 
-        .cr-detail-grid .cr-field-half {
-            grid-column: span 2;
+        .cr-hero-meta .cr-overdue {
+            color: var(--cr-bad);
+            font-weight: 600;
         }
 
-        .cr-detail-grid label {
-            margin-bottom: 0.15rem;
+    /* Status + priority chips */
+    .cr-status, .cr-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .2rem .65rem;
+        border-radius: 999px;
+        font-size: .8rem;
+        font-weight: 600;
+    }
+
+        .cr-status.ok, .cr-chip.ok {
+            background: rgba(61,220,151,.18);
+            color: #1f9d6b;
         }
 
-        .cr-detail-grid span {
-            word-break: break-word;
+        .cr-status.warn, .cr-chip.warn {
+            background: rgba(255,176,32,.2);
+            color: #b57600;
         }
 
-        .cr-detail-grid .cr-section-title {
-            grid-column: 1 / -1;
-            border-top: 1px solid #dee2e6;
-            padding-top: 0.75rem;
-            margin-top: 0.25rem;
-            font-weight: 700;
+        .cr-status.bad, .cr-chip.bad {
+            background: rgba(255,93,108,.18);
+            color: #d6384a;
         }
 
-            /* First heading: no divider line at the top of the modal body */
-            .cr-detail-grid .cr-section-title.cr-section-first {
-                border-top: 0;
-                padding-top: 0;
-                margin-top: 0;
+        .cr-status.info, .cr-chip.info {
+            background: rgba(120,150,255,.2);
+            color: #4a63d6;
+        }
+
+    .cr-hero .cr-status.ok, .cr-hero .cr-chip.ok {
+        color: var(--cr-ok);
+    }
+
+    .cr-hero .cr-status.warn, .cr-hero .cr-chip.warn {
+        color: var(--cr-warn);
+    }
+
+    .cr-hero .cr-status.bad, .cr-hero .cr-chip.bad {
+        color: var(--cr-bad);
+    }
+
+    .cr-hero .cr-status.info, .cr-hero .cr-chip.info {
+        color: #b4c3ff;
+    }
+
+    /* ===== Stepper (the one expressive element) ===== */
+    .cr-stepper {
+        list-style: none;
+        margin: 0;
+        padding: 1.3rem 1.25rem 1.4rem;
+        display: flex;
+        overflow-x: auto;
+    }
+
+    .cr-step {
+        flex: 1 0 84px;
+        position: relative;
+        text-align: center;
+        font-size: .78rem;
+        color: rgba(255,255,255,.55);
+    }
+
+        .cr-step::before {
+            content: "";
+            position: absolute;
+            top: 16px;
+            right: 50%;
+            width: 100%;
+            height: 3px;
+            border-radius: 2px;
+            background-color: rgba(255,255,255,.16);
+        }
+
+        .cr-step:first-child::before {
+            display: none;
+        }
+
+        .cr-step.is-done::before,
+        .cr-step.is-current::before {
+            background-image: linear-gradient(var(--cr-ok), var(--cr-ok));
+            background-repeat: no-repeat;
+            background-size: 0 100%;
+            animation: cr-fill .45s ease-out forwards;
+            animation-delay: calc(var(--i) * 110ms);
+        }
+
+    @@keyframes cr-fill {
+        to {
+            background-size: 100% 100%;
+        }
+    }
+
+    .cr-dot {
+        position: relative;
+        z-index: 1;
+        width: 34px;
+        height: 34px;
+        margin: 0 auto .45rem;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 1rem;
+        background: #26304f;
+        border: 2px solid rgba(255,255,255,.22);
+    }
+
+    .cr-step.is-done .cr-dot {
+        background: var(--cr-ok);
+        border-color: var(--cr-ok);
+        color: #0c2a1e;
+    }
+
+    .cr-step.is-current .cr-dot {
+        background: #fff;
+        border-color: #fff;
+        color: var(--cr-ink);
+        box-shadow: 0 0 0 5px rgba(255,255,255,.18);
+    }
+
+    .cr-step.is-current.is-returned .cr-dot {
+        background: var(--cr-warn);
+        border-color: var(--cr-warn);
+    }
+
+    .cr-step.is-current.is-rejected .cr-dot {
+        background: var(--cr-bad);
+        border-color: var(--cr-bad);
+        color: #fff;
+    }
+
+    .cr-step.is-done, .cr-step.is-current {
+        color: rgba(255,255,255,.85);
+    }
+
+    .cr-step.is-current {
+        color: #fff;
+        font-weight: 600;
+    }
+
+    /* ===== Body, tabs ===== */
+    .cr-body {
+        padding: 0;
+    }
+
+    .cr-tabs {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: .25rem;
+        padding: 0 1.1rem;
+        margin: 0;
+        list-style: none;
+        overflow-x: auto;
+        border-bottom: 1px solid var(--cr-line);
+    }
+
+        .cr-tabs .nav-link {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            padding: .95rem 1rem;
+            border: 0;
+            background: none;
+            color: var(--cr-muted);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+            .cr-tabs .nav-link:hover {
+                color: var(--cr-accent);
             }
 
-    /* Attachment groups (SRS / BA / QA / Vendor) */
-    .cr-attachment-group {
-        grid-column: 1 / -1;
+            .cr-tabs .nav-link::after {
+                content: "";
+                position: absolute;
+                left: .75rem;
+                right: .75rem;
+                bottom: -1px;
+                height: 3px;
+                border-radius: 3px 3px 0 0;
+                background: var(--cr-accent);
+                transform: scaleX(0);
+                transition: transform .2s ease;
+            }
+
+            .cr-tabs .nav-link.active {
+                color: var(--cr-accent);
+            }
+
+                .cr-tabs .nav-link.active::after {
+                    transform: scaleX(1);
+                }
+
+    .cr-tab-badge, .cr-count {
+        min-width: 1.35rem;
+        padding: .05rem .4rem;
+        border-radius: 999px;
+        font-size: .72rem;
+        font-weight: 700;
+        text-align: center;
+        background: var(--cr-surface);
+        color: var(--cr-muted);
     }
 
-        .cr-attachment-group .cr-attachment-title {
-            font-weight: 700;
-            margin-bottom: 0.25rem;
+    .cr-tabs .nav-link.active .cr-tab-badge {
+        background: var(--cr-accent);
+        color: #fff;
+    }
+
+    .cr-panes {
+        padding: 1.4rem 1.5rem 1.6rem;
+        min-height: 360px;
+    }
+
+    .cr-action-banner {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        margin: 1rem 1.5rem 0;
+        padding: .65rem .9rem;
+        border-radius: .5rem;
+        font-size: .9rem;
+        font-weight: 500;
+        background: rgba(255,176,32,.14);
+        color: #8a5a00;
+        border: 1px solid rgba(255,176,32,.4);
+    }
+
+        .cr-action-banner i {
+            font-size: 1.15rem;
         }
 
-    /* Fix overlay layer ordering for Select2 inside Modals and SweetAlert */
+    /* ===== Facts ===== */
+    .cr-facts {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: .75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .cr-fact {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        padding: .7rem .85rem;
+        border: 1px solid var(--cr-line);
+        border-radius: .6rem;
+    }
+
+    .cr-fact-ico {
+        flex: 0 0 auto;
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border-radius: .5rem;
+        font-size: 1.1rem;
+        color: var(--cr-accent);
+        background: rgba(59,91,219,.1);
+    }
+
+    .cr-fact-label {
+        font-size: .78rem;
+        color: var(--cr-muted);
+    }
+
+    .cr-fact-value {
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+        .cr-fact-value.is-overdue {
+            color: #d6384a;
+        }
+
+    /* ===== Text blocks ===== */
+    .cr-block {
+        padding: 1rem 0;
+        border-top: 1px solid var(--cr-line);
+    }
+
+        .cr-block:first-of-type {
+            border-top: 0;
+            padding-top: 0;
+        }
+
+    .cr-block-hl {
+        padding: 1rem 1.1rem;
+        border: 0;
+        border-left: 4px solid var(--cr-accent);
+        border-radius: .4rem;
+        background: var(--cr-surface);
+        margin-bottom: 1.25rem;
+    }
+
+    .cr-block-title {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin: 0 0 .4rem;
+        font-weight: 700;
+        font-size: .95rem;
+    }
+
+        .cr-block-title i {
+            color: var(--cr-accent);
+            font-size: 1.1rem;
+        }
+
+    .cr-block-text {
+        margin: 0;
+        max-width: 78ch;
+        line-height: 1.6;
+        white-space: pre-line;
+        word-break: break-word;
+    }
+
+    /* ===== Attachments ===== */
+    .cr-file-group + .cr-file-group {
+        margin-top: 1.4rem;
+    }
+
+    .cr-file-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: .6rem;
+    }
+
+    .cr-file {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        padding: .65rem .8rem;
+        border: 1px solid var(--cr-line);
+        border-radius: .6rem;
+        color: inherit;
+        text-decoration: none;
+        transition: border-color .15s, transform .15s;
+    }
+
+        .cr-file:hover {
+            border-color: var(--cr-accent);
+            transform: translateY(-1px);
+            color: inherit;
+        }
+
+    .cr-file-ico {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        border-radius: .5rem;
+        font-size: 1.3rem;
+    }
+
+    .cr-file-pdf {
+        background: rgba(255,93,108,.14);
+        color: #d6384a;
+    }
+
+    .cr-file-img {
+        background: rgba(61,184,220,.16);
+        color: #1a8aa8;
+    }
+
+    .cr-file-file {
+        background: rgba(59,91,219,.12);
+        color: var(--cr-accent);
+    }
+
+    .cr-file-main {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .cr-file-name {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .cr-file-sub {
+        font-size: .78rem;
+        color: var(--cr-muted);
+    }
+
+    .cr-file-act {
+        color: var(--cr-muted);
+        font-size: 1.15rem;
+    }
+
+    /* ===== People ===== */
+    .cr-people {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: .75rem;
+    }
+
+    .cr-person {
+        display: flex;
+        align-items: center;
+        gap: .8rem;
+        padding: .7rem .85rem;
+        border: 1px solid var(--cr-line);
+        border-radius: .6rem;
+    }
+
+    .cr-avatar {
+        flex: 0 0 auto;
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .cr-hue-0 {
+        background: #3b5bdb;
+    }
+
+    .cr-hue-1 {
+        background: #0ca678;
+    }
+
+    .cr-hue-2 {
+        background: #d9480f;
+    }
+
+    .cr-hue-3 {
+        background: #7048e8;
+    }
+
+    .cr-hue-4 {
+        background: #1c7ed6;
+    }
+
+    .cr-hue-5 {
+        background: #c2255c;
+    }
+
+    .cr-person-text {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .cr-person-name {
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    .cr-person-role {
+        font-size: .8rem;
+        color: var(--cr-muted);
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+    }
+
+    .cr-person-id {
+        font-size: .78rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--cr-muted);
+    }
+
+    .cr-you {
+        margin-left: .3rem;
+        padding: .05rem .45rem;
+        border-radius: 999px;
+        font-size: .7rem;
+        font-weight: 700;
+        color: #fff;
+        background: var(--cr-accent);
+    }
+
+    /* ===== Workflow timeline ===== */
+    .cr-timeline {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .cr-tl-item {
+        position: relative;
+        display: flex;
+        gap: 1rem;
+        padding-bottom: 1.25rem;
+    }
+
+        .cr-tl-item:last-child {
+            padding-bottom: 0;
+        }
+
+        .cr-tl-item::before {
+            content: "";
+            position: absolute;
+            left: 13px;
+            top: 28px;
+            bottom: 0;
+            width: 2px;
+            background: var(--cr-line);
+        }
+
+        .cr-tl-item:last-child::before {
+            display: none;
+        }
+
+    .cr-tl-dot {
+        flex: 0 0 auto;
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-size: .95rem;
+        color: #fff;
+        z-index: 1;
+    }
+
+        .cr-tl-dot.ok {
+            background: #1f9d6b;
+        }
+
+        .cr-tl-dot.warn {
+            background: #d99100;
+        }
+
+        .cr-tl-dot.bad {
+            background: #d6384a;
+        }
+
+        .cr-tl-dot.wait {
+            background: var(--cr-surface);
+            color: var(--cr-muted);
+            border: 2px solid var(--cr-line);
+        }
+
+    .cr-tl-body {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .cr-tl-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .5rem;
+        font-weight: 600;
+    }
+
+    .cr-tl-who {
+        font-size: .85rem;
+        color: var(--cr-muted);
+    }
+
+    /* ===== Empty state ===== */
+    .cr-empty {
+        text-align: center;
+        padding: 2.5rem 1rem;
+        color: var(--cr-muted);
+    }
+
+        .cr-empty i {
+            font-size: 2.2rem;
+            display: block;
+            margin-bottom: .4rem;
+            opacity: .6;
+        }
+
+    /* Keep Select2 above Modals and SweetAlert */
     .select2-container--open {
         z-index: 20000 !important;
     }
+
+    @@media (max-width: 576px) {
+        .cr-hero-title {
+            font-size: 1.2rem;
+        }
+
+        .cr-panes {
+            padding: 1.1rem 1rem;
+        }
+
+        .cr-action-banner {
+            margin: 1rem 1rem 0;
+        }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .cr-step.is-done::before, .cr-step.is-current::before {
+            animation: none;
+            background-size: 100% 100%;
+        }
+
+        .cr-tabs .nav-link::after, .cr-file {
+            transition: none;
+        }
+    }
 </style>
 
-@{
-    void DetailField(string label, string? value, bool wide = false)
-    {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            <div class="@(wide ? "cr-field-wide" : "")">
-                <label class="fw-bold text-dark d-block mb-1">@label:</label>
-                <span>@value</span>
-            </div>
-        }
-    }
+@* ===================== HERO: CR number, title, status, key facts, progress ===================== *@
+<div class="modal-header cr-hero">
+    <button type="button" class="btn-close cr-close" data-bs-dismiss="modal" aria-label="Close"></button>
 
-    // Renders one attachment group (heading + file list). Nothing is rendered when the group is empty.
-    void RenderAttachmentGroup(string title, IEnumerable<Attachment> items)
-    {
-        if (items == null || !items.Any())
-        {
-            return;
-        }
-
-        <div class="cr-attachment-group">
-            <label class="fw-bold text-dark d-block cr-attachment-title">@title:</label>
-            <ul class="list-unstyled mb-0">
-                @foreach (var a in items)
-                {
-                    var ext = System.IO.Path.GetExtension(a.FileName)?.ToLowerInvariant() ?? "";
-                    var isImage = imageExt.Contains(ext);
-                    var isPdf = ext == ".pdf";
-                    <li class="mb-1">
-                        @if (isImage)
-                        {
-                            <a href="#" class="preview-image-link"
-                               data-attachment-id="@a.AttachmentID"
-                               data-file-name="@a.FileName">
-                                <i class="ri-image-line me-1"></i>@a.FileName
-                            </a>
-                        }
-                        else if (isPdf)
-                        {
-                            <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = a.AttachmentID })"
-                               target="_blank" rel="noopener">
-                                <i class="ri-file-pdf-line me-1"></i>@a.FileName
-                            </a>
-                        }
-                        else
-                        {
-                            <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = a.AttachmentID })" download>
-                                <i class="ri-download-2-line me-1"></i>@a.FileName
-                            </a>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(a.UploadedBy) || a.UploadedDate != default)
-                        {
-                            <small class="text-muted">
-                                (@a.UploadedBy — @a.UploadedDate.ToString("yyyy/MM/dd"))
-                            </small>
-                        }
-                    </li>
-                }
-            </ul>
+    <div class="cr-hero-top">
+        <div class="cr-hero-id">
+            <span class="cr-crnum"><i class="ri-git-pull-request-line"></i>@Model.CRNumber</span>
+            @if (!string.IsNullOrWhiteSpace(Model.Status))
+            {
+                <span class="cr-status @StatusCss()">
+                    <i class="@(isRejected ? "ri-close-circle-line" : isReturned ? "ri-arrow-go-back-line" : isReleased ? "ri-checkbox-circle-line" : "ri-loader-4-line")"></i>@Pretty(Model.Status)
+                </span>
+            }
         </div>
-    }
-}
 
-<div class="modal-header">
-    <div class="ms-auto d-flex align-items-center"><h4>
-        <label class="col-form-label fw-semibold me-2">CR Number:</label>
-            <span class="fw-bold">@Model.CRNumber</span>
-        </h4>
+        <h3 class="cr-hero-title">@(string.IsNullOrWhiteSpace(Model.ChangeTitle) ? "Untitled change request" : Model.ChangeTitle)</h3>
+
+        <div class="cr-hero-meta">
+            @if (!string.IsNullOrWhiteSpace(Model.Priority))
+            {
+                <span class="cr-chip @PriorityCss(Model.Priority)"><i class="ri-flag-2-line"></i>@Model.Priority priority</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Division))
+            {
+                <span class="cr-meta-item"><i class="ri-building-line"></i>@Model.Division</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Module))
+            {
+                <span class="cr-meta-item"><i class="ri-apps-line"></i>@Model.Module</span>
+            }
+            <span class="cr-meta-item"><i class="ri-calendar-line"></i>Requested @Model.RequestedDate.ToString("yyyy/MM/dd")</span>
+            @if (Model.DueDate.HasValue)
+            {
+                <span class="cr-meta-item @(isOverdue ? "cr-overdue" : "")">
+                    <i class="ri-time-line"></i>Due @Model.DueDate.Value.ToString("yyyy/MM/dd")@(isOverdue ? " (overdue)" : "")
+                </span>
+            }
+        </div>
     </div>
-    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+
+    <ol class="cr-stepper" aria-label="Workflow progress">
+        @for (var si = 0; si < stageNames.Length; si++)
+        {
+            var isDone = si < activeStage;
+            var isCurrent = si == activeStage;
+            var stateCss = isDone ? "is-done" : isCurrent ? "is-current" : "";
+            if (isCurrent && isRejected) { stateCss += " is-rejected"; }
+            else if (isCurrent && isReturned) { stateCss += " is-returned"; }
+
+            <li class="cr-step @stateCss" style="--i:@(si)" aria-current="@(isCurrent ? "step" : null)">
+                <div class="cr-dot"><i class="@(isDone ? "ri-check-line" : stageIcons[si])"></i></div>
+                <div>@stageNames[si]</div>
+            </li>
+        }
+    </ol>
 </div>
 
-<div class="modal-body">
+@* ===================== BODY ===================== *@
+<div class="modal-body cr-body">
 
-    <div class="cr-detail-grid">
+    @if (hasAction)
+    {
+        <div class="cr-action-banner">
+            <i class="ri-notification-3-line"></i>
+            <span>This request is waiting on you. Use the buttons at the bottom to continue.</span>
+        </div>
+    }
 
-        @* ===== CR Request ===== *@
-        <div class="cr-section-title cr-section-first"><h4><i>CR Request Details</i></h4></div>
+    <ul class="nav cr-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link active" data-bs-toggle="tab" data-bs-target="#cr-tab-overview" role="tab">
+                <i class="ri-file-list-3-line"></i>Overview
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#cr-tab-assessment" role="tab">
+                <i class="ri-file-search-line"></i>Assessment
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#cr-tab-files" role="tab">
+                <i class="ri-attachment-2"></i>Attachments
+                @if (attachmentCount > 0)
+                {
+                    <span class="cr-tab-badge">@attachmentCount</span>
+                }
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#cr-tab-people" role="tab">
+                <i class="ri-team-line"></i>People
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#cr-tab-workflow" role="tab">
+                <i class="ri-route-line"></i>Workflow
+                @if (stepRows.Any())
+                {
+                    <span class="cr-tab-badge">@stepRows.Count</span>
+                }
+            </button>
+        </li>
+    </ul>
 
-        @{
-            DetailField("Change Request Title", Model.ChangeTitle, wide: true);
-        }
-        @{
-            DetailField("Change Summary & Business Justification", Model.Summary, wide: true);
-        }
-        @{
-            DetailField("Change Type", Model.ChangeType);
-        }
-        @{
-            DetailField("Other Change Type", Model.OtherChangeType);
-        }
-        @{
-            DetailField("Change Priority", Model.Priority);
-        }
-        @{
-            DetailField("Division", Model.Division);
-        }
-        @{
-            DetailField("Module", Model.Module);
-        }
+    <div class="tab-content cr-panes">
 
-        @* ===== Change Details ===== *@
-        <div class="cr-section-title"><h4><i>Developer Assessment Details</i></h4></div>
+        @* ----- Overview ----- *@
+        <div class="tab-pane fade show active" id="cr-tab-overview" role="tabpanel">
+            <div class="cr-facts">
+                @{
+                    Fact("ri-swap-box-line", "Change type", Model.ChangeType);
+                    Fact("ri-edit-2-line", "Other change type", Model.OtherChangeType);
+                    Fact("ri-flag-2-line", "Priority", Model.Priority);
+                    Fact("ri-building-line", "Division", Model.Division);
+                    Fact("ri-apps-line", "Module", Model.Module);
+                    Fact("ri-calendar-line", "Requested", Model.RequestedDate.ToString("yyyy/MM/dd"));
+                    Fact("ri-time-line", "Due", Model.DueDate?.ToString("yyyy/MM/dd"), isOverdue ? "is-overdue" : "");
+                    Fact("ri-calendar-check-line", "Completed", Model.CompletedDate?.ToString("yyyy/MM/dd"));
+                }
+            </div>
 
-        @{
-            DetailField("Status", Model.Status);
-        }
-        @{
-            DetailField("Change Impact", Model.ChangeImpact);
-        }
-        @{
-            DetailField("Vendor", Model.Vendor);
-        }
-        @{
-            DetailField("Proposal Number", Model.ProposalNumber);
-        }
-        @{
-            DetailField("Requested Date", Model.RequestedDate.ToString("yyyy/MM/dd"));
-        }
-        @{
-            DetailField("Due Date", Model.DueDate?.ToString("yyyy/MM/dd"));
-        }
-        @{
-            DetailField("Completed Date", Model.CompletedDate?.ToString("yyyy/MM/dd"));
-        }
+            @{
+                TextBlock("ri-lightbulb-flash-line", "Change summary and business justification", Model.Summary, highlight: true);
+            }
 
-        @{
-            DetailField("Business Impact", Model.BusinessImpact, wide: true);
-        }
-        @{
-            DetailField("Reason", Model.Reason, wide: true);
-        }
-        @{
-            DetailField("Expected Benefit", Model.ExpectedBenefit, wide: true);
-        }
-        @{
-            DetailField("Rollback Plan", Model.RollbackPlan, wide: true);
-        }
-        @{
-            DetailField("Risk Assessment", Model.RiskAssessment, wide: true);
-        }
-        @{
-            DetailField("Activities & Tasks", Model.ActivitiesTasks, wide: true);
-        }
-        @{
-            DetailField("Fixed Assets", Model.FixedAssets, wide: true);
-        }
+            @if (string.IsNullOrWhiteSpace(Model.Summary))
+            {
+                <div class="cr-empty"><i class="ri-draft-line"></i>No summary was provided for this request.</div>
+            }
+        </div>
 
-        @* ===== Attachments, grouped by type ===== *@
-        @if (hasAnyAttachments)
-        {
-            <div class="cr-section-title">Attachments</div>
+        @* ----- Assessment ----- *@
+        <div class="tab-pane fade" id="cr-tab-assessment" role="tabpanel">
+            @if (!hasAssessmentData)
+            {
+                <div class="cr-empty"><i class="ri-file-search-line"></i>The developer assessment hasn't been submitted yet.</div>
+            }
+            else
+            {
+                <div class="cr-facts">
+                    @{
+                        Fact("ri-pulse-line", "Change impact", Model.ChangeImpact);
+                        Fact("ri-store-2-line", "Vendor", Model.Vendor);
+                        Fact("ri-hashtag", "Proposal number", Model.ProposalNumber);
+                    }
+                </div>
+                <div>
+                    @{
+                        TextBlock("ri-briefcase-line", "Business impact", Model.BusinessImpact);
+                        TextBlock("ri-question-line", "Reason", Model.Reason);
+                        TextBlock("ri-medal-line", "Expected benefit", Model.ExpectedBenefit);
+                        TextBlock("ri-alert-line", "Risk assessment", Model.RiskAssessment);
+                        TextBlock("ri-arrow-go-back-line", "Rollback plan", Model.RollbackPlan);
+                        TextBlock("ri-task-line", "Activities and tasks", Model.ActivitiesTasks);
+                        TextBlock("ri-computer-line", "Fixed assets", Model.FixedAssets);
+                    }
+                </div>
+            }
+        </div>
 
-            RenderAttachmentGroup("SRS Document", srsFiles);
-            RenderAttachmentGroup("BA Document", baFiles);
-            RenderAttachmentGroup("QA Attachments", qaFiles);
-            RenderAttachmentGroup("Vendor Attachments", vendorFiles);
-        }
+        @* ----- Attachments ----- *@
+        <div class="tab-pane fade" id="cr-tab-files" role="tabpanel">
+            @if (!hasAnyAttachments)
+            {
+                <div class="cr-empty"><i class="ri-folder-open-line"></i>No files have been attached yet.</div>
+            }
+            else
+            {
+                FileGroup("SRS documents", "ri-file-text-line", srsFiles);
+                FileGroup("BA documents", "ri-file-list-line", baFiles);
+                FileGroup("QA attachments", "ri-test-tube-line", qaFiles);
+                FileGroup("Vendor attachments", "ri-store-2-line", vendorFiles);
+            }
+        </div>
 
-        @* ===== Assigned users (workflow steps) ===== *@
-        @if (hasAssignedUsers)
-        {
-            <div class="cr-section-title">Assigned Users</div>
+        @* ----- People ----- *@
+        <div class="tab-pane fade" id="cr-tab-people" role="tabpanel">
+            @if (!hasAssignedUsers)
+            {
+                <div class="cr-empty"><i class="ri-user-unfollow-line"></i>No one has been assigned yet.</div>
+            }
+            else
+            {
+                <div class="cr-people">
+                    @{
+                        Person("Requested by", "ri-user-line", Model.RequestedBy);
+                        Person("CR approver", "ri-user-follow-line", Model.ApproverUserName);
+                        Person("Developer", "ri-code-s-slash-line", developerUser);
+                        Person("InfoSec officer", "ri-shield-user-line", Model.SecurityUserName);
+                        Person("QA tester", "ri-test-tube-line", Model.TestingUserName);
+                        Person("QA assigned by", "ri-user-shared-line", Model.TesterUserName);
+                        Person("QA approved by", "ri-user-star-line", Model.TestingApproverUserName);
+                        Person("Final CR approver", "ri-medal-line", Model.FinalApproverUserName);
+                    }
+                </div>
+            }
+        </div>
 
-            DetailField("Requested By", DisplayUser(Model.RequestedBy));
-            DetailField("CR Approver", DisplayUser(Model.ApproverUserName));
-            DetailField("Developer", DisplayUser(developerUser));
-            DetailField("InfoSec Officer", DisplayUser(Model.SecurityUserName));
-            DetailField("QA Tester", DisplayUser(Model.TestingUserName));
-            DetailField("QA Assigned By", DisplayUser(Model.TesterUserName));
-            DetailField("QA Approved By", DisplayUser(Model.TestingApproverUserName));
-            DetailField("Final CR Approver", DisplayUser(Model.FinalApproverUserName));
-        }
+        @* ----- Workflow history ----- *@
+        <div class="tab-pane fade" id="cr-tab-workflow" role="tabpanel">
+            @if (!stepRows.Any())
+            {
+                <div class="cr-empty"><i class="ri-route-line"></i>No workflow steps have been created yet.</div>
+            }
+            else
+            {
+                <ol class="cr-timeline">
+                    @foreach (var step in stepRows)
+                    {
+                        var state = StepState(step);
+                        var waitingOnMe = IsPending(step) && IsCurrentUser(step.AssignedTo);
+                        var dotIcon = state.Css == "ok" ? "ri-check-line"
+                        : state.Css == "bad" ? "ri-close-line"
+                        : state.Css == "warn" ? "ri-arrow-go-back-line"
+                        : "ri-time-line";
+
+                        <li class="cr-tl-item">
+                            <span class="cr-tl-dot @state.Css"><i class="@dotIcon"></i></span>
+                            <div class="cr-tl-body">
+                                <div class="cr-tl-head">
+                                    @Pretty(step.StepName)
+                                    <span class="cr-chip @(state.Css == "wait" ? "info" : state.Css)">@state.Label</span>
+                                    @if (waitingOnMe)
+                                    {
+                                        <span class="cr-you">Waiting on you</span>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(step.AssignedTo))
+                                {
+                                    <div class="cr-tl-who">@DisplayUser(step.AssignedTo)</div>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ol>
+            }
+        </div>
+
     </div>
 </div>
 
@@ -565,13 +1433,13 @@
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                        foreach (var user in ViewBag.Users)
-                        {
-                                    string uId = user.UserName;
-                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                    if (string.IsNullOrEmpty(uId)) { continue; }
-                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                        }
+                            foreach (var user in ViewBag.Users)
+                            {
+                                            string uId = user.UserName;
+                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                            if (string.IsNullOrEmpty(uId)) { continue; }
+                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                            }
             }
         ];
 

@@ -324,7 +324,7 @@ namespace VF_CR_Management_System.Controllers
                     {
                         success = true,
                         message = "Assessment updated successfully",
-                        redirectUrl = Url.Action("AssessmentsTable", "CRManagement")
+                        redirectUrl = Url.Action("AssignedByMeTable", "CRManagement")
                     });
                 }
                 else
@@ -415,7 +415,7 @@ namespace VF_CR_Management_System.Controllers
                         message = isSubmit
                             ? "Security assessment submitted successfully"
                             : "Security assessment saved successfully",
-                        redirectUrl = Url.Action("SecurityTable", "CRManagement")
+                        redirectUrl = Url.Action("AssignedToMeTable", "CRManagement")
                     });
                 }
                 else
@@ -477,29 +477,13 @@ namespace VF_CR_Management_System.Controllers
             return View(crs);
         }
 
-        public async Task<IActionResult> AssessmentsTable()
-        {
-            var empNo = HttpContext.Session.GetString("EmpNo");
-            ViewBag.CurrentEmpNo = empNo;
-            var crs = await _changeRequestService.GetAllChangeRequestsAssessmentsAsync(empNo);
-            return View(crs);
-        }
-
-        public async Task<IActionResult> SecurityTable()
-        {
-            var empNo = HttpContext.Session.GetString("EmpNo");
-            ViewBag.CurrentEmpNo = empNo;
-            var crs = await _changeRequestService.GetAllChangeRequestsSecurityAsync(empNo);
-            return View(crs);
-        }
-
 
         [HttpGet]
         public async Task<IActionResult> EditAssessment(int? id)
         {
             if (id == null)
             {
-                return RedirectToAction("AssessmentsTable");
+                return RedirectToAction("AssignedByMeTable");
             }
 
             try

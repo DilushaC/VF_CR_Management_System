@@ -13,212 +13,953 @@
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
+
+    string Initials(string? n)
+    {
+        var l = (n ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => char.IsLetter(p[0]))
+            .Select(p => char.ToUpperInvariant(p[0]))
+            .Take(2)
+            .ToArray();
+        return l.Length > 0 ? new string(l) : "?";
+    }
+
+    // Same ids / values as before, so server binding and the edit-hydration JS keep working
+    var typeOptions = new[]
+    {
+        (Id: "customRadio3", Value: "1", Name: "Bug Fix", Icon: "ri-bug-line", Desc: "Something isn't working as expected"),
+        (Id: "customRadio4", Value: "2", Name: "Report Development", Icon: "ri-bar-chart-box-line", Desc: "A new or updated report"),
+        (Id: "customRadio5", Value: "3", Name: "Enhancement", Icon: "ri-rocket-2-line", Desc: "Improve an existing feature"),
+        (Id: "customRadio6", Value: "4", Name: "Infrastructure Changes", Icon: "ri-server-line", Desc: "Servers, network or deployment"),
+        (Id: "customRadio7", Value: "5", Name: "Other", Icon: "ri-more-2-fill", Desc: "Anything else, tell us below")
+    };
+
+    var priorityOptions = new[]
+    {
+        (Id: "customRadio8", Value: "1", Name: "Low", Icon: "ri-leaf-line", Tone: "ok", Desc: "Can wait for a normal cycle"),
+        (Id: "customRadio9", Value: "2", Name: "Medium", Icon: "ri-timer-line", Tone: "info", Desc: "Plan it for this cycle"),
+        (Id: "customRadio10", Value: "3", Name: "High", Icon: "ri-alarm-warning-line", Tone: "warn", Desc: "Needed soon"),
+        (Id: "customRadio11", Value: "4", Name: "Emergency", Icon: "ri-fire-line", Tone: "bad", Desc: "The business is blocked now")
+    };
 }
 
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header border-bottom border-dashed d-flex align-items-center">
-                <h4 class="header-title mb-0">Section 1 : Change Request and Requirement</h4>
+<style>
+    .crf-page {
+        --crf-ink: #17213b;
+        --crf-accent: #3b5bdb;
+        --crf-ok: #1f9d6b;
+        --crf-line: var(--bs-border-color, #e3e6ec);
+        --crf-muted: var(--bs-secondary-color, #6b7385);
+        --crf-surface: var(--bs-tertiary-bg, #f5f7fb);
+        --crf-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+    }
+
+        .crf-page .tone-ok {
+            --t: #1f9d6b;
+            --t-bg: rgba(31,157,107,.14);
+        }
+
+        .crf-page .tone-warn {
+            --t: #b57600;
+            --t-bg: rgba(255,176,32,.2);
+        }
+
+        .crf-page .tone-bad {
+            --t: #d6384a;
+            --t-bg: rgba(255,93,108,.16);
+        }
+
+        .crf-page .tone-info {
+            --t: #4a63d6;
+            --t-bg: rgba(59,91,219,.13);
+        }
+
+    [data-bs-theme="dark"] .crf-page .tone-ok {
+        --t: #3ddc97;
+    }
+
+    [data-bs-theme="dark"] .crf-page .tone-warn {
+        --t: #ffc247;
+    }
+
+    [data-bs-theme="dark"] .crf-page .tone-bad {
+        --t: #ff7b88;
+    }
+
+    [data-bs-theme="dark"] .crf-page .tone-info {
+        --t: #9db0ff;
+    }
+
+    /* ===== Hero ===== */
+    .crf-hero {
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 1.25rem;
+        padding: 1.5rem 1.75rem;
+        border-radius: .9rem;
+        color: #fff;
+        background: #451423; /* was var(--crf-ink) */
+    }
+
+        .crf-hero::after {
+            content: "";
+            position: absolute;
+            right: -60px;
+            top: -80px;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            border: 40px solid rgba(255,255,255,.05);
+            pointer-events: none;
+        }
+
+    .crf-hero-row {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .crf-hero-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        margin-bottom: .5rem;
+        padding: .25rem .7rem;
+        border-radius: 999px;
+        font-size: .82rem;
+        font-weight: 600;
+        background: rgba(255,255,255,.12);
+    }
+
+    .crf-hero h3 {
+        margin: 0;
+        color: #fff;
+        font-size: 1.6rem;
+        font-weight: 700;
+    }
+
+    .crf-hero p {
+        margin: .25rem 0 0;
+        color: rgba(255,255,255,.7);
+        font-size: .92rem;
+    }
+
+    .crf-back {
+        color: rgba(255,255,255,.85);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: .9rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.3);
+    }
+
+        .crf-back:hover {
+            background: rgba(255,255,255,.12);
+            color: #fff;
+        }
+
+    /* ===== Layout ===== */
+    .crf-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 1.25rem;
+        align-items: start;
+    }
+
+    .crf-aside {
+        position: sticky;
+        top: 90px;
+        display: grid;
+        gap: 1rem;
+    }
+
+    @@media (max-width: 991px) {
+        .crf-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .crf-aside {
+            position: static;
+        }
+    }
+
+    /* ===== Section cards ===== */
+    .crf-sec {
+        margin-bottom: 1.1rem;
+        border: 1px solid var(--crf-line);
+        border-radius: .9rem;
+        background: var(--crf-card);
+        animation: crf-rise .4s ease-out backwards;
+    }
+
+        .crf-sec:nth-of-type(1) {
+            animation-delay: .00s;
+        }
+
+        .crf-sec:nth-of-type(2) {
+            animation-delay: .06s;
+        }
+
+        .crf-sec:nth-of-type(3) {
+            animation-delay: .12s;
+        }
+
+        .crf-sec:nth-of-type(4) {
+            animation-delay: .18s;
+        }
+
+        .crf-sec:nth-of-type(5) {
+            animation-delay: .24s;
+        }
+
+    @@keyframes crf-rise {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+    }
+
+    .crf-sec-head {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--crf-line);
+    }
+
+    .crf-step {
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: .9rem;
+        color: var(--crf-accent);
+        background: rgba(59,91,219,.12);
+        transition: background .25s, color .25s;
+    }
+
+        .crf-step .crf-step-ck {
+            display: none;
+            font-size: 1.1rem;
+        }
+
+    .crf-sec.is-done .crf-step {
+        background: var(--crf-ok);
+        color: #fff;
+    }
+
+        .crf-sec.is-done .crf-step .crf-step-no {
+            display: none;
+        }
+
+        .crf-sec.is-done .crf-step .crf-step-ck {
+            display: block;
+        }
+
+    .crf-sec-title {
+        margin: 0;
+        font-size: 1.02rem;
+        font-weight: 700;
+    }
+
+    .crf-sec-sub {
+        margin: 0;
+        font-size: .83rem;
+        color: var(--crf-muted);
+    }
+
+    .crf-sec-body {
+        padding: 1.25rem;
+    }
+
+    /* ===== Requester strip ===== */
+    .crf-who {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .crf-avatar {
+        flex: 0 0 auto;
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #fff;
+        background: var(--crf-accent);
+    }
+
+    .crf-who-name {
+        font-weight: 700;
+        font-size: 1.05rem;
+    }
+
+    .crf-who-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem 1.25rem;
+        margin-top: .15rem;
+        font-size: .85rem;
+        color: var(--crf-muted);
+    }
+
+        .crf-who-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+    /* ===== Inputs ===== */
+    .crf-label {
+        font-weight: 600;
+        margin-bottom: .35rem;
+        display: block;
+    }
+
+    .crf-page .form-control {
+        border-radius: .6rem;
+    }
+
+        .crf-page .form-control:focus {
+            border-color: var(--crf-accent);
+            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        }
+
+    .crf-counter {
+        display: flex;
+        justify-content: space-between;
+        margin-top: .35rem;
+        font-size: .8rem;
+        color: var(--crf-muted);
+    }
+
+    /* ===== Selectable tiles (radios) ===== */
+    .crf-tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: .75rem;
+    }
+
+    .crf-opt {
+        position: relative;
+    }
+
+    .crf-radio {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .crf-tile {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: .75rem;
+        height: 100%;
+        margin: 0;
+        padding: .85rem .9rem;
+        cursor: pointer;
+        border: 1.5px solid var(--crf-line);
+        border-radius: .8rem;
+        background: var(--crf-card);
+        transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+
+        .crf-tile:hover {
+            transform: translateY(-2px);
+            border-color: var(--crf-accent);
+        }
+
+    .crf-tile-ico {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        border-radius: .6rem;
+        font-size: 1.25rem;
+        color: var(--t, var(--crf-accent));
+        background: var(--t-bg, rgba(59,91,219,.12));
+    }
+
+    .crf-tile-name {
+        display: block;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .crf-tile-desc {
+        display: block;
+        font-size: .78rem;
+        color: var(--crf-muted);
+        margin-top: .1rem;
+    }
+
+    .crf-check {
+        position: absolute;
+        top: .5rem;
+        right: .5rem;
+        width: 20px;
+        height: 20px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-size: .8rem;
+        color: #fff;
+        background: var(--t, var(--crf-accent));
+        opacity: 0;
+        transform: scale(.4);
+        transition: opacity .15s, transform .2s cubic-bezier(.3,1.6,.6,1);
+    }
+
+    .crf-radio:checked + .crf-tile {
+        border-color: var(--t, var(--crf-accent));
+        background: var(--t-bg, rgba(59,91,219,.08));
+        box-shadow: 0 0 0 3px rgba(59,91,219,.12);
+    }
+
+        .crf-radio:checked + .crf-tile .crf-check {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+    .crf-radio:focus-visible + .crf-tile {
+        outline: 2px solid var(--crf-accent);
+        outline-offset: 2px;
+    }
+
+    .crf-other {
+        margin-top: .85rem;
+    }
+
+    /* ===== Aside: completion ===== */
+    .crf-card {
+        border: 1px solid var(--crf-line);
+        border-radius: .9rem;
+        background: var(--crf-card);
+        padding: 1.1rem 1.15rem;
+    }
+
+        .crf-card h6 {
+            margin: 0 0 .75rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+        }
+
+            .crf-card h6 i {
+                color: var(--crf-accent);
+            }
+
+    .crf-progress {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .crf-ring-wrap {
+        position: relative;
+        flex: 0 0 auto;
+        width: 92px;
+        height: 92px;
+    }
+
+    .crf-ring {
+        width: 100%;
+        height: 100%;
+    }
+
+        .crf-ring circle {
+            fill: none;
+            stroke-width: 9;
+        }
+
+        .crf-ring .crf-ring-bg {
+            stroke: var(--crf-line);
+        }
+
+        .crf-ring .crf-ring-fg {
+            stroke: var(--crf-accent);
+            stroke-linecap: round;
+            stroke-dasharray: 276.46;
+            stroke-dashoffset: 276.46;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+            transition: stroke-dashoffset .6s cubic-bezier(.3,.9,.3,1), stroke .3s;
+        }
+
+    .crf-ring-wrap.is-full .crf-ring-fg {
+        stroke: var(--crf-ok);
+    }
+
+    .crf-ring-num {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 1.35rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+        .crf-ring-num small {
+            font-size: .7rem;
+            font-weight: 600;
+            color: var(--crf-muted);
+            margin-left: 1px;
+        }
+
+    .crf-progress-text strong {
+        display: block;
+        font-size: 1rem;
+    }
+
+    .crf-progress-text span {
+        font-size: .83rem;
+        color: var(--crf-muted);
+    }
+
+    .crf-checklist {
+        list-style: none;
+        margin: 1rem 0 0;
+        padding: 0;
+        display: grid;
+        gap: .45rem;
+    }
+
+        .crf-checklist li {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            font-size: .88rem;
+            color: var(--crf-muted);
+            transition: color .2s;
+        }
+
+            .crf-checklist li i {
+                width: 20px;
+                height: 20px;
+                display: grid;
+                place-items: center;
+                border-radius: 50%;
+                font-size: .8rem;
+                border: 1.5px solid var(--crf-line);
+                color: transparent;
+                transition: background .2s, border-color .2s, color .2s;
+            }
+
+            .crf-checklist li.is-done {
+                color: inherit;
+            }
+
+                .crf-checklist li.is-done i {
+                    background: var(--crf-ok);
+                    border-color: var(--crf-ok);
+                    color: #fff;
+                }
+
+    /* ===== Aside: live preview ===== */
+    .crf-pv-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+        margin-bottom: .6rem;
+    }
+
+    .crf-pv-num {
+        padding: .2rem .6rem;
+        border-radius: .5rem;
+        font-size: .8rem;
+        font-weight: 700;
+        color: var(--crf-muted);
+        border: 1px dashed var(--crf-line);
+    }
+
+    .crf-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .2rem .65rem;
+        border-radius: 999px;
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--t);
+        background: var(--t-bg);
+    }
+
+    .crf-pv-title {
+        font-weight: 700;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+
+        .crf-pv-title.is-empty {
+            color: var(--crf-muted);
+            font-weight: 500;
+            font-style: italic;
+        }
+
+    .crf-pv-type {
+        margin-top: .15rem;
+        font-size: .8rem;
+        color: var(--crf-muted);
+    }
+
+    .crf-pv-sum {
+        margin: .7rem 0 0;
+        font-size: .85rem;
+        line-height: 1.5;
+        color: var(--crf-muted);
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+    }
+
+    .crf-pv-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem 1rem;
+        margin-top: .8rem;
+        font-size: .82rem;
+    }
+
+        .crf-pv-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .crf-pv-meta i {
+            color: var(--crf-accent);
+        }
+
+    .crf-pv-foot {
+        margin-top: .9rem;
+        padding-top: .75rem;
+        border-top: 1px solid var(--crf-line);
+        font-size: .78rem;
+        color: var(--crf-muted);
+    }
+
+    /* ===== Action bar ===== */
+    .crf-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-top: 1.25rem;
+        padding: .85rem 1.1rem;
+        border: 1px solid var(--crf-line);
+        border-radius: .9rem;
+        background: var(--crf-card);
+        box-shadow: 0 -6px 18px rgba(23,33,59,.08);
+    }
+
+        .crf-actions .btn {
+            border-radius: 999px;
+            padding-left: 1.3rem;
+            padding-right: 1.3rem;
+            font-weight: 600;
+        }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .crf-sec {
+            animation: none;
+        }
+
+        .crf-tile, .crf-check, .crf-ring .crf-ring-fg {
+            transition: none;
+        }
+    }
+</style>
+
+<div class="crf-page">
+
+    <div class="crf-hero">
+        <div class="crf-hero-row">
+            <div>
+                <span class="crf-hero-chip">
+                    <i class="@(crId > 0 ? "ri-edit-2-line" : "ri-add-circle-line")"></i>@(crId > 0 ? $"Editing draft #{crId}" : "New request")
+                </span>
+                <h3>@(crId > 0 ? "Edit change request" : "Create a change request")</h3>
+                <p>Section 1: Change request and requirement. Fill in the sections below and watch your progress on the right.</p>
+            </div>
+            <a class="crf-back" href="@Url.Action("DraftTable")"><i class="ri-arrow-left-line"></i>Back to drafts</a>
+        </div>
+    </div>
+
+    <form id="crForm" action="@formAction" method="post">
+        @Html.AntiForgeryToken()
+
+        <!-- Holds 1 (Save) or 2 (Submit & Approve), set by JS right before submission -->
+        <input type="hidden" id="StatusID" name="StatusID" value="">
+        <!-- Present only when editing an existing draft; used client-side to know whether to fetch/populate the form via AJAX -->
+        <input type="hidden" id="CRID" name="CRID" value="@crId">
+
+        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+        <div class="crf-grid">
+
+            <!-- ============ Left: the form ============ -->
+            <div>
+
+                <!-- 1. Requester -->
+                <section class="crf-sec is-done" data-sec="1">
+                    <div class="crf-sec-head">
+                        <span class="crf-step"><span class="crf-step-no">1</span><i class="ri-check-line crf-step-ck"></i></span>
+                        <div>
+                            <h5 class="crf-sec-title">Requester</h5>
+                            <p class="crf-sec-sub">Filled in automatically from your profile</p>
+                        </div>
+                    </div>
+                    <div class="crf-sec-body">
+                        <div class="crf-who">
+                            <span class="crf-avatar">@Initials(username)</span>
+                            <div>
+                                <div class="crf-who-name">@(string.IsNullOrWhiteSpace(username) ? "Unknown user" : username)</div>
+                                <div class="crf-who-meta">
+                                    @if (!string.IsNullOrWhiteSpace(designation))
+                                    {
+                                        <span><i class="ri-briefcase-line"></i>@designation</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(department))
+                                    {
+                                        <span><i class="ri-building-line"></i>@department</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(email))
+                                    {
+                                        <span><i class="ri-mail-line"></i>@email</span>
+                                    }
+                                    <span><i class="ri-calendar-line"></i>@DateTime.Now.ToString("dd/MM/yyyy")</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. What is changing -->
+                <section class="crf-sec" data-sec="2">
+                    <div class="crf-sec-head">
+                        <span class="crf-step"><span class="crf-step-no">2</span><i class="ri-check-line crf-step-ck"></i></span>
+                        <div>
+                            <h5 class="crf-sec-title">What needs to change?</h5>
+                            <p class="crf-sec-sub">A clear title and the business reason behind it</p>
+                        </div>
+                    </div>
+                    <div class="crf-sec-body">
+                        <div class="mb-3">
+                            <label class="crf-label" for="ChangeTitle">Change request title</label>
+                            <input id="ChangeTitle" name="ChangeTitle" class="form-control" value="@Model?.ChangeTitle"
+                                   placeholder="e.g. Add Excel export to the invoice report">
+                            <span asp-validation-for="ChangeTitle" class="text-danger"></span>
+                        </div>
+                        <div>
+                            <label class="crf-label" for="Summary">Change summary &amp; business justification</label>
+                            <textarea id="Summary" name="Summary" class="form-control" rows="10"
+                                      placeholder="What should change, why it matters, and who it affects...">@Model?.Summary</textarea>
+                            <div class="crf-counter"><span>Be specific. It helps the approver decide faster.</span><span id="crfWords">0 words</span></div>
+                            <span asp-validation-for="Summary" class="text-danger"></span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. Change type -->
+                <section class="crf-sec" data-sec="3">
+                    <div class="crf-sec-head">
+                        <span class="crf-step"><span class="crf-step-no">3</span><i class="ri-check-line crf-step-ck"></i></span>
+                        <div>
+                            <h5 class="crf-sec-title">Type of change</h5>
+                            <p class="crf-sec-sub">Pick the one that fits best</p>
+                        </div>
+                    </div>
+                    <div class="crf-sec-body">
+                        <div class="crf-tiles">
+                            @foreach (var t in typeOptions)
+                            {
+                                <div class="crf-opt">
+                                    <input type="radio" id="@t.Id" name="ChangeTypeID" value="@t.Value" class="crf-radio" onchange="toggleOtherTextarea()">
+                                    <label class="crf-tile" for="@t.Id">
+                                        <span class="crf-tile-ico"><i class="@t.Icon"></i></span>
+                                        <span>
+                                            <span class="crf-tile-name">@t.Name</span>
+                                            <span class="crf-tile-desc">@t.Desc</span>
+                                        </span>
+                                        <span class="crf-check"><i class="ri-check-line"></i></span>
+                                    </label>
+                                </div>
+                            }
+                        </div>
+
+                        <div id="otherTextareaWrapper" class="crf-other" style="display: none;">
+                            <textarea id="otherTextarea" name="OtherChangeType" class="form-control" rows="2" placeholder="Please specify the type of change..."></textarea>
+                        </div>
+                        <span asp-validation-for="ChangeTypeID" class="text-danger"></span>
+                        <span asp-validation-for="OtherChangeType" class="text-danger"></span>
+                    </div>
+                </section>
+
+                <!-- 4. Priority -->
+                <section class="crf-sec" data-sec="4">
+                    <div class="crf-sec-head">
+                        <span class="crf-step"><span class="crf-step-no">4</span><i class="ri-check-line crf-step-ck"></i></span>
+                        <div>
+                            <h5 class="crf-sec-title">How urgent is it?</h5>
+                            <p class="crf-sec-sub">Emergency is only for work that blocks the business</p>
+                        </div>
+                    </div>
+                    <div class="crf-sec-body">
+                        <div class="crf-tiles">
+                            @foreach (var p in priorityOptions)
+                            {
+                                <div class="crf-opt">
+                                    <input type="radio" id="@p.Id" name="PriorityID" value="@p.Value" class="crf-radio" data-tone="@p.Tone">
+                                    <label class="crf-tile tone-@p.Tone" for="@p.Id">
+                                        <span class="crf-tile-ico"><i class="@p.Icon"></i></span>
+                                        <span>
+                                            <span class="crf-tile-name">@p.Name</span>
+                                            <span class="crf-tile-desc">@p.Desc</span>
+                                        </span>
+                                        <span class="crf-check"><i class="ri-check-line"></i></span>
+                                    </label>
+                                </div>
+                            }
+                        </div>
+                        <span asp-validation-for="PriorityID" class="text-danger d-block mt-2"></span>
+                    </div>
+                </section>
+
+                <!-- 5. Where -->
+                <section class="crf-sec" data-sec="5">
+                    <div class="crf-sec-head">
+                        <span class="crf-step"><span class="crf-step-no">5</span><i class="ri-check-line crf-step-ck"></i></span>
+                        <div>
+                            <h5 class="crf-sec-title">Where does it apply?</h5>
+                            <p class="crf-sec-sub">Choose the division first, then its module</p>
+                        </div>
+                    </div>
+                    <div class="crf-sec-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="crf-label" for="DivisionID">Division</label>
+                                <select id="DivisionID" name="DivisionID" class="form-control select2" data-toggle="select2">
+                                    <option value="" selected disabled hidden>Select Division</option>
+                                    @if (divisions != null)
+                                    {
+                                        foreach (var division in divisions)
+                                        {
+                                            <option value="@division.Id">@division.DivisionName</option>
+                                        }
+                                    }
+                                </select>
+                                <span asp-validation-for="DivisionID" class="text-danger"></span>
+                            </div>
+
+                            <div class="col-md-6" id="moduleCard" style="display: none;">
+                                <label class="crf-label" for="ModuleID">Module</label>
+                                <select id="ModuleID" name="ModuleID" class="form-control select2" data-toggle="select2">
+                                    <option value="" selected disabled hidden>Select Module</option>
+                                </select>
+                                <span asp-validation-for="ModuleID" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <!-- Hidden Approver Selector Source (the Submit popup copies these options) -->
+                        <div id="approver-wrapper" style="display:none;">
+                            <label for="ApproverID">Select User</label>
+                            <select id="ApproverID" name="ApproverID" class="form-control select2" data-toggle="select2">
+                                <option value="" selected disabled hidden>Select User</option>
+                                @if (users != null)
+                                {
+                                    foreach (var user in users)
+                                    {
+                                        <option value="@user.UserName">@user.FirstName @user.LastName - @user.UserName</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </section>
             </div>
 
-            <div class="card-body">
-                <form id="crForm" action="@formAction" method="post">
-                    @Html.AntiForgeryToken()
-
-                    <!-- Holds 1 (Save) or 2 (Submit & Approve), set by JS right before submission -->
-                    <input type="hidden" id="StatusID" name="StatusID" value="">
-                    <!-- Present only when editing an existing draft; used client-side to know whether to fetch/populate the form via AJAX -->
-                    <input type="hidden" id="CRID" name="CRID" value="@crId">
-
-                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
-
-                    <div class="row g-3">
-
-                        <!-- Left Column -->
-                        <div class="col-lg-6">
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Requester Name</label>
-                                    <input type="text" class="form-control" value="@username" disabled>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Designation</label>
-                                    <input type="text" class="form-control" value="@designation" disabled>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Department</label>
-                                    <input type="text" class="form-control" value="@department" disabled>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" class="form-control" value="@email" disabled>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Request Date</label>
-                                    <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
-                                </div>
-                                <div class="col-md-6">
-                                    <!-- Reserved for future field -->
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-12">
-                                    <label class="form-label" for="ChangeTitle">Change Request Title</label>
-                                    <input id="ChangeTitle" name="ChangeTitle" class="form-control" value="@Model?.ChangeTitle">
-                                    <span asp-validation-for="ChangeTitle" class="text-danger"></span>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label" for="Summary">Change Summary &amp; Business Justification</label>
-                                <textarea id="Summary" name="Summary" class="form-control" rows="18"
-                                          placeholder="Write the explanation here...">@Model?.Summary</textarea>
-                                <span asp-validation-for="Summary" class="text-danger"></span>
-                            </div>
+            <!-- ============ Right: progress + live preview ============ -->
+            <aside class="crf-aside">
+                <div class="crf-card">
+                    <h6><i class="ri-checkbox-circle-line"></i>Your progress</h6>
+                    <div class="crf-progress">
+                        <div class="crf-ring-wrap" id="crfRingWrap">
+                            <svg class="crf-ring" viewBox="0 0 100 100" aria-hidden="true">
+                                <circle class="crf-ring-bg" cx="50" cy="50" r="44"></circle>
+                                <circle class="crf-ring-fg" id="crfRingFg" cx="50" cy="50" r="44"></circle>
+                            </svg>
+                            <div class="crf-ring-num"><span><span id="crfPct">0</span><small>%</small></span></div>
                         </div>
-
-                        <!-- Right Column -->
-                        <div class="col-lg-6 d-flex flex-column">
-                            <!-- Change Type Card -->
-                            <div class="card border mb-3">
-                                <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Change Type</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio3" name="ChangeTypeID" value="1" class="form-check-input" onchange="toggleOtherTextarea()">
-                                        <label class="form-check-label" for="customRadio3">Bug Fix</label>
-                                    </div>
-                                    <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio4" name="ChangeTypeID" value="2" class="form-check-input" onchange="toggleOtherTextarea()">
-                                        <label class="form-check-label" for="customRadio4">Report Development</label>
-                                    </div>
-                                    <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio5" name="ChangeTypeID" value="3" class="form-check-input" onchange="toggleOtherTextarea()">
-                                        <label class="form-check-label" for="customRadio5">Enhancement</label>
-                                    </div>
-                                    <div class="form-check mb-2">
-                                        <input type="radio" id="customRadio6" name="ChangeTypeID" value="4" class="form-check-input" onchange="toggleOtherTextarea()">
-                                        <label class="form-check-label" for="customRadio6">Infrastructure Changes</label>
-                                    </div>
-                                    <div class="form-check mb-0">
-                                        <input type="radio" id="customRadio7" name="ChangeTypeID" value="5" class="form-check-input" onchange="toggleOtherTextarea()">
-                                        <label class="form-check-label" for="customRadio7">Other</label>
-                                    </div>
-
-                                    <div id="otherTextareaWrapper" class="mt-2" style="display: none;">
-                                        <textarea id="otherTextarea" name="OtherChangeType" class="form-control form-control-sm" rows="2" placeholder="Please specify..."></textarea>
-                                    </div>
-                                    <span asp-validation-for="ChangeTypeID" class="text-danger"></span>
-                                    <span asp-validation-for="OtherChangeType" class="text-danger"></span>
-                                </div>
-                            </div>
-
-                            <!-- Change Priority Card -->
-                            <div class="card border mb-3">
-                                <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Change Priority</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="form-check form-check-inline form-radio-success mb-0">
-                                        <input type="radio" id="customRadio8" name="PriorityID" value="1" class="form-check-input">
-                                        <label class="form-check-label" for="customRadio8">Low</label>
-                                    </div>
-                                    <div class="form-check form-check-inline form-radio-secondary mb-0">
-                                        <input type="radio" id="customRadio9" name="PriorityID" value="2" class="form-check-input">
-                                        <label class="form-check-label" for="customRadio9">Medium</label>
-                                    </div>
-                                    <div class="form-check form-check-inline form-radio-warning mb-0">
-                                        <input type="radio" id="customRadio10" name="PriorityID" value="3" class="form-check-input">
-                                        <label class="form-check-label" for="customRadio10">High</label>
-                                    </div>
-                                    <div class="form-check form-check-inline form-radio-danger mb-0">
-                                        <input type="radio" id="customRadio11" name="PriorityID" value="4" class="form-check-input">
-                                        <label class="form-check-label" for="customRadio11">Emergency</label>
-                                    </div>
-                                    <span asp-validation-for="PriorityID" class="text-danger d-block mt-1"></span>
-                                </div>
-                            </div>
-
-                            <!-- Division Card -->
-                            <div class="card border mb-3">
-                                <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Division</h6>
-                                </div>
-                                <div class="card-body">
-                                    <label class="form-label" for="DivisionID">Select Division</label>
-                                    <select id="DivisionID" name="DivisionID" class="form-control select2" data-toggle="select2">
-                                        <option value="" selected disabled hidden>Select Division</option>
-                                        @if (divisions != null)
-                                        {
-                                            foreach (var division in divisions)
-                                            {
-                                                <option value="@division.Id">@division.DivisionName</option>
-                                            }
-                                        }
-                                    </select>
-                                    <span asp-validation-for="DivisionID" class="text-danger"></span>
-                                </div>
-                            </div>
-
-                            <!-- Module Card -->
-                            <div class="card border mb-3" id="moduleCard" style="display: none;">
-                                <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Module</h6>
-                                </div>
-                                <div class="card-body">
-                                    <label class="form-label" for="ModuleID">Select Module</label>
-                                    <select id="ModuleID" name="ModuleID" class="form-control select2" data-toggle="select2">
-                                        <option value="" selected disabled hidden>Select Module</option>
-                                    </select>
-                                    <span asp-validation-for="ModuleID" class="text-danger"></span>
-                                </div>
-                            </div>
-
-                            <!-- Hidden Approver Selector Source -->
-                            <div class="card border mb-3" id="approver-wrapper" style="display:none;">
-                                <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Division Head Selection</h6>
-                                </div>
-                                <div class="card-body">
-                                    <label class="form-label" for="ApproverID">Select User</label>
-                                    <select id="ApproverID" name="ApproverID" class="form-control select2" data-toggle="select2">
-                                        <option value="" selected disabled hidden>Select User</option>
-                                        @if (users != null)
-                                        {
-                                            foreach (var user in users)
-                                            {
-                                                <option value="@user.UserName">@user.FirstName @user.LastName - @user.UserName</option>
-                                            }
-                                        }
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <button type="button" class="btn btn-outline-danger" onclick="window.location.href='@Url.Action("DraftTable")'">Cancel</button>
-                        <div class="d-flex gap-2">
-                            <button type="button" id="btn-save" class="btn btn-danger" data-status="1">Save</button>
-                            <button type="button" id="btn-submit" class="btn btn-primary" data-status="2">Submit</button>
+                        <div class="crf-progress-text">
+                            <strong id="crfHeadline">Let's get started</strong>
+                            <span id="crfSubline">0 of 6 steps done</span>
                         </div>
                     </div>
-                </form>
-            </div> <!-- end card-body -->
-        </div> <!-- end card -->
-    </div><!-- end col -->
-</div><!-- end row -->
+                    <ul class="crf-checklist" id="crfChecklist">
+                        <li data-key="title"><i class="ri-check-line"></i>Add a title</li>
+                        <li data-key="summary"><i class="ri-check-line"></i>Explain the change</li>
+                        <li data-key="type"><i class="ri-check-line"></i>Choose the type</li>
+                        <li data-key="priority"><i class="ri-check-line"></i>Set the priority</li>
+                        <li data-key="division"><i class="ri-check-line"></i>Select the division</li>
+                        <li data-key="module"><i class="ri-check-line"></i>Select the module</li>
+                    </ul>
+                </div>
+
+                <div class="crf-card">
+                    <h6><i class="ri-eye-line"></i>Live preview</h6>
+                    <div class="crf-pv-top">
+                        <span class="crf-pv-num">@(crId > 0 ? $"Draft #{crId}" : "WAITING")</span>
+                        <span class="crf-pill" id="pvPrio" style="display:none;"><i class="ri-flag-2-line"></i><span id="pvPrioText"></span></span>
+                    </div>
+                    <div class="crf-pv-title is-empty" id="pvTitle">Untitled change request</div>
+                    <div class="crf-pv-type" id="pvType"></div>
+                    <p class="crf-pv-sum" id="pvSummary">Your summary will appear here as you type.</p>
+                    <div class="crf-pv-meta">
+                        <span id="pvDiv" style="display:none;"><i class="ri-building-line"></i><span></span></span>
+                        <span id="pvMod" style="display:none;"><i class="ri-apps-line"></i><span></span></span>
+                    </div>
+                    <div class="crf-pv-foot">Requested by @(string.IsNullOrWhiteSpace(username) ? "you" : username) on @DateTime.Now.ToString("dd/MM/yyyy")</div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Actions -->
+        <div class="crf-actions">
+            <button type="button" class="btn btn-outline-danger" onclick="window.location.href='@Url.Action("DraftTable")'">Cancel</button>
+            <div class="d-flex gap-2">
+                <button type="button" id="btn-save" class="btn btn-danger" data-status="1"><i class="ri-save-3-line me-1"></i>Save</button>
+                <button type="button" id="btn-submit" class="btn btn-primary" data-status="2"><i class="ri-send-plane-line me-1"></i>Submit</button>
+            </div>
+        </div>
+    </form>
+</div>
+
 @section Scripts {
     <script>
         function toggleOtherTextarea() {
@@ -244,23 +985,110 @@
             var $moduleCard = $('#moduleCard');
             var $module = $('#ModuleID');
 
+            // ===== Live preview + progress ring =====
+            var RING_LEN = 276.46;
+
+            function refreshPreview() {
+                var title = ($('#ChangeTitle').val() || '').trim();
+                var summary = ($('#Summary').val() || '').trim();
+                var otherText = ($('#otherTextarea').val() || '').trim();
+
+                var $type = $('input[name="ChangeTypeID"]:checked');
+                var typeLabel = $type.length ? $('label[for="' + $type.attr('id') + '"] .crf-tile-name').text() : '';
+                var typeDone = $type.length > 0 && ($type.val() !== '5' || otherText.length > 0);
+                if ($type.val() === '5' && otherText) { typeLabel = 'Other: ' + otherText; }
+
+                var $prio = $('input[name="PriorityID"]:checked');
+                var prioLabel = $prio.length ? $('label[for="' + $prio.attr('id') + '"] .crf-tile-name').text() : '';
+                var prioTone = $prio.length ? $prio.data('tone') : '';
+
+                var divText = $division.val() ? $.trim($division.find('option:selected').text()) : '';
+                var modText = $module.val() ? $.trim($module.find('option:selected').text()) : '';
+
+                var moduleOptions = $module.find('option').filter(function () { return this.value !== ''; }).length;
+                var moduleDone = !!$module.val() || ($moduleCard.is(':visible') && moduleOptions === 0);
+
+                // Preview card
+                $('#pvTitle').text(title || 'Untitled change request').toggleClass('is-empty', !title);
+                $('#pvType').text(typeLabel);
+                $('#pvSummary').text(summary || 'Your summary will appear here as you type.');
+
+                if (prioLabel) {
+                    $('#pvPrioText').text(prioLabel);
+                    $('#pvPrio').attr('class', 'crf-pill tone-' + prioTone).show();
+                } else {
+                    $('#pvPrio').hide();
+                }
+                $('#pvDiv').toggle(!!divText).find('span').text(divText);
+                $('#pvMod').toggle(!!modText).find('span').text(modText);
+
+                // Word counter
+                var words = summary ? summary.split(/\s+/).length : 0;
+                $('#crfWords').text(words + (words === 1 ? ' word' : ' words'));
+
+                // Checklist
+                var state = {
+                    title: title.length > 0,
+                    summary: summary.length > 0,
+                    type: typeDone,
+                    priority: $prio.length > 0,
+                    division: !!$division.val(),
+                    module: moduleDone && !!$division.val()
+                };
+
+                var done = 0;
+                $('#crfChecklist li').each(function () {
+                    var ok = !!state[$(this).data('key')];
+                    $(this).toggleClass('is-done', ok);
+                    if (ok) { done++; }
+                });
+
+                var total = 6;
+                var pct = Math.round(done / total * 100);
+                $('#crfPct').text(pct);
+                $('#crfRingFg').css('stroke-dashoffset', RING_LEN * (1 - done / total));
+                $('#crfRingWrap').toggleClass('is-full', done === total);
+                $('#crfSubline').text(done + ' of ' + total + ' steps done');
+                $('#crfHeadline').text(
+                    done === total ? 'Ready to submit' :
+                    done === 0 ? "Let's get started" :
+                    done >= 4 ? 'Almost there' : 'Looking good');
+
+                // Section badges turn into check marks
+                $('[data-sec="2"]').toggleClass('is-done', state.title && state.summary);
+                $('[data-sec="3"]').toggleClass('is-done', state.type);
+                $('[data-sec="4"]').toggleClass('is-done', state.priority);
+                $('[data-sec="5"]').toggleClass('is-done', state.division && state.module);
+            }
+
+            $('#crForm').on('input change', refreshPreview);
+
+            // ===== Modules (cascading from Division) =====
+            var moduleRequestSeq = 0;
+
             function loadModulesForDivision(divisionId, preselectId) {
+                var seq = ++moduleRequestSeq;
+
                 if (!divisionId) {
                     $module.empty().append('<option value="" selected disabled hidden>Select Module</option>').trigger('change');
                     $moduleCard.hide();
+                    refreshPreview();
                     return;
                 }
 
-                fetch('@Url.Action("GetModulesByDivision", "CRManagement")' + '?divisionId=' + divisionId)
+                fetch('@Url.Action("GetModulesByDivision", "CRManagement")' + '?divisionId=' + encodeURIComponent(divisionId))
                     .then(function (response) {
                         if (!response.ok) { throw new Error('Failed to load modules.'); }
                         return response.json();
                     })
                     .then(function (modules) {
+                        // Ignore answers that arrive after a newer request was started
+                        if (seq !== moduleRequestSeq) { return; }
+
                         $module.empty();
                         $module.append('<option value="" selected disabled hidden>Select Module</option>');
                         modules.forEach(function (m) {
-                            $module.append('<option value="' + m.id + '">' + m.name + '</option>');
+                            $module.append($('<option>').val(m.id).text(m.name));
                         });
 
                         $moduleCard.show();
@@ -270,6 +1098,7 @@
                         } else {
                             $module.trigger('change');
                         }
+                        refreshPreview();
                     })
                     .catch(function (err) {
                         Swal.fire({
@@ -521,10 +1350,17 @@
                     $('#ApproverID').val(data.approverID).trigger('change');
                 }
                 if (data.divisionID) {
-                    $division.val(String(data.divisionID)).trigger('change');
+                    // Update the select2 display only. A plain 'change' here would start a second,
+                    // competing module request in addition to the one below.
+                    $division.val(String(data.divisionID)).trigger('change.select2');
                     loadModulesForDivision(data.divisionID, data.moduleID);
                 }
+
+                refreshPreview();
             }
+
+            // First paint of the preview / progress ring
+            refreshPreview();
         });
     </script>
 }
