@@ -1,7 +1,7 @@
 ﻿@using VF_CR_Management_System.Data.Models
 @model VF_CR_Management_System.Data.Models.ChangeRequest
 @{
-    ViewData["Title"] = "CR Assesment - Testing";
+    ViewData["Title"] = "CR Assessment - Testing";
 }
 @{
     var username = Context.Session.GetString("UserName");
@@ -20,9 +20,10 @@
     // ===== Attachments grouped by type =====
     var rawAttachments = ((IEnumerable<object>?)ViewBag.Attachments)?.ToList() ?? new List<object>();
 
-    // Reads AttachmentTypeName from whatever object type the controller put in ViewBag.Attachments
-    string AttachmentType(object a) =>
-        (a.GetType().GetProperty("AttachmentTypeName")?.GetValue(a) as string ?? string.Empty).Trim();
+    // Reads a property from whatever object type the controller put in ViewBag.Attachments
+    object? Prop(object a, string name) => a.GetType().GetProperty(name)?.GetValue(a);
+
+    string AttachmentType(object a) => ((Prop(a, "AttachmentTypeName") as string) ?? string.Empty).Trim();
 
     var srsFiles = rawAttachments
         .Where(a => string.Equals(AttachmentType(a), "SRS", StringComparison.OrdinalIgnoreCase))
@@ -55,6 +56,7 @@
         .ToList();
 
     var hasAnyAttachments = rawAttachments.Any();
+    var requestFileCount = srsFiles.Count + baFiles.Count + vendorFiles.Count + otherFiles.Count;
 
     // ===== User display helpers (full name - UserName), same logic as the details popup =====
     string Normalize(string? u)
@@ -131,349 +133,1566 @@
         Model.TesterUserName,
         Model.TestingApproverUserName
     }.Any(u => !string.IsNullOrWhiteSpace(u));
-}
 
-@{
-    // One "label: value" cell in the Assigned Users section. Nothing is rendered when the value is empty.
-    void AssignedUserField(string label, string? value)
+    // ===== Visual helpers (purely cosmetic, no logic changes) =====
+    string PriorityTone(string? p)
     {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            <div class="col-md-6">
-                <label class="fw-bold text-dark d-block mb-1">@label:</label>
-                <span>@value</span>
-            </div>
-        }
+        var v = (p ?? string.Empty).Trim().ToLowerInvariant();
+        if (v.Contains("emergency") || v.Contains("urgent") || v.Contains("critical")) return "bad";
+        if (v.Contains("high")) return "warn";
+        if (v.Contains("medium")) return "info";
+        if (v.Contains("low")) return "ok";
+        return "neutral";
     }
 
-    // Renders one attachment group (heading + file list). Nothing is rendered when the group is empty.
-    void RenderAttachmentGroup(string title, List<object> items)
+    string StatusTone(string? s)
+    {
+        var v = (s ?? string.Empty).Trim().ToLowerInvariant();
+        if (v.Contains("pass") || v.Contains("approved") || v.Contains("complete")) return "ok";
+        if (v.Contains("fail") || v.Contains("reject") || v.Contains("return")) return "bad";
+        if (v.Contains("test") || v.Contains("progress") || v.Contains("pending")) return "info";
+        return "neutral";
+    }
+
+    string Pretty(string? s) =>
+        string.IsNullOrWhiteSpace(s)
+            ? string.Empty
+            : System.Text.RegularExpressions.Regex.Replace(s.Trim(), "(?<=[a-z])(?=[A-Z])", " ");
+
+    string Initials(string? displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) return "?";
+        var namePart = displayName.Split(" - ")[0].Trim();
+        var parts = namePart.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1) return parts[0].Substring(0, Math.Min(2, parts[0].Length)).ToUpper();
+        return (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpper();
+    }
+
+    // (icon class, colour kind) for a file name
+    (string Icon, string Kind) FileIcon(string fileName)
+    {
+        var ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
+        return ext switch
+        {
+            ".pdf" => ("ri-file-pdf-2-line", "pdf"),
+            ".doc" or ".docx" => ("ri-file-word-2-line", "word"),
+            ".xls" or ".xlsx" or ".csv" => ("ri-file-excel-2-line", "excel"),
+            ".zip" => ("ri-file-zip-line", "zip"),
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" => ("ri-image-2-line", "image"),
+            _ => ("ri-file-3-line", "default")
+        };
+    }
+
+    // Due date text + tone
+    var dueText = string.Empty;
+    var dueTone = "neutral";
+    if (Model.DueDate.HasValue)
+    {
+        var daysLeft = (Model.DueDate.Value.Date - DateTime.Today).Days;
+        if (daysLeft < 0) { dueText = $"Overdue by {-daysLeft} day{(-daysLeft == 1 ? "" : "s")}"; dueTone = "bad"; }
+        else if (daysLeft == 0) { dueText = "Due today"; dueTone = "warn"; }
+        else { dueText = $"Due in {daysLeft} day{(daysLeft == 1 ? "" : "s")}"; dueTone = daysLeft <= 3 ? "warn" : "ok"; }
+    }
+
+    var hasUat = !string.IsNullOrWhiteSpace(uatLink);
+    var statusLabel = Pretty(Model.Status);
+
+    // ===== Markup helpers =====
+    void Fact(string icon, string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) { return; }
+        <div class="crt-fact">
+            <span class="crt-fact-ico"><i class="@icon"></i></span>
+            <div class="crt-fact-text">
+                <div class="crt-fact-label">@label</div>
+                <div class="crt-fact-value">@value</div>
+            </div>
+        </div>
+    }
+
+    void TextBlock(string icon, string title, string? value, bool highlight = false)
+    {
+        if (string.IsNullOrWhiteSpace(value)) { return; }
+        <section class="crt-block @(highlight ? "crt-block-hl" : "")">
+            <h6 class="crt-block-title"><i class="@icon"></i>@title</h6>
+            <p class="crt-block-text">@value</p>
+        </section>
+    }
+
+    // One person card in the People section. Nothing is rendered when the value is empty.
+    void Person(string role, string icon, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) { return; }
+        var sep = value.LastIndexOf(" - ", StringComparison.Ordinal);
+        var pName = sep > 0 ? value.Substring(0, sep).Trim() : value;
+        var pId = sep > 0 ? value.Substring(sep + 3).Trim() : string.Empty;
+        var hue = Math.Abs(pName.Sum(c => (int)c)) % 6;
+
+        <div class="crt-person">
+            <span class="crt-avatar crt-hue-@hue">@Initials(value)</span>
+            <div class="crt-person-text">
+                <div class="crt-person-name">@pName</div>
+                <div class="crt-person-role"><i class="@icon"></i>@role</div>
+            </div>
+            @if (pId.Length > 0)
+            {
+                <span class="crt-person-id">@pId</span>
+            }
+        </div>
+    }
+
+    // Renders one attachment group (heading + file cards). Nothing is rendered when the group is empty.
+    void RenderAttachmentGroup(string title, string groupIcon, List<object> items)
     {
         if (items == null || items.Count == 0)
         {
             return;
         }
 
-        <div class="mb-3">
-            <label class="fw-bold text-dark d-block mb-1">@title:</label>
-            <ul class="list-unstyled mb-0">
+        <div class="crt-file-group">
+            <h6 class="crt-block-title"><i class="@groupIcon"></i>@title <span class="crt-count">@items.Count</span></h6>
+            <div class="crt-file-list">
                 @foreach (var item in items)
                 {
-                    dynamic attachment = item;
-                    int attachmentId = attachment.AttachmentID;
-                    string fileName = attachment.FileName;
+                    int attachmentId = Convert.ToInt32(Prop(item, "AttachmentID") ?? 0);
+                    string fileName = (Prop(item, "FileName") as string) ?? string.Empty;
                     string ext = System.IO.Path.GetExtension(fileName)?.ToLower() ?? "";
                     bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(ext);
                     bool isPdf = ext == ".pdf";
                     string previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachmentId });
                     string downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachmentId });
+                    var fi = FileIcon(fileName);
+                    var actIcon = isImage ? "ri-eye-line" : isPdf ? "ri-external-link-line" : "ri-download-2-line";
 
-                    <li class="mb-1">
-                        @if (isImage)
-                        {
-                            <a href="javascript:void(0);" class="attachment-link"
-                               data-type="image"
-                               data-preview-url="@previewUrl"
-                               data-download-url="@downloadUrl"
-                               data-name="@fileName">
-                                <i class="ri-image-line me-1"></i>@fileName
-                            </a>
-                        }
-                        else if (isPdf)
-                        {
-                            <a href="@previewUrl" target="_blank" rel="noopener">
-                                <i class="ri-file-pdf-line me-1"></i>@fileName
-                            </a>
-                        }
-                        else
-                        {
-                            <a href="@downloadUrl" download>
-                                <i class="ri-download-2-line me-1"></i>@fileName
-                            </a>
-                        }
-                    </li>
+                    var uploadedBy = Prop(item, "UploadedBy") as string;
+                    var uploadedDate = Prop(item, "UploadedDate") is DateTime ud && ud != default ? ud.ToString("yyyy/MM/dd") : string.Empty;
+                    var sub = string.Join(" · ", new[] { uploadedBy, uploadedDate }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+                    if (isImage)
+                    {
+                        <a href="javascript:void(0);" class="crt-file attachment-link"
+                           data-type="image"
+                           data-preview-url="@previewUrl"
+                           data-download-url="@downloadUrl"
+                           data-name="@fileName">
+                            <span class="crt-file-ico crt-file-@fi.Kind"><i class="@fi.Icon"></i></span>
+                            <span class="crt-file-main">
+                                <span class="crt-file-name">@fileName</span>
+                                @if (sub.Length > 0)
+                                {
+                                    <span class="crt-file-sub">@sub</span>
+                                }
+                            </span>
+                            <i class="crt-file-act @actIcon"></i>
+                        </a>
+                    }
+                    else if (isPdf)
+                    {
+                        <a href="@previewUrl" target="_blank" rel="noopener" class="crt-file">
+                            <span class="crt-file-ico crt-file-@fi.Kind"><i class="@fi.Icon"></i></span>
+                            <span class="crt-file-main">
+                                <span class="crt-file-name">@fileName</span>
+                                @if (sub.Length > 0)
+                                {
+                                    <span class="crt-file-sub">@sub</span>
+                                }
+                            </span>
+                            <i class="crt-file-act @actIcon"></i>
+                        </a>
+                    }
+                    else
+                    {
+                        <a href="@downloadUrl" download class="crt-file">
+                            <span class="crt-file-ico crt-file-@fi.Kind"><i class="@fi.Icon"></i></span>
+                            <span class="crt-file-main">
+                                <span class="crt-file-name">@fileName</span>
+                                @if (sub.Length > 0)
+                                {
+                                    <span class="crt-file-sub">@sub</span>
+                                }
+                            </span>
+                            <i class="crt-file-act @actIcon"></i>
+                        </a>
+                    }
                 }
-            </ul>
+            </div>
         </div>
     }
 }
 
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header border-bottom border-dashed d-flex align-items-center">
-                <h4 class="header-title mb-0">Section 3 : Testing - @Model.CRNumber</h4>
-            </div>
+<style>
+    .crt-page {
+        --crt-ink: #451423;
+        --crt-accent: #3b5bdb;
+        --crt-ok: #1f9d6b;
+        --crt-line: var(--bs-border-color, #e3e6ec);
+        --crt-muted: var(--bs-secondary-color, #6b7385);
+        --crt-surface: var(--bs-tertiary-bg, #f5f7fb);
+        --crt-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+    }
 
-            <div class="card-body">
+        .crt-page .tone-ok {
+            --t: #1f9d6b;
+            --t-bg: rgba(31,157,107,.14);
+        }
 
-                <form id="testingForm" enctype="multipart/form-data">
-                    @Html.AntiForgeryToken()
+        .crt-page .tone-warn {
+            --t: #b57600;
+            --t-bg: rgba(255,176,32,.2);
+        }
 
-                    <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
+        .crt-page .tone-bad {
+            --t: #d6384a;
+            --t-bg: rgba(255,93,108,.16);
+        }
 
-                    <!-- Change Request details, bound directly from the model (same as Security Assessment view) -->
-                    <div class="card border mb-4">
-                        <div class="card-header bg-light-subtle">
-                            <h6 class="fs-15 mb-0">Change Request Details</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">CR Number:</label>
-                                    <span>@Model.CRNumber</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Title:</label>
-                                    <span>@Model.ChangeTitle</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
-                                    <span>@Model.ChangeType</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Priority:</label>
-                                    <span>@Model.Priority</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Division:</label>
-                                    <span>@(string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division)</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Module:</label>
-                                    <span>@Model.Module</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Status:</label>
-                                    <span>@Model.Status</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
-                                    <span>@Model.RequestedBy</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
-                                    <span>@Model.RequestedDate.ToString("yyyy/MM/dd")</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Approver:</label>
-                                    <span>@Model.ApproverUserName</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Estimated Due Date:</label>
-                                    <span>@(Model.DueDate.HasValue? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—")</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
-                                    <span>@Model.Summary</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Fixed Assets:</label>
-                                    <span>@Model.FixedAssets</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Activities &amp; Tasks:</label>
-                                    <span>@Model.ActivitiesTasks</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Proposal Number of Vendor:</label>
-                                    <span>@Model.ProposalNumber</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Risk Assessment:</label>
-                                    <span>@Model.RiskAssessment</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        .crt-page .tone-info {
+            --t: #4a63d6;
+            --t-bg: rgba(59,91,219,.13);
+        }
 
-                    <!-- Attachments, grouped by type -->
-                    <div class="card border mb-4">
-                        <div class="card-header bg-light-subtle">
-                            <h6 class="fs-15 mb-0">Attachments</h6>
-                        </div>
-                        <div class="card-body">
-                            @if (hasAnyAttachments)
-                            {
-                                RenderAttachmentGroup("SRS Document", srsFiles);
-                                RenderAttachmentGroup("BA Document", baFiles);
-                                RenderAttachmentGroup("Vendor Attachments", vendorFiles);
-                                RenderAttachmentGroup("Other Attachments", otherFiles);
-                            }
-                            else
-                            {
-                                <p class="text-muted mb-0">No attachments found.</p>
-                            }
-                        </div>
-                    </div>
+        .crt-page .tone-neutral {
+            --t: var(--crt-muted);
+            --t-bg: var(--crt-surface);
+        }
 
-                    <!-- Assigned Users -->
-                    @if (hasAssignedUsers)
+    [data-bs-theme="dark"] .crt-page .tone-ok {
+        --t: #3ddc97;
+    }
+
+    [data-bs-theme="dark"] .crt-page .tone-warn {
+        --t: #ffc247;
+    }
+
+    [data-bs-theme="dark"] .crt-page .tone-bad {
+        --t: #ff7b88;
+    }
+
+    [data-bs-theme="dark"] .crt-page .tone-info {
+        --t: #9db0ff;
+    }
+
+    /* ===== Hero ===== */
+    .crt-hero {
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 1.25rem;
+        padding: 1.5rem 1.75rem;
+        border-radius: .9rem;
+        color: #fff;
+        background: var(--crt-ink);
+    }
+
+        .crt-hero::after {
+            content: "";
+            position: absolute;
+            right: -60px;
+            top: -80px;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            border: 40px solid rgba(255,255,255,.05);
+            pointer-events: none;
+        }
+
+    .crt-hero-row {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .crt-hero-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin-bottom: .55rem;
+    }
+
+    .crt-hero-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .25rem .7rem;
+        border-radius: 999px;
+        font-size: .82rem;
+        font-weight: 600;
+        background: rgba(255,255,255,.12);
+    }
+
+    .crt-hero h3 {
+        margin: 0;
+        color: #fff;
+        font-size: 1.6rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .crt-hero p {
+        margin: .25rem 0 0;
+        color: rgba(255,255,255,.75);
+        font-size: .95rem;
+        max-width: 70ch;
+    }
+
+    .crt-hero-side {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: .6rem;
+    }
+
+    .crt-hero-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        justify-content: flex-end;
+    }
+
+    .crt-hero .crt-pill {
+        background: rgba(255,255,255,.14);
+        color: #fff;
+    }
+
+    .crt-back {
+        color: rgba(255,255,255,.85);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: .9rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.3);
+    }
+
+        .crt-back:hover {
+            background: rgba(255,255,255,.12);
+            color: #fff;
+        }
+
+    /* ===== Layout ===== */
+    .crt-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 1.25rem;
+        align-items: start;
+    }
+
+    .crt-aside {
+        position: sticky;
+        top: 90px;
+        display: grid;
+        gap: 1rem;
+    }
+
+    @@media (max-width: 991px) {
+        .crt-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .crt-aside {
+            position: static;
+        }
+    }
+
+    /* ===== Section cards ===== */
+    .crt-sec {
+        margin-bottom: 1.1rem;
+        border: 1px solid var(--crt-line);
+        border-radius: .9rem;
+        background: var(--crt-card);
+        animation: crt-rise .4s ease-out backwards;
+    }
+
+        .crt-sec:nth-of-type(1) {
+            animation-delay: .00s;
+        }
+
+        .crt-sec:nth-of-type(2) {
+            animation-delay: .06s;
+        }
+
+        .crt-sec:nth-of-type(3) {
+            animation-delay: .12s;
+        }
+
+        .crt-sec:nth-of-type(4) {
+            animation-delay: .18s;
+        }
+
+        .crt-sec:nth-of-type(5) {
+            animation-delay: .24s;
+        }
+
+    @@keyframes crt-rise {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+    }
+
+    .crt-sec-head {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--crt-line);
+    }
+
+    .crt-step {
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: .9rem;
+        color: var(--crt-accent);
+        background: rgba(59,91,219,.12);
+        transition: background .25s, color .25s;
+    }
+
+        .crt-step .crt-step-ck {
+            display: none;
+            font-size: 1.1rem;
+        }
+
+    .crt-sec.is-done .crt-step {
+        background: var(--crt-ok);
+        color: #fff;
+    }
+
+        .crt-sec.is-done .crt-step .crt-step-no {
+            display: none;
+        }
+
+        .crt-sec.is-done .crt-step .crt-step-ck {
+            display: block;
+        }
+
+    .crt-sec-title {
+        margin: 0;
+        font-size: 1.02rem;
+        font-weight: 700;
+    }
+
+    .crt-sec-sub {
+        margin: 0;
+        font-size: .83rem;
+        color: var(--crt-muted);
+    }
+
+    .crt-sec-body {
+        padding: 1.25rem;
+    }
+
+    /* ===== Facts and text blocks ===== */
+    .crt-facts {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: .75rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .crt-fact {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        padding: .7rem .85rem;
+        border: 1px solid var(--crt-line);
+        border-radius: .6rem;
+    }
+
+    .crt-fact-ico {
+        flex: 0 0 auto;
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border-radius: .5rem;
+        font-size: 1.1rem;
+        color: var(--crt-accent);
+        background: rgba(59,91,219,.1);
+    }
+
+    .crt-fact-label {
+        font-size: .78rem;
+        color: var(--crt-muted);
+    }
+
+    .crt-fact-value {
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    .crt-block {
+        padding: 1rem 0;
+        border-top: 1px solid var(--crt-line);
+    }
+
+        .crt-block:first-of-type {
+            border-top: 0;
+            padding-top: 0;
+        }
+
+    .crt-block-hl {
+        padding: 1rem 1.1rem;
+        border: 0;
+        border-left: 4px solid var(--crt-accent);
+        border-radius: .4rem;
+        background: var(--crt-surface);
+        margin-bottom: .75rem;
+    }
+
+    .crt-block-title {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        margin: 0 0 .4rem;
+        font-weight: 700;
+        font-size: .95rem;
+    }
+
+        .crt-block-title i {
+            color: var(--crt-accent);
+            font-size: 1.1rem;
+        }
+
+    .crt-block-text {
+        margin: 0;
+        max-width: 78ch;
+        line-height: 1.6;
+        white-space: pre-line;
+        word-break: break-word;
+    }
+
+    .crt-count {
+        min-width: 1.35rem;
+        padding: .05rem .4rem;
+        border-radius: 999px;
+        font-size: .72rem;
+        font-weight: 700;
+        text-align: center;
+        background: var(--crt-surface);
+        color: var(--crt-muted);
+    }
+
+    .crt-empty {
+        text-align: center;
+        padding: 1.5rem 1rem;
+        color: var(--crt-muted);
+    }
+
+        .crt-empty i {
+            font-size: 2rem;
+            display: block;
+            margin-bottom: .35rem;
+            opacity: .6;
+        }
+
+    /* ===== File cards ===== */
+    .crt-file-group + .crt-file-group {
+        margin-top: 1.25rem;
+    }
+
+    .crt-file-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: .6rem;
+    }
+
+    .crt-file {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        padding: .65rem .8rem;
+        border: 1px solid var(--crt-line);
+        border-radius: .6rem;
+        color: inherit;
+        text-decoration: none;
+        transition: border-color .15s, transform .15s;
+    }
+
+        .crt-file:hover {
+            border-color: var(--crt-accent);
+            transform: translateY(-1px);
+            color: inherit;
+        }
+
+    .crt-file-ico {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        border-radius: .5rem;
+        font-size: 1.3rem;
+    }
+
+    .crt-file-pdf {
+        background: rgba(255,93,108,.14);
+        color: #d6384a;
+    }
+
+    .crt-file-word {
+        background: rgba(43,87,154,.14);
+        color: #2b579a;
+    }
+
+    .crt-file-excel {
+        background: rgba(29,111,66,.14);
+        color: #1d6f42;
+    }
+
+    .crt-file-zip {
+        background: rgba(176,137,0,.16);
+        color: #b08900;
+    }
+
+    .crt-file-image {
+        background: rgba(61,184,220,.16);
+        color: #1a8aa8;
+    }
+
+    .crt-file-default {
+        background: rgba(59,91,219,.12);
+        color: var(--crt-accent);
+    }
+
+    .crt-file-main {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .crt-file-name {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .crt-file-sub {
+        font-size: .78rem;
+        color: var(--crt-muted);
+    }
+
+    .crt-file-act {
+        color: var(--crt-muted);
+        font-size: 1.15rem;
+    }
+
+    /* ===== People ===== */
+    .crt-people {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: .75rem;
+    }
+
+    .crt-person {
+        display: flex;
+        align-items: center;
+        gap: .8rem;
+        padding: .7rem .85rem;
+        border: 1px solid var(--crt-line);
+        border-radius: .6rem;
+    }
+
+    .crt-avatar {
+        flex: 0 0 auto;
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-weight: 700;
+        color: #fff;
+        background: var(--crt-accent);
+    }
+
+    .crt-hue-0 {
+        background: #3b5bdb;
+    }
+
+    .crt-hue-1 {
+        background: #0ca678;
+    }
+
+    .crt-hue-2 {
+        background: #d9480f;
+    }
+
+    .crt-hue-3 {
+        background: #7048e8;
+    }
+
+    .crt-hue-4 {
+        background: #1c7ed6;
+    }
+
+    .crt-hue-5 {
+        background: #c2255c;
+    }
+
+    .crt-person-text {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .crt-person-name {
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    .crt-person-role {
+        font-size: .8rem;
+        color: var(--crt-muted);
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+    }
+
+    .crt-person-id {
+        font-size: .78rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--crt-muted);
+    }
+
+    /* ===== UAT link ===== */
+    .crt-uat {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        flex-wrap: wrap;
+        padding: .9rem 1rem;
+        border: 1.5px dashed rgba(59,91,219,.45);
+        border-radius: .8rem;
+        background: rgba(59,91,219,.06);
+    }
+
+    .crt-uat-ico {
+        flex: 0 0 auto;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: .7rem;
+        font-size: 1.35rem;
+        color: #fff;
+        background: var(--crt-accent);
+    }
+
+    .crt-uat-url {
+        flex: 1 1 220px;
+        min-width: 0;
+    }
+
+        .crt-uat-url .form-control {
+            font-variant-numeric: tabular-nums;
+        }
+
+    .crt-uat-actions {
+        display: flex;
+        gap: .5rem;
+    }
+
+    .crt-pillbtn {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .45rem 1rem;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: .88rem;
+        border: 1px solid var(--crt-accent);
+        color: var(--crt-accent);
+        background: transparent;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background .15s, color .15s;
+    }
+
+        .crt-pillbtn:hover {
+            background: var(--crt-accent);
+            color: #fff;
+        }
+
+        .crt-pillbtn.is-solid {
+            background: var(--crt-accent);
+            color: #fff;
+        }
+
+    /* ===== Test execution ===== */
+    .crt-who {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.25rem;
+    }
+
+        .crt-who .crt-avatar {
+            width: 52px;
+            height: 52px;
+            font-size: 1.15rem;
+        }
+
+    .crt-who-name {
+        font-weight: 700;
+        font-size: 1.05rem;
+    }
+
+    .crt-who-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem 1.25rem;
+        margin-top: .15rem;
+        font-size: .85rem;
+        color: var(--crt-muted);
+    }
+
+        .crt-who-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+    .crt-label {
+        font-weight: 600;
+        margin-bottom: .35rem;
+        display: block;
+    }
+
+    .crt-page .form-control {
+        border-radius: .6rem;
+    }
+
+        .crt-page .form-control:focus {
+            border-color: var(--crt-accent);
+            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        }
+
+    .crt-counter {
+        display: flex;
+        justify-content: space-between;
+        margin-top: .35rem;
+        font-size: .8rem;
+        color: var(--crt-muted);
+    }
+
+    .crt-drop {
+        position: relative;
+        padding: 1.25rem 1rem;
+        text-align: center;
+        border: 2px dashed var(--crt-line);
+        border-radius: .8rem;
+        background: var(--crt-surface);
+        transition: border-color .2s, background .2s;
+    }
+
+        .crt-drop:hover,
+        .crt-drop:focus-within,
+        .crt-drop.is-over {
+            border-color: var(--crt-accent);
+            background: rgba(59,91,219,.07);
+        }
+
+    .crt-drop-ico {
+        font-size: 2rem;
+        color: var(--crt-accent);
+        display: block;
+        margin-bottom: .2rem;
+    }
+
+    .crt-drop strong {
+        display: block;
+    }
+
+    .crt-drop small {
+        color: var(--crt-muted);
+    }
+
+    .crt-drop input[type="file"] {
+        max-width: 360px;
+        margin: .75rem auto 0;
+    }
+
+    .crt-chosen {
+        list-style: none;
+        margin: .75rem 0 0;
+        padding: 0;
+        display: grid;
+        gap: .45rem;
+    }
+
+        .crt-chosen li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .6rem;
+            padding: .45rem .7rem;
+            border: 1px solid var(--crt-line);
+            border-radius: .6rem;
+            background: var(--crt-card);
+            animation: crt-rise .25s ease both;
+        }
+
+            .crt-chosen li span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .crt-chosen li button {
+                border: 0;
+                background: transparent;
+                color: #d6384a;
+                padding: 0 .2rem;
+                font-size: 1.2rem;
+                line-height: 1;
+            }
+
+    /* ===== Aside ===== */
+    .crt-card {
+        border: 1px solid var(--crt-line);
+        border-radius: .9rem;
+        background: var(--crt-card);
+        padding: 1.1rem 1.15rem;
+    }
+
+        .crt-card h6 {
+            margin: 0 0 .75rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+        }
+
+            .crt-card h6 i {
+                color: var(--crt-accent);
+            }
+
+    .crt-progress {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .crt-ring-wrap {
+        position: relative;
+        flex: 0 0 auto;
+        width: 92px;
+        height: 92px;
+    }
+
+    .crt-ring {
+        width: 100%;
+        height: 100%;
+    }
+
+        .crt-ring circle {
+            fill: none;
+            stroke-width: 9;
+        }
+
+        .crt-ring .crt-ring-bg {
+            stroke: var(--crt-line);
+        }
+
+        .crt-ring .crt-ring-fg {
+            stroke: var(--crt-accent);
+            stroke-linecap: round;
+            stroke-dasharray: 276.46;
+            stroke-dashoffset: 276.46;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+            transition: stroke-dashoffset .6s cubic-bezier(.3,.9,.3,1), stroke .3s;
+        }
+
+    .crt-ring-wrap.is-full .crt-ring-fg {
+        stroke: var(--crt-ok);
+    }
+
+    .crt-ring-num {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 1.35rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+        .crt-ring-num small {
+            font-size: .7rem;
+            font-weight: 600;
+            color: var(--crt-muted);
+            margin-left: 1px;
+        }
+
+    .crt-progress-text strong {
+        display: block;
+        font-size: 1rem;
+    }
+
+    .crt-progress-text span {
+        font-size: .83rem;
+        color: var(--crt-muted);
+    }
+
+    .crt-checklist {
+        list-style: none;
+        margin: 1rem 0 0;
+        padding: 0;
+        display: grid;
+        gap: .45rem;
+    }
+
+        .crt-checklist li {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            font-size: .88rem;
+            color: var(--crt-muted);
+            transition: color .2s;
+        }
+
+            .crt-checklist li i {
+                width: 20px;
+                height: 20px;
+                display: grid;
+                place-items: center;
+                border-radius: 50%;
+                font-size: .8rem;
+                border: 1.5px solid var(--crt-line);
+                color: transparent;
+                transition: background .2s, border-color .2s, color .2s;
+            }
+
+            .crt-checklist li.is-done {
+                color: inherit;
+            }
+
+                .crt-checklist li.is-done i {
+                    background: var(--crt-ok);
+                    border-color: var(--crt-ok);
+                    color: #fff;
+                }
+
+    .crt-note {
+        margin: .85rem 0 0;
+        font-size: .8rem;
+        color: var(--crt-muted);
+    }
+
+    .crt-optional-title {
+        margin: 1rem 0 .1rem;
+        padding-top: .85rem;
+        border-top: 1px solid var(--crt-line);
+        font-size: .8rem;
+        font-weight: 600;
+        color: var(--crt-muted);
+    }
+
+    .crt-optional {
+        margin-top: .5rem;
+    }
+
+        .crt-optional li i {
+            border-style: dashed;
+        }
+
+        .crt-optional li.is-done i {
+            border-style: solid;
+        }
+
+    .crt-glance {
+        display: grid;
+        gap: .65rem;
+    }
+
+    .crt-glance-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        font-size: .88rem;
+    }
+
+        .crt-glance-row > span:first-child {
+            color: var(--crt-muted);
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+        }
+
+    .crt-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .2rem .65rem;
+        border-radius: 999px;
+        font-size: .78rem;
+        font-weight: 600;
+        white-space: nowrap;
+        color: var(--t);
+        background: var(--t-bg);
+    }
+
+    .crt-pill-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .crt-next {
+        display: grid;
+        gap: .6rem;
+    }
+
+    .crt-next-row {
+        display: flex;
+        gap: .7rem;
+        align-items: flex-start;
+        font-size: .85rem;
+    }
+
+    .crt-next-ico {
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: .5rem;
+        font-size: 1.1rem;
+        color: var(--t);
+        background: var(--t-bg);
+    }
+
+    .crt-next-row strong {
+        display: block;
+    }
+
+    .crt-next-row span {
+        color: var(--crt-muted);
+    }
+
+    /* ===== Action bar ===== */
+    .crt-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-top: 1.25rem;
+        padding: .85rem 1.1rem;
+        border: 1px solid var(--crt-line);
+        border-radius: .9rem;
+        background: var(--crt-card);
+        box-shadow: 0 -6px 18px rgba(23,33,59,.08);
+    }
+
+        .crt-actions .btn {
+            border-radius: 999px;
+            padding-left: 1.3rem;
+            padding-right: 1.3rem;
+            font-weight: 600;
+        }
+
+    #submitBtn {
+        color: #fff;
+        border: 0;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        box-shadow: 0 10px 20px -12px rgba(34,197,94,.8);
+    }
+
+    #btn-fail {
+        color: #fff;
+        border: 0;
+        background: linear-gradient(135deg, #fb7185, #e11d48);
+        box-shadow: 0 10px 20px -12px rgba(225,29,72,.8);
+    }
+
+        #submitBtn:hover, #btn-fail:hover {
+            color: #fff;
+            transform: translateY(-2px);
+        }
+
+        #submitBtn:disabled, #btn-fail:disabled {
+            opacity: .7;
+            transform: none;
+        }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .crt-sec, .crt-chosen li {
+            animation: none;
+        }
+
+        .crt-file, .crt-ring .crt-ring-fg {
+            transition: none;
+        }
+    }
+</style>
+
+<div class="crt-page">
+
+    <!-- Hero -->
+    <div class="crt-hero">
+        <div class="crt-hero-row">
+            <div>
+                <div class="crt-hero-chips">
+                    <span class="crt-hero-chip"><i class="ri-flask-line"></i>Section 3: Testing</span>
+                    @if (latestTest != null)
                     {
-                        <div class="card border mb-4">
-                            <div class="card-header bg-light-subtle">
-                                <h6 class="fs-15 mb-0">Assigned Users</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="row g-3">
-                                    @{
-                                        AssignedUserField("Requested By", DisplayUser(Model.RequestedBy));
-                                        AssignedUserField("CR Approver", DisplayUser(Model.ApproverUserName));
-                                        AssignedUserField("Developer", DisplayUser(developerUser));
-                                        AssignedUserField("InfoSec Officer", DisplayUser(Model.SecurityUserName));
-                                        AssignedUserField("QA Tester", DisplayUser(Model.TestingUserName));
-                                        AssignedUserField("QA Assigned By", DisplayUser(Model.TesterUserName));
-                                        AssignedUserField("QA Approved By", DisplayUser(Model.TestingApproverUserName));
-                                        AssignedUserField("Final CR Approver", DisplayUser(Model.FinalApproverUserName));
-                                    }
-                                </div>
-                            </div>
-                        </div>
+                        <span class="crt-hero-chip"><i class="ri-repeat-line"></i>Cycle @latestTest.TestCycleNumber</span>
                     }
+                </div>
+                <h3>@Model.CRNumber</h3>
+                <p>@Model.ChangeTitle</p>
+            </div>
+            <div class="crt-hero-side">
+                <div class="crt-hero-pills">
+                    @if (!string.IsNullOrWhiteSpace(Model.Status))
+                    {
+                        <span class="crt-pill tone-@StatusTone(Model.Status)"><span class="crt-pill-dot"></span>@statusLabel</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.Priority))
+                    {
+                        <span class="crt-pill tone-@PriorityTone(Model.Priority)"><i class="ri-flag-2-line"></i>@Model.Priority</span>
+                    }
+                </div>
+                <a class="crt-back" href="@Url.Action("TestingQueueTable")"><i class="ri-arrow-left-line"></i>Back to queue</a>
+            </div>
+        </div>
+    </div>
 
-                    <!-- UAT Link (read-only, uploaded by the developer) -->
-                    <div class="card border mb-4">
-                        <div class="card-header bg-light-subtle">
-                            <h6 class="fs-15 mb-0">UAT Link</h6>
-                        </div>
-                        <div class="card-body">
-                            @if (!string.IsNullOrWhiteSpace(uatLink))
-                            {
-                                <!-- Half-width on desktop (col-md-6) and capped at 500px so the field is not stretched -->
-                                <div class="row">
-                                    <div class="col-12 col-md-6" style="max-width: 500px;">
-                                        <div class="input-group">
-                                            <input type="text" id="uatLinkField" class="form-control text-truncate"
-                                                   value="@uatLink" title="@uatLink" readonly />
-                                            <a href="@uatLink" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
-                                                <i class="ri-external-link-line me-1"></i>Open
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            }
-                            else
-                            {
-                                <p class="text-muted mb-0">No UAT link has been provided yet.</p>
-                            }
+    <form id="testingForm" enctype="multipart/form-data">
+        @Html.AntiForgeryToken()
+
+        <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
+
+        <div class="crt-grid">
+
+            <!-- ============ Left: details and test execution ============ -->
+            <div>
+
+                <!-- 1. Change request details -->
+                <section class="crt-sec" data-sec="1">
+                    <div class="crt-sec-head">
+                        <span class="crt-step"><span class="crt-step-no">1</span><i class="ri-check-line crt-step-ck"></i></span>
+                        <div>
+                            <h5 class="crt-sec-title">Change request details</h5>
+                            <p class="crt-sec-sub">Read what was requested before you start testing</p>
                         </div>
                     </div>
+                    <div class="crt-sec-body">
+                        <div class="crt-facts">
+                            @{
+                                Fact("ri-swap-box-line", "Change type", Model.ChangeType);
+                                Fact("ri-flag-2-line", "Priority", Model.Priority);
+                                Fact("ri-building-line", "Division", string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division);
+                                Fact("ri-apps-line", "Module", Model.Module);
+                                Fact("ri-git-commit-line", "Status", statusLabel);
+                                Fact("ri-calendar-line", "Requested", Model.RequestedDate.ToString("yyyy/MM/dd"));
+                                Fact("ri-time-line", "Estimated due date", Model.DueDate.HasValue ? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—");
+                                Fact("ri-hashtag", "Vendor proposal number", Model.ProposalNumber);
+                            }
+                        </div>
 
-                    <div class="row g-3">
+                        @{
+                            TextBlock("ri-lightbulb-flash-line", "Summary and business justification", Model.Summary, highlight: true);
+                            TextBlock("ri-task-line", "Activities and tasks", Model.ActivitiesTasks);
+                            TextBlock("ri-computer-line", "Fixed assets", Model.FixedAssets);
+                            TextBlock("ri-alert-line", "Risk assessment", Model.RiskAssessment);
+                        }
+                    </div>
+                </section>
 
-                        <!-- Tester details -->
-                        <div class="col-md-4">
-                            <label class="form-label">Tester Name</label>
-                            <input type="text" class="form-control" value="@username" disabled>
+                <!-- 2. Attachments -->
+                <section class="crt-sec" data-sec="2">
+                    <div class="crt-sec-head">
+                        <span class="crt-step"><span class="crt-step-no">2</span><i class="ri-check-line crt-step-ck"></i></span>
+                        <div>
+                            <h5 class="crt-sec-title">Attachments</h5>
+                            <p class="crt-sec-sub">Documents supplied with the request</p>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Designation</label>
-                            <input type="text" class="form-control" value="@designation" disabled>
+                    </div>
+                    <div class="crt-sec-body">
+                        @if (requestFileCount > 0)
+                        {
+                            RenderAttachmentGroup("SRS documents", "ri-file-text-line", srsFiles);
+                            RenderAttachmentGroup("BA documents", "ri-file-list-line", baFiles);
+                            RenderAttachmentGroup("Vendor attachments", "ri-store-2-line", vendorFiles);
+                            RenderAttachmentGroup("Other attachments", "ri-folder-2-line", otherFiles);
+                        }
+                        else
+                        {
+                            <div class="crt-empty"><i class="ri-folder-open-line"></i>No attachments found.</div>
+                        }
+                    </div>
+                </section>
+
+                <!-- 3. People -->
+                @if (hasAssignedUsers)
+                {
+                    <section class="crt-sec" data-sec="3">
+                        <div class="crt-sec-head">
+                            <span class="crt-step"><span class="crt-step-no">3</span><i class="ri-check-line crt-step-ck"></i></span>
+                            <div>
+                                <h5 class="crt-sec-title">People</h5>
+                                <p class="crt-sec-sub">Everyone involved with this change request</p>
+                            </div>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Department</label>
-                            <input type="text" class="form-control" value="@department" disabled>
+                        <div class="crt-sec-body">
+                            <div class="crt-people">
+                                @{
+                                    Person("Requested by", "ri-user-line", DisplayUser(Model.RequestedBy));
+                                    Person("CR approver", "ri-user-follow-line", DisplayUser(Model.ApproverUserName));
+                                    Person("Developer", "ri-code-s-slash-line", DisplayUser(developerUser));
+                                    Person("InfoSec officer", "ri-shield-user-line", DisplayUser(Model.SecurityUserName));
+                                    Person("QA tester", "ri-test-tube-line", DisplayUser(Model.TestingUserName));
+                                    Person("QA assigned by", "ri-user-shared-line", DisplayUser(Model.TesterUserName));
+                                    Person("QA approved by", "ri-user-star-line", DisplayUser(Model.TestingApproverUserName));
+                                    Person("Final CR approver", "ri-medal-line", DisplayUser(Model.FinalApproverUserName));
+                                }
+                            </div>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-control" value="@email" disabled>
+                    </section>
+                }
+
+                <!-- 4. UAT link -->
+                <section class="crt-sec @(hasUat ? "" : "is-done")" data-sec="4" id="crtSecUat">
+                    <div class="crt-sec-head">
+                        <span class="crt-step"><span class="crt-step-no">4</span><i class="ri-check-line crt-step-ck"></i></span>
+                        <div>
+                            <h5 class="crt-sec-title">UAT link</h5>
+                            <p class="crt-sec-sub">Uploaded by the developer. Open it to run your tests</p>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Testing Date</label>
-                            <input type="text" class="form-control"
-                                   value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
+                    </div>
+                    <div class="crt-sec-body">
+                        @if (hasUat)
+                        {
+                            <div class="crt-uat">
+                                <span class="crt-uat-ico"><i class="ri-link-m"></i></span>
+                                <div class="crt-uat-url">
+                                    <input type="text" id="uatLinkField" class="form-control text-truncate"
+                                           value="@uatLink" title="@uatLink" readonly />
+                                </div>
+                                <div class="crt-uat-actions">
+                                    <button type="button" class="crt-pillbtn" id="crtCopyUat"><i class="ri-file-copy-line"></i><span>Copy</span></button>
+                                    <a href="@uatLink" target="_blank" rel="noopener noreferrer" class="crt-pillbtn is-solid" id="crtOpenUat">
+                                        <i class="ri-external-link-line"></i>Open UAT
+                                    </a>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="crt-empty"><i class="ri-link-unlink-m"></i>No UAT link has been provided yet.</div>
+                        }
+                    </div>
+                </section>
+
+                <!-- 5. Test execution -->
+                <section class="crt-sec" data-sec="5" id="crtSecTest">
+                    <div class="crt-sec-head">
+                        <span class="crt-step"><span class="crt-step-no">5</span><i class="ri-check-line crt-step-ck"></i></span>
+                        <div>
+                            <h5 class="crt-sec-title">Test execution</h5>
+                            <p class="crt-sec-sub">Record your test plan, the results and any evidence</p>
+                        </div>
+                    </div>
+                    <div class="crt-sec-body">
+
+                        <!-- Tester details (read-only, from your profile) -->
+                        <div class="crt-who">
+                            <span class="crt-avatar">@Initials(username)</span>
+                            <div>
+                                <div class="crt-who-name">@(string.IsNullOrWhiteSpace(username) ? "Unknown tester" : username)</div>
+                                <div class="crt-who-meta">
+                                    @if (!string.IsNullOrWhiteSpace(designation))
+                                    {
+                                        <span><i class="ri-briefcase-line"></i>@designation</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(department))
+                                    {
+                                        <span><i class="ri-building-line"></i>@department</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(email))
+                                    {
+                                        <span><i class="ri-mail-line"></i>@email</span>
+                                    }
+                                    <span><i class="ri-calendar-line"></i>Testing date @DateTime.Now.ToString("dd/MM/yyyy")</span>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Test plan and results -->
-                        <div class="col-12">
-                            <label class="form-label">Test Plan and Test Results</label>
+                        <div class="mb-4">
+                            <label class="crt-label" for="testPlanResults">Test plan and test results</label>
                             <textarea name="Test" id="testPlanResults" class="form-control" rows="8"
                                       placeholder="Describe the test plan and results (if the test failed, explain why):"></textarea>
+                            <div class="crt-counter"><span>If the test failed, explain what went wrong so the developer can fix it.</span><span id="crtWords">0 words</span></div>
                         </div>
 
                         <!-- Test results attachments -->
-                        <div class="col-12">
-                            <label class="form-label" for="testResultFiles">Test Results Attachments</label>
-                            <input type="file"
-                                   id="testResultFiles"
-                                   name="TestResultFiles"
-                                   class="form-control"
-                                   multiple
-                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.zip" />
-                            <div class="form-text">
-                                PDF, Word, Excel, CSV, text, images or ZIP. Max 10 MB per file, up to 10 files.
+                        <div id="crtEvidence" data-existing="@testResultFiles.Count">
+                            <label class="crt-label" for="testResultFiles">Test results attachments</label>
+                            <div class="crt-drop" id="crtDrop">
+                                <i class="ri-upload-cloud-2-line crt-drop-ico"></i>
+                                <strong>Drag and drop files here</strong>
+                                <small>PDF, Word, Excel, CSV, text, images or ZIP. Max 10 MB per file, up to 10 files.</small>
+                                <input type="file"
+                                       id="testResultFiles"
+                                       name="TestResultFiles"
+                                       class="form-control"
+                                       multiple
+                                       accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.zip" />
                             </div>
 
                             <!-- Newly selected files (not yet uploaded) -->
-                            <ul id="selectedFilesList" class="list-unstyled mt-2 mb-0"></ul>
+                            <ul id="selectedFilesList" class="crt-chosen"></ul>
 
                             <!-- Files already uploaded for this CR -->
                             @if (testResultFiles.Any())
                             {
                                 <div class="mt-3">
                                     @{
-                                        RenderAttachmentGroup("Uploaded QA Report Files", testResultFiles);
+                                        RenderAttachmentGroup("Uploaded QA report files", "ri-test-tube-line", testResultFiles);
                                     }
                                 </div>
                             }
                         </div>
-
                     </div>
+                </section>
+            </div>
 
-                    <!-- Actions -->
-                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <button type="button"
-                                class="btn btn-outline-secondary"
-                                onclick="window.location.href='@Url.Action("TestingQueueTable")'">
-                            Cancel
-                        </button>
-                        <div class="d-flex gap-2">
-                            <button type="button"
-                                    id="btn-fail"
-                                    class="btn btn-danger"
-                                    data-status="3">
-                                <i class="ri-arrow-go-back-line me-1"></i>Test Failed
-                            </button>
-                            <button type="button"
-                                    id="submitBtn"
-                                    class="btn btn-success"
-                                    data-status="2">
-                                <i class="ri-check-line me-1"></i>Test Passed
-                            </button>
+            <!-- ============ Right: progress, at a glance, what happens next ============ -->
+            <aside class="crt-aside">
+                <div class="crt-card">
+                    <h6><i class="ri-checkbox-circle-line"></i>Your progress</h6>
+                    <div class="crt-progress">
+                        <div class="crt-ring-wrap" id="crtRingWrap">
+                            <svg class="crt-ring" viewBox="0 0 100 100" aria-hidden="true">
+                                <circle class="crt-ring-bg" cx="50" cy="50" r="44"></circle>
+                                <circle class="crt-ring-fg" id="crtRingFg" cx="50" cy="50" r="44"></circle>
+                            </svg>
+                            <div class="crt-ring-num"><span><span id="crtPct">0</span><small>%</small></span></div>
+                        </div>
+                        <div class="crt-progress-text">
+                            <strong id="crtHeadline">Add your test plan</strong>
+                            <span id="crtSubline">Test plan and results still needed</span>
                         </div>
                     </div>
-                </form>
+                    <ul class="crt-checklist" id="crtChecklist">
+                        <li data-key="plan"><i class="ri-check-line"></i>Write the test plan and results</li>
+                    </ul>
+                    <p class="crt-note">This is the only required step before you choose Passed or Failed.</p>
+                    <div class="crt-optional-title">Optional extras</div>
+                    <ul class="crt-checklist crt-optional" id="crtOptional">
+                        <li data-key="uat"><i class="ri-check-line"></i>@(hasUat ? "Open the UAT link" : "No UAT link provided")</li>
+                        <li data-key="evidence"><i class="ri-check-line"></i>Attach evidence files</li>
+                    </ul>
+                </div>
 
-                <!-- Image Preview Modal -->
-                <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog modal-lg modal-dialog-centered">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body text-center">
-                                <div id="imagePreviewSpinner" class="py-5">
-                                    <div class="spinner-border text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                </div>
-                                <img id="modalPreviewImage" src="" alt="" class="img-fluid d-none" />
-                            </div>
-                            <div class="modal-footer">
-                                <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
-                                    <i class="ri-download-2-line me-1"></i> Download
-                                </a>
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            </div>
-                        </div>
+                <div class="crt-card">
+                    <h6><i class="ri-dashboard-line"></i>At a glance</h6>
+                    <div class="crt-glance">
+                        @if (latestTest != null)
+                        {
+                            <div class="crt-glance-row"><span><i class="ri-repeat-line"></i>Test cycle</span><strong>@latestTest.TestCycleNumber</strong></div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(Model.Priority))
+                        {
+                            <div class="crt-glance-row"><span><i class="ri-flag-2-line"></i>Priority</span><span class="crt-pill tone-@PriorityTone(Model.Priority)">@Model.Priority</span></div>
+                        }
+                        @if (dueText.Length > 0)
+                        {
+                            <div class="crt-glance-row"><span><i class="ri-time-line"></i>Due</span><span class="crt-pill tone-@dueTone">@dueText</span></div>
+                        }
+                        <div class="crt-glance-row"><span><i class="ri-attachment-2"></i>Request files</span><strong>@requestFileCount</strong></div>
+                        <div class="crt-glance-row"><span><i class="ri-link-m"></i>UAT link</span><span class="crt-pill tone-@(hasUat ? "ok" : "neutral")">@(hasUat ? "Provided" : "Not provided")</span></div>
                     </div>
                 </div>
 
-            </div> <!-- end card-body -->
-        </div> <!-- end card -->
-    </div><!-- end col -->
-</div><!-- end row -->
+                <div class="crt-card">
+                    <h6><i class="ri-route-line"></i>What happens next</h6>
+                    <div class="crt-next">
+                        <div class="crt-next-row tone-ok">
+                            <span class="crt-next-ico"><i class="ri-check-double-line"></i></span>
+                            <div><strong>Test passed</strong><span>The change request moves to the next stage.</span></div>
+                        </div>
+                        <div class="crt-next-row tone-bad">
+                            <span class="crt-next-ico"><i class="ri-arrow-go-back-line"></i></span>
+                            <div><strong>Test failed</strong><span>It goes back to the developer with your notes.</span></div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Actions -->
+        <div class="crt-actions">
+            <button type="button"
+                    class="btn btn-outline-secondary"
+                    onclick="window.location.href='@Url.Action("TestingQueueTable")'">
+                <i class="ri-arrow-left-line me-1"></i>Cancel
+            </button>
+            <div class="d-flex gap-2">
+                <button type="button"
+                        id="btn-fail"
+                        class="btn"
+                        data-status="3">
+                    <i class="ri-arrow-go-back-line me-1"></i>Test Failed
+                </button>
+                <button type="button"
+                        id="submitBtn"
+                        class="btn"
+                        data-status="2">
+                    <i class="ri-check-line me-1"></i>Test Passed
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Image Preview Modal -->
+    <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 14px; overflow: hidden;">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div id="imagePreviewSpinner" class="py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <img id="modalPreviewImage" src="" alt="" class="img-fluid d-none" style="border-radius: 10px;" />
+                </div>
+                <div class="modal-footer">
+                    <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
+                        <i class="ri-download-2-line me-1"></i> Download
+                    </a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -511,6 +1730,73 @@
                 });
             });
 
+            // ---- Progress ring + word counter ----
+            var RING_LEN = 276.46;
+            var hasUat = @(hasUat ? "true" : "false");
+            var uatOpened = false;
+            var existingEvidence = parseInt(document.getElementById('crtEvidence').getAttribute('data-existing'), 10) || 0;
+            var planEl = document.getElementById('testPlanResults');
+
+            function refreshProgress() {
+                var plan = (planEl.value || '').trim();
+                var words = plan ? plan.split(/\s+/).length : 0;
+                document.getElementById('crtWords').textContent = words + (words === 1 ? ' word' : ' words');
+
+                var planDone = plan.length > 0;
+
+                // Required: the test plan and results (the only thing the tester has to fill in)
+                document.querySelector('#crtChecklist li').classList.toggle('is-done', planDone);
+
+                // Optional extras only tick; they never move the ring
+                var optional = {
+                    uat: hasUat && uatOpened,
+                    evidence: selectedFiles.length > 0 || existingEvidence > 0
+                };
+                document.querySelectorAll('#crtOptional li').forEach(function (li) {
+                    li.classList.toggle('is-done', !!optional[li.getAttribute('data-key')]);
+                });
+
+                document.getElementById('crtPct').textContent = planDone ? 100 : 0;
+                document.getElementById('crtRingFg').style.strokeDashoffset = planDone ? 0 : RING_LEN;
+                document.getElementById('crtRingWrap').classList.toggle('is-full', planDone);
+                document.getElementById('crtSubline').textContent = planDone ? 'Test plan and results written' : 'Test plan and results still needed';
+                document.getElementById('crtHeadline').textContent = planDone ? 'Ready to decide' : 'Add your test plan';
+
+                // Section badges turn into check marks
+                document.getElementById('crtSecTest').classList.toggle('is-done', planDone);
+                var secUat = document.getElementById('crtSecUat');
+                if (secUat) { secUat.classList.toggle('is-done', !hasUat || uatOpened); }
+            }
+
+            planEl.addEventListener('input', refreshProgress);
+
+            // ---- UAT link: copy + remember that it was opened ----
+            var openUat = document.getElementById('crtOpenUat');
+            if (openUat) {
+                openUat.addEventListener('click', function () { uatOpened = true; refreshProgress(); });
+            }
+
+            var copyUat = document.getElementById('crtCopyUat');
+            if (copyUat) {
+                copyUat.addEventListener('click', function () {
+                    var field = document.getElementById('uatLinkField');
+                    var label = copyUat.querySelector('span');
+
+                    function copied() {
+                        label.textContent = 'Copied';
+                        setTimeout(function () { label.textContent = 'Copy'; }, 1500);
+                    }
+
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(field.value).then(copied);
+                    } else {
+                        field.select();
+                        document.execCommand('copy');
+                        copied();
+                    }
+                });
+            }
+
             // ---- Test result attachments (select, validate, remove before upload) ----
             var MAX_FILE_BYTES = 10 * 1024 * 1024;   // 10 MB per file
             var MAX_FILES = 10;
@@ -538,18 +1824,15 @@
                 selectedList.innerHTML = '';
                 selectedFiles.forEach(function (file, index) {
                     var li = document.createElement('li');
-                    li.className = 'd-flex align-items-center justify-content-between border rounded px-2 py-1 mb-1';
 
                     var label = document.createElement('span');
-                    label.className = 'text-truncate me-2';
                     label.innerHTML = '<i class="ri-attachment-2 me-1"></i>';
                     label.appendChild(document.createTextNode(file.name + ' (' + formatSize(file.size) + ')'));
 
                     var removeBtn = document.createElement('button');
                     removeBtn.type = 'button';
-                    removeBtn.className = 'btn btn-sm btn-link text-danger p-0';
                     removeBtn.title = 'Remove';
-                    removeBtn.innerHTML = '<i class="ri-close-line fs-18"></i>';
+                    removeBtn.innerHTML = '<i class="ri-close-line"></i>';
                     removeBtn.addEventListener('click', function () {
                         selectedFiles.splice(index, 1);
                         syncInputFiles();
@@ -560,6 +1843,7 @@
                     li.appendChild(removeBtn);
                     selectedList.appendChild(li);
                 });
+                refreshProgress();
             }
 
             fileInput.addEventListener('change', function () {
@@ -595,6 +1879,21 @@
                         customClass: { confirmButton: 'btn btn-primary' },
                         buttonsStyling: false
                     });
+                }
+            });
+
+            // Drag and drop onto the upload area (goes through the same checks as the file picker)
+            var drop = document.getElementById('crtDrop');
+            ['dragenter', 'dragover'].forEach(function (evt) {
+                drop.addEventListener(evt, function (e) { e.preventDefault(); drop.classList.add('is-over'); });
+            });
+            ['dragleave', 'drop'].forEach(function (evt) {
+                drop.addEventListener(evt, function (e) { e.preventDefault(); drop.classList.remove('is-over'); });
+            });
+            drop.addEventListener('drop', function (e) {
+                if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    fileInput.dispatchEvent(new Event('change'));
                 }
             });
 
@@ -738,6 +2037,9 @@
             // preventDefault stops any native form post
             submitBtn.addEventListener('click', function (e) { e.preventDefault(); handleTestingSubmission(submitBtn, 'pass'); });
             failBtn.addEventListener('click',   function (e) { e.preventDefault(); handleTestingSubmission(failBtn, 'fail'); });
+
+            // First paint of the progress ring
+            refreshProgress();
         });
     </script>
 }

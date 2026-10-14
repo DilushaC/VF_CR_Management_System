@@ -15,6 +15,17 @@
     var designation = Context.Session.GetString("Designation");
     var department = Context.Session.GetString("Department");
     var email = Context.Session.GetString("Email");
+
+    string Initials(string? n)
+    {
+        var l = (n ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => char.IsLetter(p[0]))
+            .Select(p => char.ToUpperInvariant(p[0]))
+            .Take(2)
+            .ToArray();
+        return l.Length > 0 ? new string(l) : "?";
+    }
 }
 @{
     // ---- Existing attachments, split by attachment type ----
@@ -43,48 +54,50 @@
             return;
         }
 
-        <div class="mt-2">
-            <label class="form-label fw-bold mb-1">Previously Uploaded Files</label>
-            <ul class="list-unstyled mb-0" id="@listId">
+        <div class="mt-3">
+            <label class="casm-label-sm">Previously uploaded</label>
+            <ul class="casm-filelist" id="@listId">
                 @foreach (var att in items)
                 {
                     var ext = System.IO.Path.GetExtension(att.FileName).ToLowerInvariant();
                     var isImage = imageExtensions.Contains(ext);
                     var isPdf = ext == ".pdf";
 
-                    <li class="d-flex align-items-center gap-2 mb-1" data-attachment-id="@att.AttachmentID">
-                        <i class="mdi mdi-paperclip"></i>
+                    <li data-attachment-id="@att.AttachmentID">
+                        <span class="casm-file-ico"><i class="mdi mdi-paperclip"></i></span>
 
-                        @if (isImage)
-                        {
-                            <a href="javascript:void(0);"
-                               class="preview-attachment-link"
-                               data-attachment-id="@att.AttachmentID"
-                               data-file-name="@att.FileName">
-                                @att.FileName
-                            </a>
-                        }
-                        else if (isPdf)
-                        {
-                            <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = att.AttachmentID })"
-                               target="_blank"
-                               rel="noopener noreferrer">
-                                @att.FileName
-                            </a>
-                        }
-                        else
-                        {
-                            <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = att.AttachmentID })">
-                                @att.FileName
-                            </a>
-                        }
+                        <span class="casm-file-name">
+                            @if (isImage)
+                            {
+                                <a href="javascript:void(0);"
+                                   class="preview-attachment-link"
+                                   data-attachment-id="@att.AttachmentID"
+                                   data-file-name="@att.FileName">
+                                    @att.FileName
+                                </a>
+                            }
+                            else if (isPdf)
+                            {
+                                <a href="@Url.Action("PreviewAttachment", "CRManagement", new { id = att.AttachmentID })"
+                                   target="_blank"
+                                   rel="noopener noreferrer">
+                                    @att.FileName
+                                </a>
+                            }
+                            else
+                            {
+                                <a href="@Url.Action("DownloadAttachment", "CRManagement", new { id = att.AttachmentID })">
+                                    @att.FileName
+                                </a>
+                            }
+                            <small>@att.UploadedDate.ToString("yyyy/MM/dd")</small>
+                        </span>
 
-                        <small class="text-muted">(@att.UploadedDate.ToString("yyyy/MM/dd"))</small>
                         <a href="javascript:void(0);"
-                           class="text-danger remove-attachment-btn"
+                           class="casm-file-remove remove-attachment-btn"
                            title="Remove attachment"
                            data-attachment-id="@att.AttachmentID">
-                            &times;
+                            <i class="ri-close-line"></i>
                         </a>
                     </li>
                 }
@@ -93,230 +106,862 @@
     }
 }
 
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header border-bottom border-dashed d-flex align-items-center">
-                <h4 class="header-title mb-0" id="assessmentHeader">
-                    Section 2 : Change Assessment (Implementer) - @Model.CRNumber
-                </h4>
+<style>
+    .casm-page {
+        --casm-accent: rgb(89, 17, 32);
+        --casm-accent-soft: rgba(89, 17, 32, .1);
+        --casm-progress: #3b5bdb;
+        --casm-progress-soft: rgba(59, 91, 219, .12);
+        --casm-ok: #1f9d6b;
+        --casm-line: var(--bs-border-color, #e3e6ec);
+        --casm-muted: var(--bs-secondary-color, #6b7385);
+        --casm-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+    }
+
+    /* ===== Hero ===== */
+    .casm-hero {
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 1.25rem;
+        padding: 1.5rem 1.75rem;
+        border-radius: .9rem;
+        color: #fff;
+        background: #451423;
+    }
+
+        .casm-hero::after {
+            content: "";
+            position: absolute;
+            right: -60px;
+            top: -80px;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            border: 40px solid rgba(255,255,255,.05);
+            pointer-events: none;
+        }
+
+    .casm-hero-row {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .casm-hero-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        margin-bottom: .5rem;
+        padding: .25rem .7rem;
+        border-radius: 999px;
+        font-size: .82rem;
+        font-weight: 600;
+        background: rgba(255,255,255,.12);
+    }
+
+    .casm-hero h3 {
+        margin: 0;
+        color: #fff;
+        font-size: 1.55rem;
+        font-weight: 700;
+    }
+
+    .casm-hero p {
+        margin: .25rem 0 0;
+        color: rgba(255,255,255,.7);
+        font-size: .92rem;
+    }
+
+    .casm-back {
+        color: rgba(255,255,255,.85);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: .9rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.3);
+    }
+
+        .casm-back:hover {
+            background: rgba(255,255,255,.12);
+            color: #fff;
+        }
+
+    /* ===== Layout ===== */
+    .casm-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 1.25rem;
+        align-items: start;
+    }
+
+    .casm-aside {
+        position: sticky;
+        top: 90px;
+        display: grid;
+        gap: 1rem;
+    }
+
+    @@media (max-width: 991px) {
+        .casm-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .casm-aside {
+            position: static;
+        }
+    }
+
+    /* ===== Section cards ===== */
+    .casm-sec {
+        margin-bottom: 1.1rem;
+        border: 1px solid var(--casm-line);
+        border-radius: .9rem;
+        background: var(--casm-card);
+        animation: casm-rise .4s ease-out backwards;
+    }
+
+        .casm-sec:nth-of-type(1) {
+            animation-delay: .00s;
+        }
+
+        .casm-sec:nth-of-type(2) {
+            animation-delay: .06s;
+        }
+
+        .casm-sec:nth-of-type(3) {
+            animation-delay: .12s;
+        }
+
+    @@keyframes casm-rise {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+    }
+
+    .casm-sec-head {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--casm-line);
+    }
+
+    .casm-step {
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: .9rem;
+        color: var(--casm-accent);
+        background: var(--casm-accent-soft);
+    }
+
+    .casm-sec-title {
+        margin: 0;
+        font-size: 1.02rem;
+        font-weight: 700;
+    }
+
+    .casm-sec-sub {
+        margin: 0;
+        font-size: .83rem;
+        color: var(--casm-muted);
+    }
+
+    .casm-sec-body {
+        padding: 1.25rem;
+    }
+
+    /* ===== Implementer strip ===== */
+    .casm-who {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .casm-avatar {
+        flex: 0 0 auto;
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #fff;
+        background: var(--casm-accent);
+    }
+
+    .casm-who-name {
+        font-weight: 700;
+        font-size: 1.05rem;
+    }
+
+    .casm-who-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem 1.25rem;
+        margin-top: .15rem;
+        font-size: .85rem;
+        color: var(--casm-muted);
+    }
+
+        .casm-who-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .casm-who-meta i {
+            color: var(--casm-accent);
+        }
+
+    /* ===== Inputs ===== */
+    .casm-label {
+        font-weight: 600;
+        margin-bottom: .35rem;
+        display: block;
+    }
+
+    .casm-label-sm {
+        font-weight: 700;
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--casm-muted);
+        display: block;
+        margin-bottom: .4rem;
+    }
+
+    .casm-page .form-control,
+    .casm-page .form-select {
+        border-radius: .6rem;
+    }
+
+        .casm-page .form-control:focus,
+        .casm-page .form-select:focus {
+            border-color: var(--casm-accent) !important;
+            box-shadow: 0 0 0 3px var(--casm-accent-soft) !important;
+        }
+
+    /* ===== Upload dropzones ===== */
+    .casm-upload {
+        border: 1.5px dashed var(--casm-line);
+        border-radius: .8rem;
+        padding: 1rem;
+        transition: border-color .15s ease, background .15s ease;
+    }
+
+        .casm-upload:hover {
+            border-color: var(--casm-accent);
+            background: var(--casm-accent-soft);
+        }
+
+    .casm-filelist {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: .5rem;
+    }
+
+        .casm-filelist li {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            padding: .5rem .7rem;
+            border: 1px solid var(--casm-line);
+            border-radius: .6rem;
+            background: var(--casm-card);
+        }
+
+    .casm-file-ico {
+        flex: 0 0 auto;
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border-radius: .5rem;
+        background: var(--casm-accent-soft);
+        color: var(--casm-accent);
+    }
+
+    .casm-file-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: .88rem;
+    }
+
+        .casm-file-name a {
+            color: inherit;
+            text-decoration: none;
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+            .casm-file-name a:hover {
+                color: var(--casm-accent);
+                text-decoration: underline;
+            }
+
+        .casm-file-name small {
+            display: block;
+            color: var(--casm-muted);
+            font-size: .76rem;
+        }
+
+    .casm-file-remove {
+        flex: 0 0 auto;
+        width: 26px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        color: #d6384a;
+        text-decoration: none;
+    }
+
+        .casm-file-remove:hover {
+            background: rgba(214,56,74,.12);
+        }
+
+    /* ===== Toggle tiles (vendor yes/no) ===== */
+    .casm-toggle {
+        display: flex;
+        gap: .6rem;
+        margin-bottom: 1rem;
+    }
+
+    .casm-toggle-opt {
+        position: relative;
+        flex: 1 1 0;
+    }
+
+    .casm-toggle-input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .casm-toggle-tile {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+        margin: 0;
+        padding: .6rem .5rem;
+        cursor: pointer;
+        border: 1.5px solid var(--casm-line);
+        border-radius: .7rem;
+        font-weight: 600;
+        font-size: .88rem;
+        color: var(--casm-muted);
+        transition: border-color .15s ease, background .15s ease, color .15s ease;
+    }
+
+    .casm-toggle-input:checked + .casm-toggle-tile {
+        border-color: var(--casm-accent);
+        background: var(--casm-accent-soft);
+        color: var(--casm-accent);
+    }
+
+    .casm-toggle-input:focus-visible + .casm-toggle-tile {
+        outline: 2px solid var(--casm-accent);
+        outline-offset: 2px;
+    }
+
+    /* ===== Aside: CR summary card ===== */
+    .casm-card {
+        border: 1px solid var(--casm-line);
+        border-radius: .9rem;
+        background: var(--casm-card);
+        padding: 1.1rem 1.15rem;
+    }
+
+        .casm-card h6 {
+            margin: 0 0 .85rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+        }
+
+            .casm-card h6 i {
+                color: var(--casm-accent);
+            }
+
+    .casm-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .2rem .65rem;
+        border-radius: 999px;
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--casm-accent);
+        background: var(--casm-accent-soft);
+    }
+
+    .casm-kv {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: .65rem;
+        margin-top: .9rem;
+        font-size: .86rem;
+    }
+
+    .casm-kv-row {
+        display: flex;
+        justify-content: space-between;
+        gap: .75rem;
+        padding-bottom: .55rem;
+        border-bottom: 1px dashed var(--casm-line);
+    }
+
+        .casm-kv-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+    .casm-kv-label {
+        color: var(--casm-muted);
+        flex: 0 0 auto;
+    }
+
+    .casm-kv-val {
+        font-weight: 600;
+        text-align: right;
+        word-break: break-word;
+    }
+
+    .casm-summary-text {
+        margin-top: .9rem;
+        padding-top: .85rem;
+        border-top: 1px solid var(--casm-line);
+        font-size: .85rem;
+        line-height: 1.55;
+        color: var(--casm-muted);
+    }
+
+        .casm-summary-text strong {
+            display: block;
+            color: inherit;
+            font-weight: 700;
+            margin-bottom: .3rem;
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+
+    /* ===== Progress ring + checklist ===== */
+    .casm-progress {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .casm-ring-wrap {
+        position: relative;
+        flex: 0 0 auto;
+        width: 92px;
+        height: 92px;
+    }
+
+    .casm-ring {
+        width: 100%;
+        height: 100%;
+    }
+
+        .casm-ring circle {
+            fill: none;
+            stroke-width: 9;
+        }
+
+        .casm-ring .casm-ring-bg {
+            stroke: var(--casm-line);
+        }
+
+        .casm-ring .casm-ring-fg {
+            stroke: var(--casm-progress);
+            stroke-linecap: round;
+            stroke-dasharray: 276.46;
+            stroke-dashoffset: 276.46;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+            transition: stroke-dashoffset .6s cubic-bezier(.3,.9,.3,1), stroke .3s;
+        }
+
+    .casm-ring-wrap.is-full .casm-ring-fg {
+        stroke: var(--casm-ok);
+    }
+
+    .casm-ring-num {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 1.35rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--casm-progress);
+    }
+
+    .casm-ring-wrap.is-full .casm-ring-num {
+        color: var(--casm-ok);
+    }
+
+    .casm-ring-num small {
+        font-size: .7rem;
+        font-weight: 600;
+        color: var(--casm-muted);
+        margin-left: 1px;
+    }
+
+    .casm-progress-text strong {
+        display: block;
+        font-size: 1rem;
+    }
+
+    .casm-progress-text span {
+        font-size: .83rem;
+        color: var(--casm-muted);
+    }
+
+    .casm-checklist {
+        list-style: none;
+        margin: 1rem 0 0;
+        padding: 0;
+        display: grid;
+        gap: .45rem;
+    }
+
+        .casm-checklist li {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            font-size: .88rem;
+            color: var(--casm-muted);
+            transition: color .2s;
+        }
+
+            .casm-checklist li i {
+                width: 20px;
+                height: 20px;
+                display: grid;
+                place-items: center;
+                border-radius: 50%;
+                font-size: .8rem;
+                border: 1.5px solid var(--casm-line);
+                color: transparent;
+                transition: background .2s, border-color .2s, color .2s;
+            }
+
+            .casm-checklist li.is-done {
+                color: inherit;
+            }
+
+                .casm-checklist li.is-done i {
+                    background: var(--casm-ok);
+                    border-color: var(--casm-ok);
+                    color: #fff;
+                }
+
+    /* ===== Action bar ===== */
+    .casm-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-top: 1.25rem;
+        padding: .85rem 1.1rem;
+        border: 1px solid var(--casm-line);
+        border-radius: .9rem;
+        background: var(--casm-card);
+        box-shadow: 0 -6px 18px rgba(23,33,59,.08);
+    }
+
+        .casm-actions .btn {
+            border-radius: 999px;
+            padding-left: 1.3rem;
+            padding-right: 1.3rem;
+            font-weight: 600;
+        }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .casm-sec {
+            animation: none;
+        }
+    }
+</style>
+
+<div class="casm-page">
+
+    <div class="casm-hero">
+        <div class="casm-hero-row">
+            <div>
+                <span class="casm-hero-chip"><i class="ri-tools-line"></i>Section 2 · Implementer</span>
+                <h3>Change Assessment — @Model.CRNumber</h3>
+                <p>Review the request, log your implementation plan, and attach the supporting documents.</p>
+            </div>
+            <a class="casm-back" href="@Url.Action("AssignedByMeTable")"><i class="ri-arrow-left-line"></i>Back to assigned CRs</a>
+        </div>
+    </div>
+
+    <form id="assessmentForm">
+
+        <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
+
+        <div class="casm-grid">
+
+            <!-- ============ Left: editable assessment ============ -->
+            <div>
+
+                <!-- 1. Implementer -->
+                <section class="casm-sec">
+                    <div class="casm-sec-head">
+                        <span class="casm-step"><i class="ri-user-settings-line"></i></span>
+                        <div>
+                            <h5 class="casm-sec-title">Implementer</h5>
+                            <p class="casm-sec-sub">Filled in automatically from your profile</p>
+                        </div>
+                    </div>
+                    <div class="casm-sec-body">
+                        <div class="casm-who">
+                            <span class="casm-avatar">@Initials(username)</span>
+                            <div>
+                                <div class="casm-who-name" id="implementerName">@(string.IsNullOrWhiteSpace(username) ? "Unknown user" : username)</div>
+                                <div class="casm-who-meta">
+                                    @if (!string.IsNullOrWhiteSpace(designation))
+                                    {
+                                        <span id="implementerDesignation"><i class="ri-briefcase-line"></i>@designation</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(department))
+                                    {
+                                        <span id="implementerDepartment"><i class="ri-building-line"></i>@department</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(email))
+                                    {
+                                        <span id="implementerEmail"><i class="ri-mail-line"></i>@email</span>
+                                    }
+                                    <span><i class="ri-calendar-line"></i><span id="requestDate">@DateTime.Now.ToString("dd/MM/yyyy")</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. Plan -->
+                <section class="casm-sec">
+                    <div class="casm-sec-head">
+                        <span class="casm-step"><i class="ri-list-check-2"></i></span>
+                        <div>
+                            <h5 class="casm-sec-title">Implementation plan</h5>
+                            <p class="casm-sec-sub">Effort, activities and fixed asset details</p>
+                        </div>
+                    </div>
+                    <div class="casm-sec-body">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-5">
+                                <label class="casm-label" for="effortEstimateDays">Effort estimate (days)</label>
+                                <input type="number" name="EffortEstimateDays" id="effortEstimateDays"
+                                       class="form-control" min="0" step="0.5"
+                                       value="@effortEstimateDays">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="casm-label" for="activitiesTasks">Activities &amp; tasks</label>
+                            <textarea name="ActivitiesTasks" id="activitiesTasks" class="form-control" rows="6"
+                                      placeholder="Write the explanation here...">@Model.ActivitiesTasks</textarea>
+                        </div>
+                        <div>
+                            <label class="casm-label" for="fixedAssetInfo">Fixed asset information</label>
+                            <textarea name="FixedAssetInfo" id="fixedAssetInfo" class="form-control" rows="6"
+                                      placeholder="Write the explanation here...">@Model.FixedAssets</textarea>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. Documents -->
+                <section class="casm-sec">
+                    <div class="casm-sec-head">
+                        <span class="casm-step"><i class="ri-file-upload-line"></i></span>
+                        <div>
+                            <h5 class="casm-sec-title">Supporting documents</h5>
+                            <p class="casm-sec-sub">Attach the SRS and BA documents for this change</p>
+                        </div>
+                    </div>
+                    <div class="casm-sec-body">
+                        <div class="row g-3">
+                            <div class="col-md-6" id="srsSection">
+                                <label class="casm-label">SRS document</label>
+                                <div class="casm-upload">
+                                    <input type="file" name="srsFile" id="srsFileInput" class="form-control" multiple>
+                                    @{
+                                        RenderAttachmentList("existingSrsList", srsAttachments);
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="col-md-6" id="baSection">
+                                <label class="casm-label">BA document</label>
+                                <div class="casm-upload">
+                                    <input type="file" name="baFile" id="baFileInput" class="form-control" multiple>
+                                    @{
+                                        RenderAttachmentList("existingBaList", baAttachments);
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
 
-            <div class="card-body">
-                <form id="assessmentForm">
+            <!-- ============ Right: CR summary + vendor support ============ -->
+            <aside class="casm-aside">
 
-                    <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
-
-                    <!-- Change Request details, bound directly from the model -->
-                    <div class="card border mb-4">
-                        <div class="card-header bg-light-subtle">
-                            <h6 class="fs-15 mb-0">Change Request Details</h6>
+                <div class="casm-card">
+                    <h6><i class="ri-checkbox-circle-line"></i>Your progress</h6>
+                    <div class="casm-progress">
+                        <div class="casm-ring-wrap" id="casmRingWrap">
+                            <svg class="casm-ring" viewBox="0 0 100 100" aria-hidden="true">
+                                <circle class="casm-ring-bg" cx="50" cy="50" r="44"></circle>
+                                <circle class="casm-ring-fg" id="casmRingFg" cx="50" cy="50" r="44"></circle>
+                            </svg>
+                            <div class="casm-ring-num"><span><span id="casmPct">0</span><small>%</small></span></div>
                         </div>
-                        <div class="card-body">
-                            <div class="row g-3">
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">CR Number:</label>
-                                    <span>@Model.CRNumber</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Title:</label>
-                                    <span>@Model.ChangeTitle</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
-                                    <span>@Model.ChangeType</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Priority:</label>
-                                    <span>@Model.Priority</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Division:</label>
-                                    <span>@(string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division)</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Module:</label>
-                                    <span>@Model.Module</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Status:</label>
-                                    <span>@Model.Status</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
-                                    <span>@Model.RequestedBy</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
-                                    <span>@Model.RequestedDate.ToString("yyyy/MM/dd")</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Approver:</label>
-                                    <span>@Model.ApproverUserName</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
-                                    <span>@Model.Summary</span>
-                                </div>
-                            </div>
+                        <div class="casm-progress-text">
+                            <strong id="casmHeadline">Let's get started</strong>
+                            <span id="casmSubline">0 of 6 steps done</span>
+                        </div>
+                    </div>
+                    <ul class="casm-checklist" id="casmChecklist">
+                        <li data-key="effort"><i class="ri-check-line"></i>Effort estimate</li>
+                        <li data-key="activities"><i class="ri-check-line"></i>Activities &amp; tasks</li>
+                        <li data-key="fixedAsset"><i class="ri-check-line"></i>Fixed asset info</li>
+                        <li data-key="srs"><i class="ri-check-line"></i>SRS document</li>
+                        <li data-key="ba"><i class="ri-check-line"></i>BA document</li>
+                        <li data-key="vendor"><i class="ri-check-line"></i>Vendor details</li>
+                    </ul>
+                </div>
+
+                <div class="casm-card">
+                    <h6><i class="ri-file-list-3-line"></i>Request summary</h6>
+                    <span class="casm-pill"><i class="ri-flag-2-line"></i>@Model.Priority</span>
+                    <span class="casm-pill"><i class="ri-git-branch-line"></i>@Model.ChangeType</span>
+
+                    <div class="casm-kv">
+                        <div class="casm-kv-row"><span class="casm-kv-label">CR Number</span><span class="casm-kv-val">@Model.CRNumber</span></div>
+                        <div class="casm-kv-row"><span class="casm-kv-label">Title</span><span class="casm-kv-val">@Model.ChangeTitle</span></div>
+                        <div class="casm-kv-row"><span class="casm-kv-label">Division</span><span class="casm-kv-val">@(string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division)</span></div>
+                        <div class="casm-kv-row"><span class="casm-kv-label">Module</span><span class="casm-kv-val">@Model.Module</span></div>
+                        <div class="casm-kv-row"><span class="casm-kv-label">Status</span><span class="casm-kv-val">@Model.Status</span></div>
+                        <div class="casm-kv-row"><span class="casm-kv-label">Requested by</span><span class="casm-kv-val">@Model.RequestedBy</span></div>
+                        <div class="casm-kv-row"><span class="casm-kv-label">Requested date</span><span class="casm-kv-val">@Model.RequestedDate.ToString("yyyy/MM/dd")</span></div>
+                        <div class="casm-kv-row"><span class="casm-kv-label">Approver</span><span class="casm-kv-val">@Model.ApproverUserName</span></div>
+                    </div>
+
+                    <div class="casm-summary-text">
+                        <strong>Business justification</strong>
+                        @Model.Summary
+                    </div>
+                </div>
+
+                <div class="casm-card">
+                    <h6><i class="ri-handshake-line"></i>Vendor support</h6>
+
+                    <div class="casm-toggle">
+                        <div class="casm-toggle-opt">
+                            <input type="radio" id="vendorSupportYes" name="vendorSupport" value="yes"
+                                   class="casm-toggle-input" checked="@hasVendorSupport">
+                            <label class="casm-toggle-tile" for="vendorSupportYes"><i class="ri-check-line"></i>&nbsp;Yes</label>
+                        </div>
+                        <div class="casm-toggle-opt">
+                            <input type="radio" id="vendorSupportNo" name="vendorSupport" value="no"
+                                   class="casm-toggle-input" checked="@(!hasVendorSupport)">
+                            <label class="casm-toggle-tile" for="vendorSupportNo"><i class="ri-close-line"></i>&nbsp;No</label>
                         </div>
                     </div>
 
-                    <div class="row g-3">
-
-                        <!-- Left Column -->
-                        <div class="col-lg-6">
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Implementer Name :</label>
-                                    <span id="implementerName">@username</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Designation :</label>
-                                    <span id="implementerDesignation">@designation</span>
-                                </div>
-                            </div>
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Department :</label>
-                                    <span id="implementerDepartment">@department</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Email :</label>
-                                    <span id="implementerEmail">@email</span>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Request Date :</label>
-                                    <span id="requestDate">@DateTime.Now.ToString("dd/MM/yyyy")</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Effort Estimate ( Days )</label>
-                                    <input type="number" name="EffortEstimateDays" id="effortEstimateDays"
-                                           class="form-control" min="0" step="0.5"
-                                           value="@effortEstimateDays">
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label">Activities &amp; Tasks</label>
-                                <textarea name="ActivitiesTasks" id="activitiesTasks" class="form-control" rows="6"
-                                          placeholder="Write the explanation here...">@Model.ActivitiesTasks</textarea>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Fixed Asset Information</label>
-                                <textarea name="FixedAssetInfo" id="fixedAssetInfo" class="form-control" rows="6"
-                                          placeholder="Write the explanation here...">@Model.FixedAssets</textarea>
-                            </div>
-
-                            <!-- SRS Document -->
-                            <div class="mb-3" id="srsSection">
-                                <label class="form-label">SRS Document</label>
-                                <input type="file" name="srsFile" id="srsFileInput" class="form-control" multiple>
-                                @{
-                                    RenderAttachmentList("existingSrsList", srsAttachments);
+                    <div id="vendorSupportDetails" class="mb-3"
+                         style="display: @(hasVendorSupport ? "block" : "none");">
+                        <label class="casm-label" for="VendorID">Vendor name</label>
+                        <select id="VendorID" name="VendorID" class="form-control select2" data-toggle="select2">
+                            <option value="" disabled hidden selected="@(!hasVendorSupport)">Select Vendor</option>
+                            @if (vendors != null)
+                            {
+                                foreach (var vendor in vendors)
+                                {
+                                    <option value="@vendor.Id" selected="@(vendor.Id == selectedVendorId)">@vendor.VendorName</option>
                                 }
-                            </div>
-
-                            <!-- BA Document -->
-                            <div class="mb-3" id="baSection">
-                                <label class="form-label">BA Document</label>
-                                <input type="file" name="baFile" id="baFileInput" class="form-control" multiple>
-                                @{
-                                    RenderAttachmentList("existingBaList", baAttachments);
-                                }
-                            </div>
-
-                        </div>
-
-                        <!-- Right Column -->
-                        <div class="col-lg-6 d-flex flex-column">
-                            <div class="card border mb-3 flex-fill">
-                                <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Vendor Support</h6>
-                                </div>
-                                <div class="card-body">
-                                    <label class="form-label">Vendor Support Required</label>
-                                    <div class="mb-3">
-                                        <div class="form-check form-check-inline">
-                                            <input type="radio" id="vendorSupportYes" name="vendorSupport" value="yes"
-                                                   class="form-check-input" checked="@hasVendorSupport">
-                                            <label class="form-check-label" for="vendorSupportYes">Yes</label>
-                                        </div>
-                                        <div class="form-check form-check-inline">
-                                            <input type="radio" id="vendorSupportNo" name="vendorSupport" value="no"
-                                                   class="form-check-input" checked="@(!hasVendorSupport)">
-                                            <label class="form-check-label" for="vendorSupportNo">No</label>
-                                        </div>
-                                    </div>
-
-                                    <div id="vendorSupportDetails" class="mb-3"
-                                         style="display: @(hasVendorSupport ? "block" : "none");">
-                                        <label class="form-label">Vendor Name</label>
-                                        <select id="VendorID" name="VendorID" class="form-control select2" data-toggle="select2">
-                                            <option value="" disabled hidden selected="@(!hasVendorSupport)">Select Vendor</option>
-                                            @if (vendors != null)
-                                            {
-                                                foreach (var vendor in vendors)
-                                                {
-                                                    <option value="@vendor.Id" selected="@(vendor.Id == selectedVendorId)">@vendor.VendorName</option>
-                                                }
-                                            }
-                                        </select>
-                                        <span id="vendorIdError" class="text-danger"></span>
-                                    </div>
-
-                                    <div id="proposalNumber" class="mb-3"
-                                         style="display: @(hasVendorSupport ? "block" : "none");">
-                                        <label class="form-label">Proposal Number</label>
-                                        <input type="text" name="ProposalNumber" id="proposalNumberInput"
-                                               class="form-control" value="@Model.ProposalNumber">
-                                    </div>
-
-                                    <!-- Vendor attachments (field name must be "vendorFiles" to match the service) -->
-                                    <div id="attachmentSection" class="mb-3" style="display: @(hasVendorSupport ? "block" : "none");">
-                                        <label class="form-label">Vendor Attachments</label>
-                                        <input type="file" name="vendorFiles" id="attachmentInput" class="form-control" multiple>
-                                        @{
-                                            RenderAttachmentList("existingAttachmentsList", vendorAttachments);
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
+                            }
+                        </select>
+                        <span id="vendorIdError" class="text-danger"></span>
                     </div>
 
-                    <!-- Actions -->
-                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <button type="button"
-                                class="btn btn-outline-danger"
-                                onclick="window.location.href='@Url.Action("AssignedByMeTable")'">
-                            Cancel
-                        </button>
+                    <div id="proposalNumber" class="mb-3"
+                         style="display: @(hasVendorSupport ? "block" : "none");">
+                        <label class="casm-label" for="proposalNumberInput">Proposal number</label>
+                        <input type="text" name="ProposalNumber" id="proposalNumberInput"
+                               class="form-control" value="@Model.ProposalNumber">
+                    </div>
 
-                        <div class="d-flex gap-2">
-                            <button type="button"
-                                    id="btn-save"
-                                    class="btn btn-danger"
-                                    data-status="1">
-                                Save
-                            </button>
-
-                            <button type="submit"
-                                    id="submitBtn"
-                                    class="btn btn-primary"
-                                    data-status="2">
-                                Submit
-                            </button>
+                    <!-- Vendor attachments (field name must be "vendorFiles" to match the service) -->
+                    <div id="attachmentSection" class="mb-0" style="display: @(hasVendorSupport ? "block" : "none");">
+                        <label class="casm-label">Vendor attachments</label>
+                        <div class="casm-upload">
+                            <input type="file" name="vendorFiles" id="attachmentInput" class="form-control" multiple>
+                            @{
+                                RenderAttachmentList("existingAttachmentsList", vendorAttachments);
+                            }
                         </div>
                     </div>
-                </form>
-            </div> <!-- end card-body -->
-        </div> <!-- end card -->
-    </div><!-- end col -->
+                </div>
+            </aside>
+        </div>
+
+        <!-- Actions -->
+        <div class="casm-actions">
+            <button type="button"
+                    class="btn btn-outline-danger"
+                    onclick="window.location.href='@Url.Action("AssignedByMeTable")'">
+                Cancel
+            </button>
+
+            <div class="d-flex gap-2">
+                <button type="button"
+                        id="btn-save"
+                        class="btn btn-danger"
+                        data-status="1">
+                    <i class="ri-save-3-line me-1"></i>Save
+                </button>
+
+                <button type="submit"
+                        id="submitBtn"
+                        class="btn btn-primary"
+                        data-status="2">
+                    <i class="ri-send-plane-line me-1"></i>Submit
+                </button>
+            </div>
+        </div>
+    </form>
+
     <!-- Attachment image preview modal -->
     <div class="modal fade" id="attachmentPreviewModal" tabindex="-1" aria-labelledby="attachmentPreviewModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -331,7 +976,7 @@
             </div>
         </div>
     </div>
-</div><!-- end row -->
+</div>
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -370,13 +1015,66 @@
             }
         }
 
-        vendorYes.addEventListener('change', toggleVendorDetails);
-        vendorNo.addEventListener('change', toggleVendorDetails);
+        vendorYes.addEventListener('change', function () { toggleVendorDetails(); refreshProgress(); });
+        vendorNo.addEventListener('change', function () { toggleVendorDetails(); refreshProgress(); });
 
         // Make sure select2 reflects the pre-selected vendor after it initialises.
         if (selectedVendorId > 0 && window.jQuery && $(vendorSelect).data('select2')) {
             $(vendorSelect).val(String(selectedVendorId)).trigger('change.select2');
         }
+
+        // ---- Progress ring + checklist ----
+        var RING_LEN = 276.46;
+        var effortInput = document.getElementById('effortEstimateDays');
+        var activitiesInput = document.getElementById('activitiesTasks');
+        var fixedAssetInput = document.getElementById('fixedAssetInfo');
+        var srsFileInput = document.getElementById('srsFileInput');
+        var baFileInput = document.getElementById('baFileInput');
+
+        function hasExistingFiles(listId) {
+            var list = document.getElementById(listId);
+            return !!list && list.querySelectorAll('li').length > 0;
+        }
+
+        function hasNewFiles(input) {
+            return !!(input && input.files && input.files.length > 0);
+        }
+
+        function refreshProgress() {
+            var state = {
+                effort: !!(effortInput && parseFloat(effortInput.value) > 0),
+                activities: !!(activitiesInput && activitiesInput.value.trim().length > 0),
+                fixedAsset: !!(fixedAssetInput && fixedAssetInput.value.trim().length > 0),
+                srs: hasExistingFiles('existingSrsList') || hasNewFiles(srsFileInput),
+                ba: hasExistingFiles('existingBaList') || hasNewFiles(baFileInput),
+                vendor: vendorNo.checked || (vendorYes.checked && !!vendorSelect.value)
+            };
+
+            var done = 0;
+            var total = 0;
+            document.querySelectorAll('#casmChecklist li').forEach(function (li) {
+                total++;
+                var ok = !!state[li.getAttribute('data-key')];
+                li.classList.toggle('is-done', ok);
+                if (ok) { done++; }
+            });
+
+            var pct = total ? Math.round(done / total * 100) : 0;
+            document.getElementById('casmPct').textContent = pct;
+            document.getElementById('casmRingFg').style.strokeDashoffset = RING_LEN * (1 - done / total);
+            document.getElementById('casmRingWrap').classList.toggle('is-full', done === total);
+            document.getElementById('casmSubline').textContent = done + ' of ' + total + ' steps done';
+            document.getElementById('casmHeadline').textContent =
+                done === total ? 'Ready to submit' :
+                done === 0 ? "Let's get started" :
+                done >= Math.ceil(total * 0.6) ? 'Almost there' : 'Looking good';
+        }
+
+        ['input', 'change'].forEach(function (evt) {
+            document.getElementById('assessmentForm').addEventListener(evt, refreshProgress);
+        });
+
+        refreshProgress();
 
         // ---- Function to handle both Save and Submit actions ----
         function handleFormSubmission(btnElement, isSubmit) {
@@ -525,6 +1223,7 @@
                         success: function (data) {
                             if (data.success) {
                                 listItem.remove();
+                                refreshProgress();
 
                                 Swal.fire({
                                     title: 'Deleted!',

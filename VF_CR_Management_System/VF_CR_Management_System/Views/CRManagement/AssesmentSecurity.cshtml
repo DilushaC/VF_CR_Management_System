@@ -11,6 +11,25 @@
 
     // Change impact options are loaded into the ChangeRequest model (ImpactID / ChangeImpactName)
     var changeImpacts = ViewBag.ChangeImpacts as IEnumerable<VF_CR_Management_System.Data.Models.ChangeRequest>;
+
+    string Initials(string? n)
+    {
+        var l = (n ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => char.IsLetter(p[0]))
+            .Select(p => char.ToUpperInvariant(p[0]))
+            .Take(2)
+            .ToArray();
+        return l.Length > 0 ? new string(l) : "?";
+    }
+
+    (string Tone, string Icon) ImpactStyle(string? name) => name switch
+    {
+        "Minor" => ("ok", "ri-checkbox-circle-line"),
+        "Standard" => ("warn", "ri-information-line"),
+        "Major" => ("bad", "ri-alarm-warning-line"),
+        _ => ("info", "ri-flag-2-line")
+    };
 }
 @{
     // ---- Attachments split by type (SRS / BA / Vendor) ----
@@ -42,9 +61,9 @@
             return;
         }
 
-        <div class="mb-3">
-            <label class="fw-bold text-dark d-block mb-1">@title:</label>
-            <ul class="list-unstyled mb-0">
+        <div class="csec-attgroup">
+            <label class="csec-label-sm">@title</label>
+            <ul class="csec-filelist">
                 @foreach (var attachment in items)
                 {
                     var fileName = attachment.FileName;
@@ -54,29 +73,34 @@
                     var previewUrl = Url.Action("PreviewAttachment", "CRManagement", new { id = attachment.AttachmentID });
                     var downloadUrl = Url.Action("DownloadAttachment", "CRManagement", new { id = attachment.AttachmentID });
 
-                    <li class="mb-1">
-                        @if (isImage)
-                        {
-                            <a href="javascript:void(0);" class="attachment-link"
-                               data-type="image"
-                               data-preview-url="@previewUrl"
-                               data-download-url="@downloadUrl"
-                               data-name="@fileName">
-                                <i class="ri-image-line me-1"></i>@fileName
-                            </a>
-                        }
-                        else if (isPdf)
-                        {
-                            <a href="@previewUrl" target="_blank" rel="noopener">
-                                <i class="ri-file-pdf-line me-1"></i>@fileName
-                            </a>
-                        }
-                        else
-                        {
-                            <a href="@downloadUrl" download>
-                                <i class="ri-download-2-line me-1"></i>@fileName
-                            </a>
-                        }
+                    <li>
+                        <span class="csec-file-ico">
+                            <i class="@(isImage ? "ri-image-line" : isPdf ? "ri-file-pdf-2-line" : "ri-file-text-line")"></i>
+                        </span>
+                        <span class="csec-file-name">
+                            @if (isImage)
+                            {
+                                <a href="javascript:void(0);" class="attachment-link"
+                                   data-type="image"
+                                   data-preview-url="@previewUrl"
+                                   data-download-url="@downloadUrl"
+                                   data-name="@fileName">
+                                    @fileName
+                                </a>
+                            }
+                            else if (isPdf)
+                            {
+                                <a href="@previewUrl" target="_blank" rel="noopener">
+                                    @fileName
+                                </a>
+                            }
+                            else
+                            {
+                                <a href="@downloadUrl" download>
+                                    @fileName
+                                </a>
+                            }
+                        </span>
                     </li>
                 }
             </ul>
@@ -84,227 +108,895 @@
     }
 }
 
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header border-bottom border-dashed d-flex align-items-center">
-                <h4 class="header-title mb-0">Section 2 : Security Requirements (IS Officer) - @Model.CRNumber</h4>
+<style>
+    .csec-page {
+        --csec-accent: rgb(89, 17, 32);
+        --csec-accent-soft: rgba(89, 17, 32, .1);
+        --csec-progress: #3b5bdb;
+        --csec-ok: #1f9d6b;
+        --csec-line: var(--bs-border-color, #e3e6ec);
+        --csec-muted: var(--bs-secondary-color, #6b7385);
+        --csec-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+    }
+
+        .csec-page .tone-ok {
+            --t: #1f9d6b;
+            --t-bg: rgba(31,157,107,.14);
+        }
+
+        .csec-page .tone-warn {
+            --t: #b57600;
+            --t-bg: rgba(255,176,32,.2);
+        }
+
+        .csec-page .tone-bad {
+            --t: #d6384a;
+            --t-bg: rgba(255,93,108,.16);
+        }
+
+        .csec-page .tone-info {
+            --t: #4a63d6;
+            --t-bg: rgba(59,91,219,.13);
+        }
+
+    /* ===== Hero ===== */
+    .csec-hero {
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 1.25rem;
+        padding: 1.5rem 1.75rem;
+        border-radius: .9rem;
+        color: #fff;
+        background: #451423;
+    }
+
+        .csec-hero::after {
+            content: "";
+            position: absolute;
+            right: -60px;
+            top: -80px;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            border: 40px solid rgba(255,255,255,.05);
+            pointer-events: none;
+        }
+
+    .csec-hero-row {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .csec-hero-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        margin-bottom: .5rem;
+        padding: .25rem .7rem;
+        border-radius: 999px;
+        font-size: .82rem;
+        font-weight: 600;
+        background: rgba(255,255,255,.12);
+    }
+
+    .csec-hero h3 {
+        margin: 0;
+        color: #fff;
+        font-size: 1.55rem;
+        font-weight: 700;
+    }
+
+    .csec-hero p {
+        margin: .25rem 0 0;
+        color: rgba(255,255,255,.7);
+        font-size: .92rem;
+    }
+
+    .csec-back {
+        color: rgba(255,255,255,.85);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: .9rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.3);
+    }
+
+        .csec-back:hover {
+            background: rgba(255,255,255,.12);
+            color: #fff;
+        }
+
+    /* ===== Layout ===== */
+    .csec-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 1.25rem;
+        align-items: start;
+    }
+
+    .csec-aside {
+        position: sticky;
+        top: 90px;
+        display: grid;
+        gap: 1rem;
+    }
+
+    @@media (max-width: 991px) {
+        .csec-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .csec-aside {
+            position: static;
+        }
+    }
+
+    /* ===== Section cards ===== */
+    .csec-sec {
+        margin-bottom: 1.1rem;
+        border: 1px solid var(--csec-line);
+        border-radius: .9rem;
+        background: var(--csec-card);
+        animation: csec-rise .4s ease-out backwards;
+    }
+
+        .csec-sec:nth-of-type(1) {
+            animation-delay: .00s;
+        }
+
+        .csec-sec:nth-of-type(2) {
+            animation-delay: .06s;
+        }
+
+        .csec-sec:nth-of-type(3) {
+            animation-delay: .12s;
+        }
+
+        .csec-sec:nth-of-type(4) {
+            animation-delay: .18s;
+        }
+
+    @@keyframes csec-rise {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+    }
+
+    .csec-sec-head {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--csec-line);
+    }
+
+    .csec-step {
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: .9rem;
+        color: var(--csec-accent);
+        background: var(--csec-accent-soft);
+    }
+
+    .csec-sec-title {
+        margin: 0;
+        font-size: 1.02rem;
+        font-weight: 700;
+    }
+
+    .csec-sec-sub {
+        margin: 0;
+        font-size: .83rem;
+        color: var(--csec-muted);
+    }
+
+    .csec-sec-body {
+        padding: 1.25rem;
+    }
+
+    /* ===== IS Officer strip ===== */
+    .csec-who {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .csec-avatar {
+        flex: 0 0 auto;
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #fff;
+        background: var(--csec-accent);
+    }
+
+    .csec-who-name {
+        font-weight: 700;
+        font-size: 1.05rem;
+    }
+
+    .csec-who-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem 1.25rem;
+        margin-top: .15rem;
+        font-size: .85rem;
+        color: var(--csec-muted);
+    }
+
+        .csec-who-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .csec-who-meta i {
+            color: var(--csec-accent);
+        }
+
+    /* ===== Inputs ===== */
+    .csec-label {
+        font-weight: 600;
+        margin-bottom: .35rem;
+        display: block;
+    }
+
+    .csec-label-sm {
+        font-weight: 700;
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--csec-muted);
+        display: block;
+        margin-bottom: .5rem;
+    }
+
+    .csec-page .form-control,
+    .csec-page .form-select {
+        border-radius: .6rem;
+    }
+
+        .csec-page .form-control:focus,
+        .csec-page .form-select:focus {
+            border-color: var(--csec-accent) !important;
+            box-shadow: 0 0 0 3px var(--csec-accent-soft) !important;
+        }
+
+    .csec-counter {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: .35rem;
+        font-size: .8rem;
+        color: var(--csec-muted);
+    }
+
+    /* ===== Attachments ===== */
+    .csec-attgroup + .csec-attgroup {
+        margin-top: 1.1rem;
+    }
+
+    .csec-filelist {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: .5rem;
+    }
+
+        .csec-filelist li {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            padding: .5rem .7rem;
+            border: 1px solid var(--csec-line);
+            border-radius: .6rem;
+            background: var(--csec-card);
+        }
+
+    .csec-file-ico {
+        flex: 0 0 auto;
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border-radius: .5rem;
+        background: var(--csec-accent-soft);
+        color: var(--csec-accent);
+    }
+
+    .csec-file-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: .88rem;
+    }
+
+        .csec-file-name a {
+            color: inherit;
+            text-decoration: none;
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+            .csec-file-name a:hover {
+                color: var(--csec-accent);
+                text-decoration: underline;
+            }
+
+    .csec-empty {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: .88rem;
+        color: var(--csec-muted);
+    }
+
+    /* ===== Impact tiles ===== */
+    .csec-tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: .65rem;
+    }
+
+    .csec-opt {
+        position: relative;
+    }
+
+    .csec-radio {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .csec-tile {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .5rem;
+        height: 100%;
+        margin: 0;
+        padding: .75rem .8rem;
+        cursor: pointer;
+        border: 1.5px solid var(--csec-line);
+        border-radius: .8rem;
+        background: var(--csec-card);
+        transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+
+        .csec-tile:hover {
+            transform: translateY(-2px);
+            border-color: var(--t, var(--csec-accent));
+        }
+
+    .csec-tile-ico {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: .55rem;
+        font-size: 1.05rem;
+        color: var(--t, var(--csec-accent));
+        background: var(--t-bg, var(--csec-accent-soft));
+    }
+
+    .csec-tile-name {
+        font-weight: 700;
+        font-size: .9rem;
+    }
+
+    .csec-check {
+        position: absolute;
+        top: .5rem;
+        right: .5rem;
+        width: 18px;
+        height: 18px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        font-size: .72rem;
+        color: #fff;
+        background: var(--t, var(--csec-accent));
+        opacity: 0;
+        transform: scale(.4);
+        transition: opacity .15s, transform .2s cubic-bezier(.3,1.6,.6,1);
+    }
+
+    .csec-radio:checked + .csec-tile {
+        border-color: var(--t, var(--csec-accent));
+        background: var(--t-bg, var(--csec-accent-soft));
+        box-shadow: 0 0 0 3px var(--t-bg, var(--csec-accent-soft));
+    }
+
+        .csec-radio:checked + .csec-tile .csec-check {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+    .csec-radio:focus-visible + .csec-tile {
+        outline: 2px solid var(--csec-accent);
+        outline-offset: 2px;
+    }
+
+    /* ===== Aside: progress ring + checklist ===== */
+    .csec-card {
+        border: 1px solid var(--csec-line);
+        border-radius: .9rem;
+        background: var(--csec-card);
+        padding: 1.1rem 1.15rem;
+    }
+
+        .csec-card h6 {
+            margin: 0 0 .85rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+        }
+
+            .csec-card h6 i {
+                color: var(--csec-accent);
+            }
+
+    .csec-progress {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .csec-ring-wrap {
+        position: relative;
+        flex: 0 0 auto;
+        width: 92px;
+        height: 92px;
+    }
+
+    .csec-ring {
+        width: 100%;
+        height: 100%;
+    }
+
+        .csec-ring circle {
+            fill: none;
+            stroke-width: 9;
+        }
+
+        .csec-ring .csec-ring-bg {
+            stroke: var(--csec-line);
+        }
+
+        .csec-ring .csec-ring-fg {
+            stroke: var(--csec-progress);
+            stroke-linecap: round;
+            stroke-dasharray: 276.46;
+            stroke-dashoffset: 276.46;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+            transition: stroke-dashoffset .6s cubic-bezier(.3,.9,.3,1), stroke .3s;
+        }
+
+    .csec-ring-wrap.is-full .csec-ring-fg {
+        stroke: var(--csec-ok);
+    }
+
+    .csec-ring-num {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 1.35rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--csec-progress);
+    }
+
+        .csec-ring-num small {
+            font-size: .7rem;
+            font-weight: 600;
+            color: var(--csec-muted);
+            margin-left: 1px;
+        }
+
+    .csec-ring-wrap.is-full .csec-ring-num {
+        color: var(--csec-ok);
+    }
+
+    .csec-progress-text strong {
+        display: block;
+        font-size: 1rem;
+    }
+
+    .csec-progress-text span {
+        font-size: .83rem;
+        color: var(--csec-muted);
+    }
+
+    .csec-checklist {
+        list-style: none;
+        margin: 1rem 0 0;
+        padding: 0;
+        display: grid;
+        gap: .45rem;
+    }
+
+        .csec-checklist li {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            font-size: .88rem;
+            color: var(--csec-muted);
+            transition: color .2s;
+        }
+
+            .csec-checklist li i {
+                width: 20px;
+                height: 20px;
+                display: grid;
+                place-items: center;
+                border-radius: 50%;
+                font-size: .8rem;
+                border: 1.5px solid var(--csec-line);
+                color: transparent;
+                transition: background .2s, border-color .2s, color .2s;
+            }
+
+            .csec-checklist li.is-done {
+                color: inherit;
+            }
+
+                .csec-checklist li.is-done i {
+                    background: var(--csec-ok);
+                    border-color: var(--csec-ok);
+                    color: #fff;
+                }
+
+    /* ===== Aside: request summary ===== */
+    .csec-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .2rem .65rem;
+        border-radius: 999px;
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--csec-accent);
+        background: var(--csec-accent-soft);
+    }
+
+    .csec-kv {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: .65rem;
+        margin-top: .9rem;
+        font-size: .86rem;
+    }
+
+    .csec-kv-row {
+        display: flex;
+        justify-content: space-between;
+        gap: .75rem;
+        padding-bottom: .55rem;
+        border-bottom: 1px dashed var(--csec-line);
+    }
+
+        .csec-kv-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+    .csec-kv-label {
+        color: var(--csec-muted);
+        flex: 0 0 auto;
+    }
+
+    .csec-kv-val {
+        font-weight: 600;
+        text-align: right;
+        word-break: break-word;
+    }
+
+    .csec-summary-text {
+        margin-top: .9rem;
+        padding-top: .85rem;
+        border-top: 1px solid var(--csec-line);
+        font-size: .85rem;
+        line-height: 1.55;
+        color: var(--csec-muted);
+    }
+
+        .csec-summary-text strong {
+            display: block;
+            color: inherit;
+            font-weight: 700;
+            margin-bottom: .3rem;
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+
+    /* ===== Action bar ===== */
+    .csec-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-top: 1.25rem;
+        padding: .85rem 1.1rem;
+        border: 1px solid var(--csec-line);
+        border-radius: .9rem;
+        background: var(--csec-card);
+        box-shadow: 0 -6px 18px rgba(23,33,59,.08);
+    }
+
+        .csec-actions .btn {
+            border-radius: 999px;
+            padding-left: 1.3rem;
+            padding-right: 1.3rem;
+            font-weight: 600;
+        }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .csec-sec {
+            animation: none;
+        }
+    }
+</style>
+
+<div class="csec-page">
+
+    <div class="csec-hero">
+        <div class="csec-hero-row">
+            <div>
+                <span class="csec-hero-chip"><i class="ri-shield-keyhole-line"></i>Section 2 · IS Officer</span>
+                <h3>Security Requirements — @Model.CRNumber</h3>
+                <p>Assess the information security risk and classify the change impact.</p>
+            </div>
+            <a class="csec-back" href="@Url.Action("SecurityTable")"><i class="ri-arrow-left-line"></i>Back to security queue</a>
+        </div>
+    </div>
+
+    <form id="securityAssessmentForm">
+
+        <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
+
+        <div class="csec-grid">
+
+            <!-- ============ Left: editable assessment ============ -->
+            <div>
+
+                <!-- 1. IS Officer -->
+                <section class="csec-sec">
+                    <div class="csec-sec-head">
+                        <span class="csec-step"><i class="ri-shield-user-line"></i></span>
+                        <div>
+                            <h5 class="csec-sec-title">IS Officer</h5>
+                            <p class="csec-sec-sub">Filled in automatically from your profile</p>
+                        </div>
+                    </div>
+                    <div class="csec-sec-body">
+                        <div class="csec-who">
+                            <span class="csec-avatar">@Initials(username)</span>
+                            <div>
+                                <div class="csec-who-name">@(string.IsNullOrWhiteSpace(username) ? "Unknown user" : username)</div>
+                                <div class="csec-who-meta">
+                                    @if (!string.IsNullOrWhiteSpace(designation))
+                                    {
+                                        <span><i class="ri-briefcase-line"></i>@designation</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(department))
+                                    {
+                                        <span><i class="ri-building-line"></i>@department</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(email))
+                                    {
+                                        <span><i class="ri-mail-line"></i>@email</span>
+                                    }
+                                    <span><i class="ri-calendar-line"></i>@DateTime.Now.ToString("dd/MM/yyyy")</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. Attachments -->
+                <section class="csec-sec">
+                    <div class="csec-sec-head">
+                        <span class="csec-step"><i class="ri-attachment-2"></i></span>
+                        <div>
+                            <h5 class="csec-sec-title">Attachments</h5>
+                            <p class="csec-sec-sub">Documents submitted with this change request</p>
+                        </div>
+                    </div>
+                    <div class="csec-sec-body">
+                        @if (hasAnyAttachments)
+                        {
+                            RenderAttachmentGroup("SRS Document", srsFiles);
+                            RenderAttachmentGroup("BA Document", baFiles);
+                            RenderAttachmentGroup("Vendor Attachments", vendorFiles);
+                        }
+                        else
+                        {
+                            <p class="csec-empty mb-0"><i class="ri-folder-info-line"></i>No attachments found.</p>
+                        }
+                    </div>
+                </section>
+
+                <!-- 3. Risk assessment -->
+                <section class="csec-sec">
+                    <div class="csec-sec-head">
+                        <span class="csec-step"><i class="ri-shield-check-line"></i></span>
+                        <div>
+                            <h5 class="csec-sec-title">Information security risk assessment</h5>
+                            <p class="csec-sec-sub">Document the security risks and mitigations for this change</p>
+                        </div>
+                    </div>
+                    <div class="csec-sec-body">
+                        <textarea name="RiskAssessment" id="securityRiskAssessment" class="form-control" rows="8"
+                                  placeholder="Write the explanation here...">@Model.RiskAssessment</textarea>
+                        <div class="csec-counter"><span id="csecWords">0 words</span></div>
+                    </div>
+                </section>
+
+                <!-- 4. Change impact -->
+                <section class="csec-sec">
+                    <div class="csec-sec-head">
+                        <span class="csec-step"><i class="ri-git-branch-line"></i></span>
+                        <div>
+                            <h5 class="csec-sec-title">Change impact</h5>
+                            <p class="csec-sec-sub">Classify how disruptive this change is</p>
+                        </div>
+                    </div>
+                    <div class="csec-sec-body">
+                        @if (changeImpacts != null && changeImpacts.Any())
+                        {
+                            <div class="csec-tiles">
+                                @foreach (var impact in changeImpacts)
+                                {
+                                    var style = ImpactStyle(impact.ChangeImpactName);
+                                    var radioId = "changeImpact_" + impact.ImpactID;
+
+                                    <div class="csec-opt">
+                                        <input type="radio" id="@radioId" name="ImpactID" value="@impact.ImpactID"
+                                               class="csec-radio" checked="@(Model.ImpactID == impact.ImpactID)">
+                                        <label class="csec-tile tone-@style.Tone" for="@radioId">
+                                            <span class="csec-tile-ico"><i class="@style.Icon"></i></span>
+                                            <span class="csec-tile-name">@impact.ChangeImpactName</span>
+                                            <span class="csec-check"><i class="ri-check-line"></i></span>
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="csec-empty mb-0"><i class="ri-folder-info-line"></i>No change impact options available.</p>
+                        }
+                    </div>
+                </section>
             </div>
 
-            <div class="card-body">
+            <!-- ============ Right: progress + summary ============ -->
+            <aside class="csec-aside">
 
-                <form id="securityAssessmentForm">
-
-                    <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
-
-                    <!-- Change Request details, bound directly from the model (same as Implementer Assessment view) -->
-                    <div class="card border mb-4">
-                        <div class="card-header bg-light-subtle">
-                            <h6 class="fs-15 mb-0">Change Request Details</h6>
+                <div class="csec-card">
+                    <h6><i class="ri-checkbox-circle-line"></i>Your progress</h6>
+                    <div class="csec-progress">
+                        <div class="csec-ring-wrap" id="csecRingWrap">
+                            <svg class="csec-ring" viewBox="0 0 100 100" aria-hidden="true">
+                                <circle class="csec-ring-bg" cx="50" cy="50" r="44"></circle>
+                                <circle class="csec-ring-fg" id="csecRingFg" cx="50" cy="50" r="44"></circle>
+                            </svg>
+                            <div class="csec-ring-num"><span><span id="csecPct">0</span><small>%</small></span></div>
                         </div>
-                        <div class="card-body">
-                            <div class="row g-3">
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">CR Number:</label>
-                                    <span>@Model.CRNumber</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Title:</label>
-                                    <span>@Model.ChangeTitle</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Change Type:</label>
-                                    <span>@Model.ChangeType</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Priority:</label>
-                                    <span>@Model.Priority</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Division:</label>
-                                    <span>@(string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division)</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Module:</label>
-                                    <span>@Model.Module</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Status:</label>
-                                    <span>@Model.Status</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Requested By:</label>
-                                    <span>@Model.RequestedBy</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Requested Date:</label>
-                                    <span>@Model.RequestedDate.ToString("yyyy/MM/dd")</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Approver:</label>
-                                    <span>@Model.ApproverUserName</span>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold text-dark d-block mb-1">Estimated Due Date:</label>
-                                    <span>@(Model.DueDate.HasValue? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—")</span>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="fw-bold text-dark d-block mb-1">Summary &amp; Business Justification:</label>
-                                    <span>@Model.Summary</span>
-                                </div>
-                            </div>
+                        <div class="csec-progress-text">
+                            <strong id="csecHeadline">Let's get started</strong>
+                            <span id="csecSubline">0 of 2 steps done</span>
                         </div>
                     </div>
-
-                    <!-- Attachments (grouped by type) -->
-                    <div class="card border mb-4">
-                        <div class="card-header bg-light-subtle">
-                            <h6 class="fs-15 mb-0">Attachments</h6>
-                        </div>
-                        <div class="card-body">
-                            @if (hasAnyAttachments)
-                            {
-                                RenderAttachmentGroup("SRS Document", srsFiles);
-                                RenderAttachmentGroup("BA Document", baFiles);
-                                RenderAttachmentGroup("Vendor Attachments", vendorFiles);
-                            }
-                            else
-                            {
-                                <p class="text-muted mb-0">No attachments found.</p>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="row g-3">
-
-                        <!-- Left Column -->
-                        <div class="col-lg-6">
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">IS Officer Name</label>
-                                    <input type="text" class="form-control" value="@username" disabled>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Designation</label>
-                                    <input type="text" class="form-control" value="@designation" disabled>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Department</label>
-                                    <input type="text" class="form-control" value="@department" disabled>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" class="form-control" value="@email" disabled>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Request Date</label>
-                                    <input type="text" class="form-control" value="@DateTime.Now.ToString("dd/MM/yyyy")" disabled>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Information Security Risk Assessment</label>
-                                <textarea name="RiskAssessment" id="securityRiskAssessment" class="form-control" rows="6"
-                                          placeholder="Write the explanation here...">@Model.RiskAssessment</textarea>
-                            </div>
-                        </div>
-
-                        <!-- Right Column -->
-                        <div class="col-lg-6 d-flex flex-column">
-                            <div class="card border mb-3 flex-fill">
-                                <div class="card-header bg-light-subtle">
-                                    <h6 class="fs-15 mb-0">Change Impact</h6>
-                                </div>
-                                <div class="card-body">
-                                    @if (changeImpacts != null && changeImpacts.Any())
-                                    {
-                                        foreach (var impact in changeImpacts)
-                                        {
-                                            var radioClass = impact.ChangeImpactName switch
-                                            {
-                                                "Minor" => "form-radio-secondary",
-                                                "Standard" => "form-radio-warning",
-                                                "Major" => "form-radio-danger",
-                                                _ => "form-radio-primary"
-                                            };
-                                            var radioId = "changeImpact_" + impact.ImpactID;
-
-                                            <div class="form-check form-check-inline @radioClass mb-0">
-                                                <input type="radio" id="@radioId" name="ImpactID" value="@impact.ImpactID"
-                                                       class="form-check-input" checked="@(Model.ImpactID == impact.ImpactID)">
-                                                <label class="form-check-label" for="@radioId">@impact.ChangeImpactName</label>
-                                            </div>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <p class="text-muted mb-0">No change impact options available.</p>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <button type="button"
-                                class="btn btn-outline-danger"
-                                onclick="window.location.href='@Url.Action("SecurityTable")'">
-                            Cancel
-                        </button>
-                        <div class="d-flex gap-2">
-                            <button type="button"
-                                    id="btn-save"
-                                    class="btn btn-danger"
-                                    data-status="1">
-                                Save
-                            </button>
-                            <button type="submit"
-                                    id="submitBtn"
-                                    class="btn btn-primary"
-                                    data-status="2">
-                                Submit
-                            </button>
-                        </div>
-                    </div>
-                </form>
-
-                <!-- Image Preview Modal -->
-                <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog modal-lg modal-dialog-centered">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body text-center">
-                                <div id="imagePreviewSpinner" class="py-5">
-                                    <div class="spinner-border text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                </div>
-                                <img id="modalPreviewImage" src="" alt="" class="img-fluid d-none" />
-                            </div>
-                            <div class="modal-footer">
-                                <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
-                                    <i class="ri-download-2-line me-1"></i> Download
-                                </a>
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            </div>
-                        </div>
-                    </div>
+                    <ul class="csec-checklist" id="csecChecklist">
+                        <li data-key="risk"><i class="ri-check-line"></i>Risk assessment</li>
+                        <li data-key="impact"><i class="ri-check-line"></i>Change impact</li>
+                    </ul>
                 </div>
 
-            </div> <!-- end card-body -->
-        </div> <!-- end card -->
-    </div><!-- end col -->
-</div><!-- end row -->
+                <div class="csec-card">
+                    <h6><i class="ri-file-list-3-line"></i>Request summary</h6>
+                    <span class="csec-pill"><i class="ri-flag-2-line"></i>@Model.Priority</span>
+                    <span class="csec-pill"><i class="ri-git-branch-line"></i>@Model.ChangeType</span>
+
+                    <div class="csec-kv">
+                        <div class="csec-kv-row"><span class="csec-kv-label">CR Number</span><span class="csec-kv-val">@Model.CRNumber</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Title</span><span class="csec-kv-val">@Model.ChangeTitle</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Division</span><span class="csec-kv-val">@(string.IsNullOrEmpty(Model.Division) ? "—" : Model.Division)</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Module</span><span class="csec-kv-val">@Model.Module</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Status</span><span class="csec-kv-val">@Model.Status</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Requested by</span><span class="csec-kv-val">@Model.RequestedBy</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Requested date</span><span class="csec-kv-val">@Model.RequestedDate.ToString("yyyy/MM/dd")</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Approver</span><span class="csec-kv-val">@Model.ApproverUserName</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Due date</span><span class="csec-kv-val">@(Model.DueDate.HasValue? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—")</span></div>
+                    </div>
+
+                    <div class="csec-summary-text">
+                        <strong>Business justification</strong>
+                        @Model.Summary
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Actions -->
+        <div class="csec-actions">
+            <button type="button"
+                    class="btn btn-outline-danger"
+                    onclick="window.location.href='@Url.Action("SecurityTable")'">
+                Cancel
+            </button>
+            <div class="d-flex gap-2">
+                <button type="button"
+                        id="btn-save"
+                        class="btn btn-danger"
+                        data-status="1">
+                    <i class="ri-save-3-line me-1"></i>Save
+                </button>
+                <button type="submit"
+                        id="submitBtn"
+                        class="btn btn-primary"
+                        data-status="2">
+                    <i class="ri-send-plane-line me-1"></i>Submit
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Image Preview Modal -->
+    <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="imagePreviewModalLabel">Attachment Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div id="imagePreviewSpinner" class="py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <img id="modalPreviewImage" src="" alt="" class="img-fluid d-none" />
+                </div>
+                <div class="modal-footer">
+                    <a id="imagePreviewDownloadBtn" href="#" class="btn btn-outline-primary" download>
+                        <i class="ri-download-2-line me-1"></i> Download
+                    </a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -341,6 +1033,44 @@
                     img.src = previewUrl;
                 });
             });
+
+            // ---- Progress ring + checklist ----
+            var RING_LEN = 276.46;
+            var riskInput = document.getElementById('securityRiskAssessment');
+
+            function refreshProgress() {
+                var risk = (riskInput.value || '').trim();
+                var impact = document.querySelector('input[name="ImpactID"]:checked');
+
+                var words = risk ? risk.split(/\s+/).length : 0;
+                document.getElementById('csecWords').textContent = words + (words === 1 ? ' word' : ' words');
+
+                var state = {
+                    risk: risk.length > 0,
+                    impact: !!impact
+                };
+
+                var done = 0, total = 0;
+                document.querySelectorAll('#csecChecklist li').forEach(function (li) {
+                    total++;
+                    var ok = !!state[li.getAttribute('data-key')];
+                    li.classList.toggle('is-done', ok);
+                    if (ok) { done++; }
+                });
+
+                var pct = total ? Math.round(done / total * 100) : 0;
+                document.getElementById('csecPct').textContent = pct;
+                document.getElementById('csecRingFg').style.strokeDashoffset = RING_LEN * (1 - done / total);
+                document.getElementById('csecRingWrap').classList.toggle('is-full', done === total);
+                document.getElementById('csecSubline').textContent = done + ' of ' + total + ' steps done';
+                document.getElementById('csecHeadline').textContent =
+                    done === total ? 'Ready to submit' :
+                    done === 0 ? "Let's get started" : 'Almost there';
+            }
+
+            document.getElementById('securityAssessmentForm').addEventListener('input', refreshProgress);
+            document.getElementById('securityAssessmentForm').addEventListener('change', refreshProgress);
+            refreshProgress();
 
             // ---- Save / Submit security assessment ----
             var saveBtn = document.getElementById('btn-save');
