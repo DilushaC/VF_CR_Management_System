@@ -197,8 +197,10 @@
         (isDevelopmentApproved || isQaReturned)
         && (isAssignedDeveloper || isOriginalDeveloper);
 
-    // "Approve to Development" is shown only when the status is SecurityApproved
-    var canApproveToDevelopment = isSecurityApproved;
+    // "Approve to Development" is shown only when the status is SecurityApproved AND the logged-in
+    // user owns the pending Security row (the approver's follow-up row created once the InfoSec
+    // officer approved it back to them) - not just anyone while the CR sits in SecurityApproved.
+    var canApproveToDevelopment = isSecurityApproved && CanActOn(securityStep);
 
     // "Proceed to QA Test" is shown when the status is DevReturn (developer has uploaded the UAT link),
     // to the QA user whose Testing step is still pending.
@@ -295,22 +297,25 @@
     var attachmentCount = srsFiles.Count + baFiles.Count + qaFiles.Count + vendorFiles.Count;
     var stepRows = Model.StepAssignments ?? new List<WorkflowStepAssignment>();
 
-    // BUG FIX: steps like "Division Head Approval" and "Testing" were showing up twice in the
-    // Workflow tab because the underlying data can legitimately contain more than one
-    // WorkflowStepAssignment row for the same step name over the life of the CR (e.g. a row
-    // created, then re-created on a handover). For display we only want the MOST RECENT row per
-    // step name, except "Developer Documentation" which is allowed multiple rows by design (see
-    // the comment above devDocRows) and must keep all of them. Original row order is preserved.
-    var devDocKey = StepKey("Developer Documentation");
-    var lastIndexByStep = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-    for (var idx = 0; idx < stepRows.Count; idx++)
-    {
-        lastIndexByStep[StepKey(stepRows[idx].StepName)] = idx;
-    }
+    // ===== Workflow tab rows =====
+    // FIX: this used to re-sort by StepID and then dedupe to just the LAST row per step name
+    // (except Developer Documentation, which was special-cased to keep every row). That broke the
+    // tab two ways on real data:
+    //   1. Re-sorting by StepID scrambles chronology the moment a step is revisited later in the
+    //      flow - e.g. Division Head Approval (StepID 1) gets a second row near the END of the
+    //      process (QA sending it back up for the final handover), but StepID-sort shoves that
+    //      second row to the very TOP of the list as if it happened first.
+    //   2. The "last row per step" dedupe silently dropped the earlier cycle of any step other than
+    //      Developer Documentation - e.g. the original Division Head approval, or the Security
+    //      officer's row before it bounced back to the approver - even though those are real,
+    //      distinct events the user should see.
+    // Model.StepAssignments arrives ordered by ApprovalID ASC (chronological - see the repository
+    // note above devDocRows), and ANY step can be revisited more than once (Division Head, Security
+    // and Developer Documentation all do it on real data), so the fix is simply: don't re-sort, and
+    // don't dedupe. Show every row, in arrival order, so the tab reads top-to-bottom as
+    // "initial stage -> latest" accurately.
     var displayStepRows = stepRows
-        .Where((s, idx) =>
-            string.Equals(StepKey(s.StepName), devDocKey, StringComparison.OrdinalIgnoreCase)
-            || lastIndexByStep[StepKey(s.StepName)] == idx)
+        .Where(s => !string.IsNullOrEmpty(StepKey(s.StepName))) // drop rows with no step name
         .ToList();
 
     var hasAssessmentData = new[]
@@ -391,7 +396,7 @@
         var pName = sep > 0 ? display.Substring(0, sep).Trim() : display;
         var pId = sep > 0 ? display.Substring(sep + 3).Trim() : string.Empty;
         var hue = Math.Abs(pName.Sum(c => (int)c)) % 6;
-        var isMe = IsCurrentUser(value);
+        var isMe = IsCurrentUser(value) || IsCurrentUser(display) || (pId.Length > 0 && IsCurrentUser(pId));
 
         <div class="cr-person">
             <span class="cr-avatar cr-hue-@hue">@Initials(pName)</span>
@@ -1484,13 +1489,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                                foreach (var user in ViewBag.Users)
-                                {
-                                                    string uId = user.UserName;
-                                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                                    if (string.IsNullOrEmpty(uId)) { continue; }
-                                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                                }
+                                    foreach (var user in ViewBag.Users)
+                                    {
+                                                            string uId = user.UserName;
+                                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                                            if (string.IsNullOrEmpty(uId)) { continue; }
+                                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                                    }
             }
         ];
 
@@ -1612,14 +1617,176 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         }
 
-        // ===== APPROVE: pick the Implementer and the QA user, then approve =====
-        $(document).off('click', '#modal-approve-btn')
-                   .on('click', '#modal-approve-btn', function () {
+            // ===== APPROVE: pick the Implementer and the QA user, then approve =====
+            $(document).off('click', '#modal-approve-btn')
+                       .on('click', '#modal-approve-btn', function () {
 
-            var crId = $(this).data('id');
+                var crId = $(this).data('id');
 
-            pickImplementerAndQa('Approve Change Request', 'Approve', '#198754')
-                .then((result) => {
+                Swal.fire({
+                    title: false,
+                    html: `
+                        <div class="uat-swal">
+                            <div class="uat-swal-icon uat-swal-icon-approve">
+                                <i class="ri-checkbox-circle-fill"></i>
+                            </div>
+                            <h3 class="uat-swal-title">Approve Change Request</h3>
+                            <p class="uat-swal-sub">Assign the Implementer and QA user who will carry this CR forward.</p>
+
+                            <div class="uat-swal-group">
+                                <label class="uat-swal-label" for="swal-implementer-select">
+                                    <i class="ri-user-settings-line"></i> Implementer
+                                </label>
+                                <select id="swal-implementer-select" class="uat-swal-select"></select>
+                                <div id="swal-implementer-error" class="uat-swal-error" style="display:none;">
+                                    <i class="ri-error-warning-line"></i><span>Please select an Implementer.</span>
+                                </div>
+                            </div>
+
+                            <div class="uat-swal-group">
+                                <label class="uat-swal-label" for="swal-qa-select">
+                                    <i class="ri-test-tube-line"></i> QA User
+                                </label>
+                                <select id="swal-qa-select" class="uat-swal-select"></select>
+                                <div id="swal-qa-error" class="uat-swal-error" style="display:none;">
+                                    <i class="ri-error-warning-line"></i><span>Please select a QA user.</span>
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    showConfirmButton: true,
+                    confirmButtonText: '<i class="ri-check-line"></i> Approve',
+                    cancelButtonText: 'Cancel',
+                    buttonsStyling: false,
+                    focusConfirm: false,
+                    customClass: {
+                        popup: 'uat-swal-popup',
+                        confirmButton: 'uat-swal-confirm uat-swal-confirm-approve',
+                        cancelButton: 'uat-swal-cancel',
+                        actions: 'uat-swal-actions'
+                    },
+                    didOpen: () => {
+                        if (!document.getElementById('uat-swal-style')) {
+                            var style = document.createElement('style');
+                            style.id = 'uat-swal-style';
+                            style.textContent = `
+                                .uat-swal-popup { border-radius: 1.1rem; padding: 1.75rem 1.75rem 1.5rem; }
+                                .uat-swal { text-align: center; }
+                                .uat-swal-icon {
+                                    width: 60px; height: 60px; margin: 0 auto .9rem;
+                                    border-radius: 50%; display: grid; place-items: center;
+                                    font-size: 1.7rem; color: #fff;
+                                    background: linear-gradient(135deg, #3b5bdb, #6a3bdb);
+                                    box-shadow: 0 8px 20px -6px rgba(59,91,219,.55);
+                                }
+                                .uat-swal-icon-live {
+                                    background: linear-gradient(135deg, #0ca678, #1f9d6b);
+                                    box-shadow: 0 8px 20px -6px rgba(12,166,120,.55);
+                                }
+                                .uat-swal-icon-approve {
+                                    background: linear-gradient(135deg, #198754, #11603b);
+                                    box-shadow: 0 8px 20px -6px rgba(25,135,84,.55);
+                                }
+                                .uat-swal-title { margin: 0 0 .35rem; font-size: 1.25rem; font-weight: 700; color: #1c2030; }
+                                .uat-swal-sub { margin: 0 0 1.4rem; font-size: .88rem; color: #6b7385; line-height: 1.5; }
+                                .uat-swal-field {
+                                    position: relative; display: flex; align-items: center;
+                                    border: 1.5px solid #e3e6ec; border-radius: .65rem;
+                                    background: #f8f9fc; transition: border-color .15s, box-shadow .15s;
+                                }
+                                .uat-swal-field:focus-within {
+                                    border-color: #3b5bdb; box-shadow: 0 0 0 4px rgba(59,91,219,.12); background: #fff;
+                                }
+                                .uat-swal-field-ico { padding: 0 .3rem 0 .85rem; color: #8891a5; font-size: 1.1rem; }
+                                .uat-swal-input {
+                                    flex: 1; border: 0; background: transparent; outline: none;
+                                    padding: .75rem .9rem .75rem .4rem; font-size: .92rem; color: #1c2030;
+                                }
+                                .uat-swal-input::placeholder { color: #aab0c0; }
+                                .uat-swal-group { text-align: left; margin-bottom: 1.1rem; }
+                                .uat-swal-group:last-of-type { margin-bottom: 0; }
+                                .uat-swal-label {
+                                    display: flex; align-items: center; gap: .4rem;
+                                    font-size: .82rem; font-weight: 600; color: #4a4f5e; margin-bottom: .4rem;
+                                }
+                                .uat-swal-label i { color: #3b5bdb; font-size: 1rem; }
+                                .uat-swal-select { width: 100%; }
+                                .uat-swal-error {
+                                    display: flex; align-items: center; gap: .4rem; justify-content: flex-start;
+                                    margin-top: .4rem; font-size: .8rem; color: #d6384a; font-weight: 500;
+                                }
+                                .uat-swal-actions { margin-top: 1.4rem !important; gap: .6rem; }
+                                .uat-swal-confirm, .uat-swal-cancel {
+                                    padding: .6rem 1.3rem; border-radius: .6rem; font-weight: 600; font-size: .88rem;
+                                    border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
+                                    transition: transform .1s, box-shadow .15s;
+                                }
+                                .uat-swal-confirm {
+                                    color: #fff; background: linear-gradient(135deg, #3b5bdb, #2f49b8);
+                                    box-shadow: 0 6px 16px -6px rgba(59,91,219,.6);
+                                }
+                                .uat-swal-confirm-live {
+                                    background: linear-gradient(135deg, #0ca678, #0b8c64);
+                                    box-shadow: 0 6px 16px -6px rgba(12,166,120,.6);
+                                }
+                                .uat-swal-confirm-approve {
+                                    background: linear-gradient(135deg, #198754, #11603b);
+                                    box-shadow: 0 6px 16px -6px rgba(25,135,84,.6);
+                                }
+                                .uat-swal-confirm:hover { transform: translateY(-1px); }
+                                .uat-swal-cancel { background: #f1f2f6; color: #4a4f5e; }
+                                .uat-swal-cancel:hover { background: #e7e9ef; }
+
+                                /* Select2 styled to match the field look above */
+                                .uat-swal-popup .select2-container .select2-selection--single {
+                                    height: auto; border: 1.5px solid #e3e6ec; border-radius: .65rem;
+                                    background: #f8f9fc; padding: .6rem .9rem; transition: border-color .15s, box-shadow .15s;
+                                }
+                                .uat-swal-popup .select2-container--open .select2-selection--single,
+                                .uat-swal-popup .select2-container .select2-selection--single:focus {
+                                    border-color: #3b5bdb; box-shadow: 0 0 0 4px rgba(59,91,219,.12); background: #fff;
+                                }
+                                .uat-swal-popup .select2-selection__rendered { padding: 0; line-height: 1.3; font-size: .92rem; color: #1c2030; }
+                                .uat-swal-popup .select2-selection__placeholder { color: #aab0c0; }
+                                .uat-swal-popup .select2-selection__arrow { height: 100%; top: 0; right: 10px; }
+                            `;
+                            document.head.appendChild(style);
+                        }
+
+                        ['#swal-implementer-select', '#swal-qa-select'].forEach(function (sel) {
+                            $(sel).select2({
+                                dropdownParent: $('.swal2-popup'),
+                                placeholder: 'Select User',
+                                width: '100%',
+                                data: [{ id: '', text: '' }].concat(userOptions)
+                            });
+                        });
+
+                        $('#swal-implementer-select').on('change', function () {
+                            if (this.value) { $('#swal-implementer-error').hide(); }
+                        });
+                        $('#swal-qa-select').on('change', function () {
+                            if (this.value) { $('#swal-qa-error').hide(); }
+                        });
+                    },
+                    preConfirm: () => {
+                        var implementerId = $('#swal-implementer-select').val();
+                        var qaId = $('#swal-qa-select').val();
+                        var valid = true;
+
+                        if (!implementerId) {
+                            $('#swal-implementer-error').show();
+                            valid = false;
+                        }
+                        if (!qaId) {
+                            $('#swal-qa-error').show();
+                            valid = false;
+                        }
+
+                        return valid ? { implementerId: implementerId, qaId: qaId } : false;
+                    }
+                }).then((result) => {
                     if (!result.isConfirmed) return;
 
                     $.ajax({
@@ -1644,7 +1811,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         }
                     });
                 });
-        });
+            });
 
         // ===== REJECT: ask for a reason in the SweetAlert, then reject =====
         $(document).off('click', '#modal-reject-btn')
@@ -1842,23 +2009,108 @@ void FileGroup(string title, string icon, List<Attachment> items)
             var crId = $(this).data('id');
 
             Swal.fire({
-                title: 'Proceed to Development',
-                input: 'url',
-                inputLabel: 'UAT Link',
-                inputPlaceholder: 'https://uat.example.com/...',
-                inputAttributes: { 'aria-label': 'UAT Link', maxlength: 500 },
+                title: false,
+                html: `
+                    <div class="uat-swal">
+                        <div class="uat-swal-icon">
+                            <i class="ri-rocket-2-fill"></i>
+                        </div>
+                        <h3 class="uat-swal-title">Proceed to Development</h3>
+                        <p class="uat-swal-sub">Paste the UAT environment link so reviewers can access the build.</p>
+
+                        <div class="uat-swal-field">
+                            <i class="ri-link-m uat-swal-field-ico"></i>
+                            <input id="uat-link-input" type="url" class="uat-swal-input"
+                                   placeholder="https://uat.example.com/..." autocomplete="off" spellcheck="false">
+                        </div>
+                        <div id="uat-link-error" class="uat-swal-error" style="display:none;">
+                            <i class="ri-error-warning-line"></i><span></span>
+                        </div>
+                    </div>
+                `,
                 showCancelButton: true,
-                confirmButtonText: 'Submit',
-                confirmButtonColor: '#198754',
+                showConfirmButton: true,
+                confirmButtonText: '<i class="ri-check-line"></i> Submit',
                 cancelButtonText: 'Cancel',
+                buttonsStyling: false,
                 focusConfirm: false,
-                inputValidator: (value) => {
-                    if (!value || !value.trim()) {
-                        return 'Please enter the UAT link.';
+                customClass: {
+                    popup: 'uat-swal-popup',
+                    confirmButton: 'uat-swal-confirm',
+                    cancelButton: 'uat-swal-cancel',
+                    actions: 'uat-swal-actions'
+                },
+                didOpen: () => {
+                    if (!document.getElementById('uat-swal-style')) {
+                        var style = document.createElement('style');
+                        style.id = 'uat-swal-style';
+                        style.textContent = `
+                            .uat-swal-popup { border-radius: 1.1rem; padding: 1.75rem 1.75rem 1.5rem; }
+                            .uat-swal { text-align: center; }
+                            .uat-swal-icon {
+                                width: 60px; height: 60px; margin: 0 auto .9rem;
+                                border-radius: 50%; display: grid; place-items: center;
+                                font-size: 1.7rem; color: #fff;
+                                background: linear-gradient(135deg, #3b5bdb, #6a3bdb);
+                                box-shadow: 0 8px 20px -6px rgba(59,91,219,.55);
+                            }
+                            .uat-swal-title { margin: 0 0 .35rem; font-size: 1.25rem; font-weight: 700; color: #1c2030; }
+                            .uat-swal-sub { margin: 0 0 1.25rem; font-size: .88rem; color: #6b7385; line-height: 1.5; }
+                            .uat-swal-field {
+                                position: relative; display: flex; align-items: center;
+                                border: 1.5px solid #e3e6ec; border-radius: .65rem;
+                                background: #f8f9fc; transition: border-color .15s, box-shadow .15s;
+                            }
+                            .uat-swal-field:focus-within {
+                                border-color: #3b5bdb; box-shadow: 0 0 0 4px rgba(59,91,219,.12); background: #fff;
+                            }
+                            .uat-swal-field-ico { padding: 0 .3rem 0 .85rem; color: #8891a5; font-size: 1.1rem; }
+                            .uat-swal-input {
+                                flex: 1; border: 0; background: transparent; outline: none;
+                                padding: .75rem .9rem .75rem .4rem; font-size: .92rem; color: #1c2030;
+                            }
+                            .uat-swal-input::placeholder { color: #aab0c0; }
+                            .uat-swal-error {
+                                display: flex; align-items: center; gap: .4rem; justify-content: center;
+                                margin-top: .6rem; font-size: .8rem; color: #d6384a; font-weight: 500;
+                            }
+                            .uat-swal-actions { margin-top: 1.4rem !important; gap: .6rem; }
+                            .uat-swal-confirm, .uat-swal-cancel {
+                                padding: .6rem 1.3rem; border-radius: .6rem; font-weight: 600; font-size: .88rem;
+                                border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
+                                transition: transform .1s, box-shadow .15s;
+                            }
+                            .uat-swal-confirm {
+                                color: #fff; background: linear-gradient(135deg, #3b5bdb, #2f49b8);
+                                box-shadow: 0 6px 16px -6px rgba(59,91,219,.6);
+                            }
+                            .uat-swal-confirm:hover { transform: translateY(-1px); }
+                            .uat-swal-cancel { background: #f1f2f6; color: #4a4f5e; }
+                            .uat-swal-cancel:hover { background: #e7e9ef; }
+                        `;
+                        document.head.appendChild(style);
                     }
-                    if (!/^https?:\/\/\S+$/i.test(value.trim())) {
-                        return 'Please enter a valid link starting with http:// or https://';
+
+                    var $input = $('#uat-link-input');
+                    var $err = $('#uat-link-error');
+                    $input.trigger('focus');
+                    $input.on('input', function () { $err.hide(); });
+                },
+                preConfirm: () => {
+                    var val = ($('#uat-link-input').val() || '').trim();
+                    var $err = $('#uat-link-error');
+
+                    if (!val) {
+                        $err.find('span').text('Please enter the UAT link.');
+                        $err.show();
+                        return false;
                     }
+                    if (!/^https?:\/\/\S+$/i.test(val)) {
+                        $err.find('span').text('Enter a valid link starting with http:// or https://');
+                        $err.show();
+                        return false;
+                    }
+                    return val;
                 }
             }).then((result) => {
                 if (!result.isConfirmed) return;
@@ -1868,7 +2120,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 $.ajax({
                     url: '@Url.Action("ProceedToDevelopment", "CRManagement")',
                     type: 'POST',
-                    data: { id: crId, uatLink: result.value.trim() },
+                    data: { id: crId, uatLink: result.value },
                     headers: token ? { "RequestVerificationToken": token } : {},
                     success: function (response) {
                         if (response && response.success === false) {
@@ -1893,23 +2145,116 @@ void FileGroup(string title, string icon, List<Attachment> items)
             var crId = $(this).data('id');
 
             Swal.fire({
-                title: 'Please insert Live deployed link here',
-                input: 'url',
-                inputLabel: 'Live Link',
-                inputPlaceholder: 'https://live.example.com/...',
-                inputAttributes: { 'aria-label': 'Live Link', maxlength: 500 },
+                title: false,
+                html: `
+                    <div class="uat-swal">
+                        <div class="uat-swal-icon uat-swal-icon-live">
+                            <i class="ri-flashlight-fill"></i>
+                        </div>
+                        <h3 class="uat-swal-title">Add Live Link</h3>
+                        <p class="uat-swal-sub">Paste the production link now that this change has gone live.</p>
+
+                        <div class="uat-swal-field">
+                            <i class="ri-link-m uat-swal-field-ico"></i>
+                            <input id="live-link-input" type="url" class="uat-swal-input"
+                                   placeholder="https://live.example.com/..." autocomplete="off" spellcheck="false">
+                        </div>
+                        <div id="live-link-error" class="uat-swal-error" style="display:none;">
+                            <i class="ri-error-warning-line"></i><span></span>
+                        </div>
+                    </div>
+                `,
                 showCancelButton: true,
-                confirmButtonText: 'Submit',
-                confirmButtonColor: '#198754',
+                showConfirmButton: true,
+                confirmButtonText: '<i class="ri-check-line"></i> Submit',
                 cancelButtonText: 'Cancel',
+                buttonsStyling: false,
                 focusConfirm: false,
-                inputValidator: (value) => {
-                    if (!value || !value.trim()) {
-                        return 'Please enter the live link.';
+                customClass: {
+                    popup: 'uat-swal-popup',
+                    confirmButton: 'uat-swal-confirm uat-swal-confirm-live',
+                    cancelButton: 'uat-swal-cancel',
+                    actions: 'uat-swal-actions'
+                },
+                didOpen: () => {
+                    if (!document.getElementById('uat-swal-style')) {
+                        var style = document.createElement('style');
+                        style.id = 'uat-swal-style';
+                        style.textContent = `
+                            .uat-swal-popup { border-radius: 1.1rem; padding: 1.75rem 1.75rem 1.5rem; }
+                            .uat-swal { text-align: center; }
+                            .uat-swal-icon {
+                                width: 60px; height: 60px; margin: 0 auto .9rem;
+                                border-radius: 50%; display: grid; place-items: center;
+                                font-size: 1.7rem; color: #fff;
+                                background: linear-gradient(135deg, #3b5bdb, #6a3bdb);
+                                box-shadow: 0 8px 20px -6px rgba(59,91,219,.55);
+                            }
+                            .uat-swal-icon-live {
+                                background: linear-gradient(135deg, #0ca678, #1f9d6b);
+                                box-shadow: 0 8px 20px -6px rgba(12,166,120,.55);
+                            }
+                            .uat-swal-title { margin: 0 0 .35rem; font-size: 1.25rem; font-weight: 700; color: #1c2030; }
+                            .uat-swal-sub { margin: 0 0 1.25rem; font-size: .88rem; color: #6b7385; line-height: 1.5; }
+                            .uat-swal-field {
+                                position: relative; display: flex; align-items: center;
+                                border: 1.5px solid #e3e6ec; border-radius: .65rem;
+                                background: #f8f9fc; transition: border-color .15s, box-shadow .15s;
+                            }
+                            .uat-swal-field:focus-within {
+                                border-color: #3b5bdb; box-shadow: 0 0 0 4px rgba(59,91,219,.12); background: #fff;
+                            }
+                            .uat-swal-field-ico { padding: 0 .3rem 0 .85rem; color: #8891a5; font-size: 1.1rem; }
+                            .uat-swal-input {
+                                flex: 1; border: 0; background: transparent; outline: none;
+                                padding: .75rem .9rem .75rem .4rem; font-size: .92rem; color: #1c2030;
+                            }
+                            .uat-swal-input::placeholder { color: #aab0c0; }
+                            .uat-swal-error {
+                                display: flex; align-items: center; gap: .4rem; justify-content: center;
+                                margin-top: .6rem; font-size: .8rem; color: #d6384a; font-weight: 500;
+                            }
+                            .uat-swal-actions { margin-top: 1.4rem !important; gap: .6rem; }
+                            .uat-swal-confirm, .uat-swal-cancel {
+                                padding: .6rem 1.3rem; border-radius: .6rem; font-weight: 600; font-size: .88rem;
+                                border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
+                                transition: transform .1s, box-shadow .15s;
+                            }
+                            .uat-swal-confirm {
+                                color: #fff; background: linear-gradient(135deg, #3b5bdb, #2f49b8);
+                                box-shadow: 0 6px 16px -6px rgba(59,91,219,.6);
+                            }
+                            .uat-swal-confirm-live {
+                                background: linear-gradient(135deg, #0ca678, #0b8c64);
+                                box-shadow: 0 6px 16px -6px rgba(12,166,120,.6);
+                            }
+                            .uat-swal-confirm:hover { transform: translateY(-1px); }
+                            .uat-swal-cancel { background: #f1f2f6; color: #4a4f5e; }
+                            .uat-swal-cancel:hover { background: #e7e9ef; }
+                        `;
+                        document.head.appendChild(style);
                     }
-                    if (!/^https?:\/\/\S+$/i.test(value.trim())) {
-                        return 'Please enter a valid link starting with http:// or https://';
+
+                    var $input = $('#live-link-input');
+                    var $err = $('#live-link-error');
+                    $input.trigger('focus');
+                    $input.on('input', function () { $err.hide(); });
+                },
+                preConfirm: () => {
+                    var val = ($('#live-link-input').val() || '').trim();
+                    var $err = $('#live-link-error');
+
+                    if (!val) {
+                        $err.find('span').text('Please enter the live link.');
+                        $err.show();
+                        return false;
                     }
+                    if (!/^https?:\/\/\S+$/i.test(val)) {
+                        $err.find('span').text('Enter a valid link starting with http:// or https://');
+                        $err.show();
+                        return false;
+                    }
+                    return val;
                 }
             }).then((result) => {
                 if (!result.isConfirmed) return;
@@ -1919,7 +2264,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 $.ajax({
                     url: '@Url.Action("SubmitLiveLink", "CRManagement")',
                     type: 'POST',
-                    data: { id: crId, liveLink: result.value.trim() },
+                    data: { id: crId, liveLink: result.value },
                     headers: token ? { "RequestVerificationToken": token } : {},
                     success: function (response) {
                         if (response && response.success === false) {
@@ -1939,12 +2284,159 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
         // ===== DEVELOPER DOCUMENTATION: APPROVE =====
         $(document).off('click', '#modal-devdoc-approve-btn')
-                   .on('click', '#modal-devdoc-approve-btn', function () {
+                    .on('click', '#modal-devdoc-approve-btn', function () {
 
             var crId = $(this).data('id');
 
-            // Accept: pick the IS Officer who receives the CR next
-            pickUser('Accept Assessment', 'Select IS Officer:', 'Accept', '#198754').then((result) => {
+            Swal.fire({
+                title: false,
+                html: `
+                    <div class="uat-swal">
+                        <div class="uat-swal-icon uat-swal-icon-security">
+                            <i class="ri-shield-user-line"></i>
+                        </div>
+                        <h3 class="uat-swal-title">Accept Assessment</h3>
+                        <p class="uat-swal-sub">Choose the IS Officer who should receive this Change Request next.</p>
+
+                        <div class="uat-swal-group">
+                            <label class="uat-swal-label" for="swal-security-select">
+                                <i class="ri-shield-check-line"></i> IS Officer
+                            </label>
+                            <select id="swal-security-select" class="uat-swal-select"></select>
+                            <div id="swal-security-error" class="uat-swal-error" style="display:none;">
+                                <i class="ri-error-warning-line"></i><span>Please select an IS Officer.</span>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                showConfirmButton: true,
+                confirmButtonText: '<i class="ri-check-line"></i> Accept',
+                cancelButtonText: 'Cancel',
+                buttonsStyling: false,
+                focusConfirm: false,
+                customClass: {
+                    popup: 'uat-swal-popup',
+                    confirmButton: 'uat-swal-confirm uat-swal-confirm-security',
+                    cancelButton: 'uat-swal-cancel',
+                    actions: 'uat-swal-actions'
+                },
+                didOpen: () => {
+                    if (!document.getElementById('uat-swal-style')) {
+                        var style = document.createElement('style');
+                        style.id = 'uat-swal-style';
+                        style.textContent = `
+                            .uat-swal-popup { border-radius: 1.1rem; padding: 1.75rem 1.75rem 1.5rem; }
+                            .uat-swal { text-align: center; }
+                            .uat-swal-icon {
+                                width: 60px; height: 60px; margin: 0 auto .9rem;
+                                border-radius: 50%; display: grid; place-items: center;
+                                font-size: 1.7rem; color: #fff;
+                                background: linear-gradient(135deg, #3b5bdb, #6a3bdb);
+                                box-shadow: 0 8px 20px -6px rgba(59,91,219,.55);
+                            }
+                            .uat-swal-icon-live {
+                                background: linear-gradient(135deg, #0ca678, #1f9d6b);
+                                box-shadow: 0 8px 20px -6px rgba(12,166,120,.55);
+                            }
+                            .uat-swal-icon-approve {
+                                background: linear-gradient(135deg, #198754, #11603b);
+                                box-shadow: 0 8px 20px -6px rgba(25,135,84,.55);
+                            }
+                            .uat-swal-icon-security {
+                                background: linear-gradient(135deg, #0dcaf0, #0a95b3);
+                                box-shadow: 0 8px 20px -6px rgba(13,202,240,.55);
+                            }
+                            .uat-swal-title { margin: 0 0 .35rem; font-size: 1.25rem; font-weight: 700; color: #1c2030; }
+                            .uat-swal-sub { margin: 0 0 1.4rem; font-size: .88rem; color: #6b7385; line-height: 1.5; }
+                            .uat-swal-field {
+                                position: relative; display: flex; align-items: center;
+                                border: 1.5px solid #e3e6ec; border-radius: .65rem;
+                                background: #f8f9fc; transition: border-color .15s, box-shadow .15s;
+                            }
+                            .uat-swal-field:focus-within {
+                                border-color: #3b5bdb; box-shadow: 0 0 0 4px rgba(59,91,219,.12); background: #fff;
+                            }
+                            .uat-swal-field-ico { padding: 0 .3rem 0 .85rem; color: #8891a5; font-size: 1.1rem; }
+                            .uat-swal-input {
+                                flex: 1; border: 0; background: transparent; outline: none;
+                                padding: .75rem .9rem .75rem .4rem; font-size: .92rem; color: #1c2030;
+                            }
+                            .uat-swal-input::placeholder { color: #aab0c0; }
+                            .uat-swal-group { text-align: left; margin-bottom: 1.1rem; }
+                            .uat-swal-group:last-of-type { margin-bottom: 0; }
+                            .uat-swal-label {
+                                display: flex; align-items: center; gap: .4rem;
+                                font-size: .82rem; font-weight: 600; color: #4a4f5e; margin-bottom: .4rem;
+                            }
+                            .uat-swal-label i { color: #3b5bdb; font-size: 1rem; }
+                            .uat-swal-select { width: 100%; }
+                            .uat-swal-error {
+                                display: flex; align-items: center; gap: .4rem; justify-content: flex-start;
+                                margin-top: .4rem; font-size: .8rem; color: #d6384a; font-weight: 500;
+                            }
+                            .uat-swal-actions { margin-top: 1.4rem !important; gap: .6rem; }
+                            .uat-swal-confirm, .uat-swal-cancel {
+                                padding: .6rem 1.3rem; border-radius: .6rem; font-weight: 600; font-size: .88rem;
+                                border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
+                                transition: transform .1s, box-shadow .15s;
+                            }
+                            .uat-swal-confirm {
+                                color: #fff; background: linear-gradient(135deg, #3b5bdb, #2f49b8);
+                                box-shadow: 0 6px 16px -6px rgba(59,91,219,.6);
+                            }
+                            .uat-swal-confirm-live {
+                                background: linear-gradient(135deg, #0ca678, #0b8c64);
+                                box-shadow: 0 6px 16px -6px rgba(12,166,120,.6);
+                            }
+                            .uat-swal-confirm-approve {
+                                background: linear-gradient(135deg, #198754, #11603b);
+                                box-shadow: 0 6px 16px -6px rgba(25,135,84,.6);
+                            }
+                            .uat-swal-confirm-security {
+                                background: linear-gradient(135deg, #0dcaf0, #0a95b3);
+                                box-shadow: 0 6px 16px -6px rgba(13,202,240,.6);
+                            }
+                            .uat-swal-confirm:hover { transform: translateY(-1px); }
+                            .uat-swal-cancel { background: #f1f2f6; color: #4a4f5e; }
+                            .uat-swal-cancel:hover { background: #e7e9ef; }
+
+                            /* Select2 styled to match the field look above */
+                            .uat-swal-popup .select2-container .select2-selection--single {
+                                height: auto; border: 1.5px solid #e3e6ec; border-radius: .65rem;
+                                background: #f8f9fc; padding: .6rem .9rem; transition: border-color .15s, box-shadow .15s;
+                            }
+                            .uat-swal-popup .select2-container--open .select2-selection--single,
+                            .uat-swal-popup .select2-container .select2-selection--single:focus {
+                                border-color: #3b5bdb; box-shadow: 0 0 0 4px rgba(59,91,219,.12); background: #fff;
+                            }
+                            .uat-swal-popup .select2-selection__rendered { padding: 0; line-height: 1.3; font-size: .92rem; color: #1c2030; }
+                            .uat-swal-popup .select2-selection__placeholder { color: #aab0c0; }
+                            .uat-swal-popup .select2-selection__arrow { height: 100%; top: 0; right: 10px; }
+                        `;
+                        document.head.appendChild(style);
+                    }
+
+                    $('#swal-security-select').select2({
+                        dropdownParent: $('.swal2-popup'),
+                        placeholder: 'Select User',
+                        width: '100%',
+                        data: [{ id: '', text: '' }].concat(userOptions)
+                    });
+
+                    $('#swal-security-select').on('change', function () {
+                        if (this.value) { $('#swal-security-error').hide(); }
+                    });
+                },
+                preConfirm: () => {
+                    var selected = $('#swal-security-select').val();
+                    if (!selected) {
+                        $('#swal-security-error').show();
+                        return false;
+                    }
+                    return selected;
+                }
+            }).then((result) => {
                 if (!result.isConfirmed) return;
 
                 var token = $('input[name="__RequestVerificationToken"]').val();

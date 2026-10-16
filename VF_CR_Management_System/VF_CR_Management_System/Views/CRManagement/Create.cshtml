@@ -711,7 +711,7 @@
         </div>
     </div>
 
-    <form id="crForm" action="@formAction" method="post">
+    <form id="crForm" action="@formAction" method="post" autocomplete="off">
         @Html.AntiForgeryToken()
 
         <!-- Holds 1 (Save) or 2 (Submit & Approve), set by JS right before submission -->

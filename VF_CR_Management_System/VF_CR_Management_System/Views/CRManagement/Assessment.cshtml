@@ -977,302 +977,303 @@
         </div>
     </div>
 </div>
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
 
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        var selectedVendorId = @selectedVendorId;
+            var selectedVendorId = @selectedVendorId;
+            var saveBtn = document.getElementById('btn-save');
+            var submitBtn = document.getElementById('submitBtn');
+            var vendorYes = document.getElementById('vendorSupportYes');
+            var vendorNo = document.getElementById('vendorSupportNo');
+            var vendorDetails = document.getElementById('vendorSupportDetails');
+            var proposalNumberDetails = document.getElementById('proposalNumber');
+            var attachmentSection = document.getElementById('attachmentSection');
+            var attachmentInput = document.getElementById('attachmentInput');
+            var vendorSelect = document.getElementById('VendorID');
 
-        var saveBtn = document.getElementById('btn-save');
-        var submitBtn = document.getElementById('submitBtn');
-        var vendorYes = document.getElementById('vendorSupportYes');
-        var vendorNo = document.getElementById('vendorSupportNo');
-        var vendorDetails = document.getElementById('vendorSupportDetails');
-        var proposalNumberDetails = document.getElementById('proposalNumber');
-        var attachmentSection = document.getElementById('attachmentSection');
-        var attachmentInput = document.getElementById('attachmentInput');
-        var vendorSelect = document.getElementById('VendorID');
+            function toggleVendorDetails() {
+                var show = vendorYes.checked ? 'block' : 'none';
+                vendorDetails.style.display = show;
+                proposalNumberDetails.style.display = show;
+                attachmentSection.style.display = show;
 
-        function toggleVendorDetails() {
-            var show = vendorYes.checked ? 'block' : 'none';
-            vendorDetails.style.display = show;
-            proposalNumberDetails.style.display = show;
-            attachmentSection.style.display = show;
+                // Clear the vendor selection and any chosen vendor files when support is
+                // switched off, so stale values aren't posted back.
+                if (!vendorYes.checked) {
+                    if (attachmentInput) {
+                        attachmentInput.value = '';
+                    }
 
-            // Clear the vendor selection and any chosen vendor files when support is
-            // switched off, so stale values aren't posted back.
-            if (!vendorYes.checked) {
-                if (attachmentInput) {
-                    attachmentInput.value = '';
-                }
-
-                if (vendorSelect) {
-                    if (window.jQuery && $(vendorSelect).data('select2')) {
-                        $(vendorSelect).val('').trigger('change.select2');
-                    } else {
-                        vendorSelect.value = '';
+                    if (vendorSelect) {
+                        if (window.jQuery && $(vendorSelect).data('select2')) {
+                            $(vendorSelect).val('').trigger('change.select2');
+                        } else {
+                            vendorSelect.value = '';
+                        }
                     }
                 }
             }
-        }
 
-        vendorYes.addEventListener('change', function () { toggleVendorDetails(); refreshProgress(); });
-        vendorNo.addEventListener('change', function () { toggleVendorDetails(); refreshProgress(); });
+            vendorYes.addEventListener('change', function () { toggleVendorDetails(); refreshProgress(); });
+            vendorNo.addEventListener('change', function () { toggleVendorDetails(); refreshProgress(); });
 
-        // Make sure select2 reflects the pre-selected vendor after it initialises.
-        if (selectedVendorId > 0 && window.jQuery && $(vendorSelect).data('select2')) {
-            $(vendorSelect).val(String(selectedVendorId)).trigger('change.select2');
-        }
+            // Make sure select2 reflects the pre-selected vendor after it initialises.
+            if (selectedVendorId > 0 && window.jQuery && $(vendorSelect).data('select2')) {
+                $(vendorSelect).val(String(selectedVendorId)).trigger('change.select2');
+            }
 
-        // ---- Progress ring + checklist ----
-        var RING_LEN = 276.46;
-        var effortInput = document.getElementById('effortEstimateDays');
-        var activitiesInput = document.getElementById('activitiesTasks');
-        var fixedAssetInput = document.getElementById('fixedAssetInfo');
-        var srsFileInput = document.getElementById('srsFileInput');
-        var baFileInput = document.getElementById('baFileInput');
+            // ---- Progress ring + checklist ----
+            var RING_LEN = 276.46;
+            var effortInput = document.getElementById('effortEstimateDays');
+            var activitiesInput = document.getElementById('activitiesTasks');
+            var fixedAssetInput = document.getElementById('fixedAssetInfo');
+            var srsFileInput = document.getElementById('srsFileInput');
+            var baFileInput = document.getElementById('baFileInput');
 
-        function hasExistingFiles(listId) {
-            var list = document.getElementById(listId);
-            return !!list && list.querySelectorAll('li').length > 0;
-        }
+            function hasExistingFiles(listId) {
+                var list = document.getElementById(listId);
+                return !!list && list.querySelectorAll('li').length > 0;
+            }
 
-        function hasNewFiles(input) {
-            return !!(input && input.files && input.files.length > 0);
-        }
+            function hasNewFiles(input) {
+                return !!(input && input.files && input.files.length > 0);
+            }
 
-        function refreshProgress() {
-            var state = {
-                effort: !!(effortInput && parseFloat(effortInput.value) > 0),
-                activities: !!(activitiesInput && activitiesInput.value.trim().length > 0),
-                fixedAsset: !!(fixedAssetInput && fixedAssetInput.value.trim().length > 0),
-                srs: hasExistingFiles('existingSrsList') || hasNewFiles(srsFileInput),
-                ba: hasExistingFiles('existingBaList') || hasNewFiles(baFileInput),
-                vendor: vendorNo.checked || (vendorYes.checked && !!vendorSelect.value)
-            };
+            function refreshProgress() {
+                var state = {
+                    effort: !!(effortInput && parseFloat(effortInput.value) > 0),
+                    activities: !!(activitiesInput && activitiesInput.value.trim().length > 0),
+                    fixedAsset: !!(fixedAssetInput && fixedAssetInput.value.trim().length > 0),
+                    srs: hasExistingFiles('existingSrsList') || hasNewFiles(srsFileInput),
+                    ba: hasExistingFiles('existingBaList') || hasNewFiles(baFileInput),
+                    vendor: vendorNo.checked || (vendorYes.checked && !!vendorSelect.value)
+                };
 
-            var done = 0;
-            var total = 0;
-            document.querySelectorAll('#casmChecklist li').forEach(function (li) {
-                total++;
-                var ok = !!state[li.getAttribute('data-key')];
-                li.classList.toggle('is-done', ok);
-                if (ok) { done++; }
+                var done = 0;
+                var total = 0;
+                document.querySelectorAll('#casmChecklist li').forEach(function (li) {
+                    total++;
+                    var ok = !!state[li.getAttribute('data-key')];
+                    li.classList.toggle('is-done', ok);
+                    if (ok) { done++; }
+                });
+
+                var pct = total ? Math.round(done / total * 100) : 0;
+                document.getElementById('casmPct').textContent = pct;
+                document.getElementById('casmRingFg').style.strokeDashoffset = RING_LEN * (1 - done / total);
+                document.getElementById('casmRingWrap').classList.toggle('is-full', done === total);
+                document.getElementById('casmSubline').textContent = done + ' of ' + total + ' steps done';
+                document.getElementById('casmHeadline').textContent =
+                    done === total ? 'Ready to submit' :
+                    done === 0 ? "Let's get started" :
+                    done >= Math.ceil(total * 0.6) ? 'Almost there' : 'Looking good';
+            }
+
+            ['input', 'change'].forEach(function (evt) {
+                document.getElementById('assessmentForm').addEventListener(evt, refreshProgress);
             });
 
-            var pct = total ? Math.round(done / total * 100) : 0;
-            document.getElementById('casmPct').textContent = pct;
-            document.getElementById('casmRingFg').style.strokeDashoffset = RING_LEN * (1 - done / total);
-            document.getElementById('casmRingWrap').classList.toggle('is-full', done === total);
-            document.getElementById('casmSubline').textContent = done + ' of ' + total + ' steps done';
-            document.getElementById('casmHeadline').textContent =
-                done === total ? 'Ready to submit' :
-                done === 0 ? "Let's get started" :
-                done >= Math.ceil(total * 0.6) ? 'Almost there' : 'Looking good';
-        }
+            refreshProgress();
 
-        ['input', 'change'].forEach(function (evt) {
-            document.getElementById('assessmentForm').addEventListener(evt, refreshProgress);
-        });
+            // ---- Function to handle both Save and Submit actions ----
+            function handleFormSubmission(btnElement, isSubmit) {
+                var crId = document.getElementById('crIdField').value;
 
-        refreshProgress();
-
-        // ---- Function to handle both Save and Submit actions ----
-        function handleFormSubmission(btnElement, isSubmit) {
-            var crId = document.getElementById('crIdField').value;
-
-            if (!crId) {
-                Swal.fire({
-                    title: 'Could not submit',
-                    text: 'Missing Change Request ID. Cannot submit the assessment.',
-                    icon: 'error',
-                    customClass: { confirmButton: 'btn btn-primary' },
-                    buttonsStyling: false
-                });
-                return;
-            }
-
-            var vendorError = document.getElementById('vendorIdError');
-            if (vendorError) { vendorError.textContent = ''; }
-
-            if (vendorYes.checked && (!vendorSelect.value || vendorSelect.value === '')) {
-                if (vendorError) { vendorError.textContent = 'Please select a vendor.'; }
-                return;
-            }
-
-            function performSubmission() {
-                var assessmentForm = document.getElementById('assessmentForm');
-                var formData = new FormData(assessmentForm);
-                var statusValue = btnElement.getAttribute('data-status');
-                if (statusValue) {
-                    formData.append('Status', statusValue);
+                if (!crId) {
+                    Swal.fire({
+                        title: 'Could not submit',
+                        text: 'Missing Change Request ID. Cannot submit the assessment.',
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                    return;
                 }
 
-                btnElement.disabled = true;
-                var originalText = btnElement.textContent;
-                btnElement.textContent = 'Processing...';
+                var vendorError = document.getElementById('vendorIdError');
+                if (vendorError) { vendorError.textContent = ''; }
 
-                $.ajax({
-                    url: '@Url.Action("CreateAssessment", "CRManagement")',
-                    type: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    headers: {
-                        "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
-                    },
-                    success: function (data) {
-                        if (!data.success) {
-                            Swal.fire({
-                                title: 'Could not save',
-                                text: data.message || 'Failed to update Change Request assessment.',
-                                icon: 'error',
-                                customClass: { confirmButton: 'btn btn-primary' },
-                                buttonsStyling: false
-                            });
-                            return;
-                        }
+                if (vendorYes.checked && (!vendorSelect.value || vendorSelect.value === '')) {
+                    if (vendorError) { vendorError.textContent = 'Please select a vendor.'; }
+                    return;
+                }
 
-                        Swal.fire({
-                            title: isSubmit ? 'Submitted!' : 'Saved!',
-                            text: isSubmit
-                                ? 'CR assessment submitted successfully.'
-                                : (data.message || 'Assessment updated successfully.'),
-                            icon: 'success',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        }).then(function () {
-                            if (data.redirectUrl) {
-                                window.location.href = data.redirectUrl;
-                            }
-                        });
-                    },
-                    error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
-                                  'Failed to update the assessment. Please try again.';
-
-                        Swal.fire({
-                            title: 'Error',
-                            text: msg,
-                            icon: 'error',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        });
-                    },
-                    complete: function () {
-                        btnElement.disabled = false;
-                        btnElement.textContent = originalText;
+                function performSubmission() {
+                    var assessmentForm = document.getElementById('assessmentForm');
+                    var formData = new FormData(assessmentForm);
+                    var statusValue = btnElement.getAttribute('data-status');
+                    if (statusValue) {
+                        formData.append('Status', statusValue);
                     }
-                });
-            }
 
-            if (isSubmit) {
-                // Simple confirmation before submitting (no IS Officer selection).
-                Swal.fire({
-                    title: 'Submit this assessment?',
-                    text: 'Once submitted, the Change Request will move to Security Assessment.',
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonText: 'Yes, submit',
-                    cancelButtonText: 'Cancel',
-                    customClass: { confirmButton: 'btn btn-primary me-2', cancelButton: 'btn btn-outline-secondary' },
-                    buttonsStyling: false
-                }).then(function (result) {
-                    if (result.isConfirmed) {
-                        performSubmission();
-                    }
-                });
-            } else {
-                performSubmission();
-            }
-        }
-
-        submitBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            handleFormSubmission(submitBtn, true);
-        });
-
-        saveBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            handleFormSubmission(saveBtn, false);
-        });
-
-        // ---- Delete an existing attachment (works for SRS, BA and Vendor lists) ----
-        document.querySelectorAll('.remove-attachment-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var attachmentId = btn.getAttribute('data-attachment-id');
-                var listItem = btn.closest('li');
-
-                Swal.fire({
-                    title: 'Remove this attachment?',
-                    text: 'This cannot be undone.',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Yes, remove it',
-                    customClass: { confirmButton: 'btn btn-danger me-2', cancelButton: 'btn btn-outline-secondary' },
-                    buttonsStyling: false
-                }).then(function (result) {
-                    if (!result.isConfirmed) return;
+                    btnElement.disabled = true;
+                    var originalText = btnElement.textContent;
+                    btnElement.textContent = 'Processing...';
 
                     $.ajax({
-                        url: '@Url.Action("DeleteAttachment", "CRManagement")',
+                        url: '@Url.Action("CreateAssessment", "CRManagement")',
                         type: 'POST',
-                        data: { id: attachmentId },
+                        data: formData,
+                        processData: false,
+                        contentType: false,
                         headers: {
                             "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
                         },
                         success: function (data) {
-                            if (data.success) {
-                                listItem.remove();
-                                refreshProgress();
-
+                            if (!data.success) {
                                 Swal.fire({
-                                    title: 'Deleted!',
-                                    text: data.message || 'Attachment removed successfully.',
-                                    icon: 'success',
+                                    title: 'Could not save',
+                                    text: data.message || 'Failed to update Change Request assessment.',
+                                    icon: 'error',
                                     customClass: { confirmButton: 'btn btn-primary' },
                                     buttonsStyling: false
                                 });
-                            } else {
+                                return;
+                            }
+
+                            Swal.fire({
+                                title: isSubmit ? 'Submitted!' : 'Saved!',
+                                text: isSubmit
+                                    ? 'CR assessment submitted successfully.'
+                                    : (data.message || 'Assessment updated successfully.'),
+                                icon: 'success',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            }).then(function () {
+                                if (data.redirectUrl) {
+                                    window.location.href = data.redirectUrl;
+                                }
+                            });
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
+                                      'Failed to update the assessment. Please try again.';
+
+                            Swal.fire({
+                                title: 'Error',
+                                text: msg,
+                                icon: 'error',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            });
+                        },
+                        complete: function () {
+                            btnElement.disabled = false;
+                            btnElement.textContent = originalText;
+                        }
+                    });
+                }
+
+                if (isSubmit) {
+                    // Simple confirmation before submitting (no IS Officer selection).
+                    Swal.fire({
+                        title: 'Submit this assessment?',
+                        text: 'Once submitted, the Change Request will move to Security Assessment.',
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, submit',
+                        cancelButtonText: 'Cancel',
+                        customClass: { confirmButton: 'btn btn-primary me-2', cancelButton: 'btn btn-outline-secondary' },
+                        buttonsStyling: false
+                    }).then(function (result) {
+                        if (result.isConfirmed) {
+                            performSubmission();
+                        }
+                    });
+                } else {
+                    performSubmission();
+                }
+            }
+
+            submitBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                handleFormSubmission(submitBtn, true);
+            });
+
+            saveBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                handleFormSubmission(saveBtn, false);
+            });
+
+            // ---- Delete an existing attachment (works for SRS, BA and Vendor lists) ----
+            document.querySelectorAll('.remove-attachment-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var attachmentId = btn.getAttribute('data-attachment-id');
+                    var listItem = btn.closest('li');
+
+                    Swal.fire({
+                        title: 'Remove this attachment?',
+                        text: 'This cannot be undone.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, remove it',
+                        customClass: { confirmButton: 'btn btn-danger me-2', cancelButton: 'btn btn-outline-secondary' },
+                        buttonsStyling: false
+                    }).then(function (result) {
+                        if (!result.isConfirmed) return;
+
+                        $.ajax({
+                            url: '@Url.Action("DeleteAttachment", "CRManagement")',
+                            type: 'POST',
+                            data: { id: attachmentId },
+                            headers: {
+                                "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                            },
+                            success: function (data) {
+                                if (data.success) {
+                                    listItem.remove();
+                                    refreshProgress();
+
+                                    Swal.fire({
+                                        title: 'Deleted!',
+                                        text: data.message || 'Attachment removed successfully.',
+                                        icon: 'success',
+                                        customClass: { confirmButton: 'btn btn-primary' },
+                                        buttonsStyling: false
+                                    });
+                                } else {
+                                    Swal.fire({
+                                        title: 'Could not remove',
+                                        text: data.message || 'Failed to remove attachment.',
+                                        icon: 'error',
+                                        customClass: { confirmButton: 'btn btn-primary' },
+                                        buttonsStyling: false
+                                    });
+                                }
+                            },
+                            error: function () {
                                 Swal.fire({
-                                    title: 'Could not remove',
-                                    text: data.message || 'Failed to remove attachment.',
+                                    title: 'Error',
+                                    text: 'Failed to remove attachment. Please try again.',
                                     icon: 'error',
                                     customClass: { confirmButton: 'btn btn-primary' },
                                     buttonsStyling: false
                                 });
                             }
-                        },
-                        error: function () {
-                            Swal.fire({
-                                title: 'Error',
-                                text: 'Failed to remove attachment. Please try again.',
-                                icon: 'error',
-                                customClass: { confirmButton: 'btn btn-primary' },
-                                buttonsStyling: false
-                            });
-                        }
+                        });
                     });
                 });
             });
-        });
 
-        // ---- Preview an image attachment in a modal ----
-        document.querySelectorAll('.preview-attachment-link').forEach(function (link) {
-            link.addEventListener('click', function () {
-                var attachmentId = link.getAttribute('data-attachment-id');
-                var fileName = link.getAttribute('data-file-name');
+            // ---- Preview an image attachment in a modal ----
+            document.querySelectorAll('.preview-attachment-link').forEach(function (link) {
+                link.addEventListener('click', function () {
+                    var attachmentId = link.getAttribute('data-attachment-id');
+                    var fileName = link.getAttribute('data-file-name');
 
-                var previewUrl = '@Url.Action("PreviewAttachment", "CRManagement")' + '?id=' + attachmentId;
+                    var previewUrl = '@Url.Action("PreviewAttachment", "CRManagement")' + '?id=' + attachmentId;
 
-                var img = document.getElementById('attachmentPreviewImage');
-                img.src = previewUrl;
+                    var img = document.getElementById('attachmentPreviewImage');
+                    img.src = previewUrl;
 
-                document.getElementById('attachmentPreviewModalLabel').textContent = fileName;
+                    document.getElementById('attachmentPreviewModalLabel').textContent = fileName;
 
-                var modalEl = document.getElementById('attachmentPreviewModal');
-                var modal = new bootstrap.Modal(modalEl);
-                modal.show();
+                    var modalEl = document.getElementById('attachmentPreviewModal');
+                    var modal = new bootstrap.Modal(modalEl);
+                    modal.show();
+                });
             });
         });
-    });
-</script>
+    </script>
+}
