@@ -3,121 +3,396 @@
 
 @{
     ViewData["Title"] = "Home Page";
+
+    // Simple derived figures for the hero strip - no new model fields needed.
+    var total = Model.TotalCRs <= 0 ? 0 : Model.TotalCRs;
+    var approvedPct = total == 0 ? 0 : Math.Round((double)Model.PendingApprovals / total * 100, 0);
+    var deployedPct = total == 0 ? 0 : Math.Round((double)Model.TotalHolds / total * 100, 0);
+    var rejectedPct = total == 0 ? 0 : Math.Round((double)Model.RejectedCRs / total * 100, 0);
 }
-<div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1">
-    <div class="col">
-        <div class="card">
-            <div class="card-body">
-                <div class="d-flex align-items-center gap-2 justify-content-between">
+
+<style>
+    .crdash {
+        --cd-accent: #3b5bdb;
+        --cd-ok: #0acf97;
+        --cd-warn: #f7b84b;
+        --cd-bad: #fa5c7c;
+        --cd-info: #45bbe0;
+        --cd-line: var(--bs-border-color, #e3e6ec);
+        --cd-muted: var(--bs-secondary-color, #6b7385);
+        --cd-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+    }
+
+    /* ===== Hero banner ===== */
+    .crdash-hero {
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+        padding: 1.75rem 2rem;
+        border-radius: 1rem;
+        color: #fff;
+        background: linear-gradient(135deg, #2f3570 0%, #966675 55%, #451423 100%);
+    }
+
+        .crdash-hero::after {
+            content: "";
+            position: absolute;
+            right: -70px;
+            top: -90px;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            border: 46px solid rgba(255,255,255,.07);
+            pointer-events: none;
+        }
+
+        .crdash-hero::before {
+            content: "";
+            position: absolute;
+            left: -40px;
+            bottom: -80px;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,255,255,.1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+    .crdash-hero-row {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+
+    .crdash-hero-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        margin-bottom: .5rem;
+        padding: .2rem .65rem;
+        border-radius: 999px;
+        font-size: .78rem;
+        font-weight: 600;
+        background: rgba(255,255,255,.14);
+    }
+
+    .crdash-hero h2 {
+        margin: 0;
+        color: #fff;
+        font-size: 1.65rem;
+        font-weight: 700;
+    }
+
+    .crdash-hero p {
+        margin: .3rem 0 0;
+        color: rgba(255,255,255,.75);
+        font-size: .9rem;
+        max-width: 48ch;
+    }
+
+    .crdash-hero-total {
+        text-align: right;
+    }
+
+        .crdash-hero-total .num {
+            font-size: 2.4rem;
+            font-weight: 800;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .crdash-hero-total .lbl {
+            font-size: .78rem;
+            color: rgba(255,255,255,.7);
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+    /* ===== Stat cards ===== */
+    .crdash-stat {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--cd-line);
+        border-radius: .9rem;
+        background: var(--cd-card);
+        padding: 1.25rem 1.35rem;
+        animation: crdash-rise .45s ease-out backwards;
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+        .crdash-stat:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 26px -10px rgba(23,33,59,.18);
+        }
+
+        .crdash-stat:nth-of-type(1) {
+            animation-delay: .00s;
+        }
+
+        .crdash-stat:nth-of-type(2) {
+            animation-delay: .06s;
+        }
+
+        .crdash-stat:nth-of-type(3) {
+            animation-delay: .12s;
+        }
+
+        .crdash-stat:nth-of-type(4) {
+            animation-delay: .18s;
+        }
+
+    @@keyframes crdash-rise {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+    }
+
+    .crdash-stat-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .75rem;
+    }
+
+    .crdash-stat-label {
+        margin: 0 0 .35rem;
+        font-size: .76rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--cd-muted);
+    }
+
+    .crdash-stat-value {
+        margin: 0;
+        font-size: 1.9rem;
+        font-weight: 800;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .crdash-stat-ico {
+        flex: 0 0 auto;
+        width: 46px;
+        height: 46px;
+        display: grid;
+        place-items: center;
+        border-radius: .7rem;
+        font-size: 1.35rem;
+    }
+
+    .crdash-stat.is-total .crdash-stat-ico {
+        background: rgba(59,91,219,.12);
+        color: var(--cd-accent);
+    }
+
+    .crdash-stat.is-ok .crdash-stat-ico {
+        background: rgba(10,207,151,.14);
+        color: var(--cd-ok);
+    }
+
+    .crdash-stat.is-info .crdash-stat-ico {
+        background: rgba(69,187,224,.16);
+        color: var(--cd-info);
+    }
+
+    .crdash-stat.is-bad .crdash-stat-ico {
+        background: rgba(250,92,124,.14);
+        color: var(--cd-bad);
+    }
+
+    .crdash-stat-foot {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        margin-top: .85rem;
+        font-size: .8rem;
+        color: var(--cd-muted);
+    }
+
+    .crdash-stat-bar {
+        margin-top: .7rem;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--cd-line);
+        overflow: hidden;
+    }
+
+        .crdash-stat-bar > span {
+            display: block;
+            height: 100%;
+            border-radius: 999px;
+            width: 0%;
+            transition: width 1s cubic-bezier(.3,.9,.3,1);
+        }
+
+    .crdash-stat.is-total .crdash-stat-bar > span {
+        background: var(--cd-accent);
+    }
+
+    .crdash-stat.is-ok .crdash-stat-bar > span {
+        background: var(--cd-ok);
+    }
+
+    .crdash-stat.is-info .crdash-stat-bar > span {
+        background: var(--cd-info);
+    }
+
+    .crdash-stat.is-bad .crdash-stat-bar > span {
+        background: var(--cd-bad);
+    }
+
+    /* ===== Chart cards ===== */
+    .crdash-chart-card {
+        border: 1px solid var(--cd-line);
+        border-radius: .9rem;
+        overflow: hidden;
+    }
+
+        .crdash-chart-card .card-header {
+            background: transparent;
+            border-bottom: 1px solid var(--cd-line);
+            padding: 1.1rem 1.3rem;
+        }
+
+    .crdash-chart-title {
+        margin: 0;
+        font-size: 1.02rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+
+        .crdash-chart-title i {
+            color: var(--cd-accent);
+        }
+
+    .crdash-chart-sub {
+        margin: .15rem 0 0;
+        font-size: .8rem;
+        color: var(--cd-muted);
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .crdash-stat {
+            animation: none;
+        }
+
+        .crdash-stat-bar > span {
+            transition: none;
+        }
+    }
+</style>
+
+<div class="crdash">
+
+    <div class="crdash-hero">
+        <div class="crdash-hero-row">
+            <div>
+                <span class="crdash-hero-eyebrow"><i class="ri-dashboard-3-line"></i>CR Management Overview</span>
+                <h2>Welcome back</h2>
+                <p>Here's where every change request stands right now across the pipeline.</p>
+            </div>
+            <div class="crdash-hero-total">
+                <div class="num">@Model.TotalCRs</div>
+                <div class="lbl">Total Change Requests</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-3">
+        <div class="col">
+            <div class="crdash-stat is-total">
+                <div class="crdash-stat-top">
                     <div>
-                        <h5 class="text-muted fs-13 fw-bold text-uppercase" title="Number of Orders">
-                            Total CRs
-                        </h5>
-                        <h3 class="my-2 py-1 fw-bold">@Model.TotalCRs</h3>
+                        <h5 class="crdash-stat-label">Total CRs</h5>
+                        <h3 class="crdash-stat-value">@Model.TotalCRs</h3>
                     </div>
-                    <div class="avatar-xl flex-shrink-0">
-                        <span class="avatar-title bg-primary-subtle text-primary rounded-circle fs-42">
-                            <iconify-icon icon="solar:bill-list-bold-duotone"></iconify-icon>
-                        </span>
+                    <span class="crdash-stat-ico"><iconify-icon icon="solar:bill-list-bold-duotone"></iconify-icon></span>
+                </div>
+                <div class="crdash-stat-foot"><i class="ri-stack-line"></i>All requests ever logged</div>
+            </div>
+        </div><!-- end col -->
+
+        <div class="col">
+            <div class="crdash-stat is-ok">
+                <div class="crdash-stat-top">
+                    <div>
+                        <h5 class="crdash-stat-label">Approved CRs</h5>
+                        <h3 class="crdash-stat-value">@Model.PendingApprovals</h3>
+                    </div>
+                    <span class="crdash-stat-ico"><iconify-icon icon="solar:armchair-2-bold"></iconify-icon></span>
+                </div>
+                <div class="crdash-stat-bar"><span style="width:@(approvedPct)%;"></span></div>
+                <div class="crdash-stat-foot"><i class="ri-percent-line"></i>@(approvedPct)% of total</div>
+            </div>
+        </div><!-- end col -->
+
+        <div class="col">
+            <div class="crdash-stat is-info">
+                <div class="crdash-stat-top">
+                    <div>
+                        <h5 class="crdash-stat-label">Deployed CRs</h5>
+                        <h3 class="crdash-stat-value">@Model.TotalHolds</h3>
+                    </div>
+                    <span class="crdash-stat-ico"><iconify-icon icon="solar:golf-bold-duotone"></iconify-icon></span>
+                </div>
+                <div class="crdash-stat-bar"><span style="width:@(deployedPct)%;"></span></div>
+                <div class="crdash-stat-foot"><i class="ri-percent-line"></i>@(deployedPct)% of total</div>
+            </div>
+        </div><!-- end col -->
+
+        <div class="col">
+            <div class="crdash-stat is-bad">
+                <div class="crdash-stat-top">
+                    <div>
+                        <h5 class="crdash-stat-label">Rejected CRs</h5>
+                        <h3 class="crdash-stat-value">@Model.RejectedCRs</h3>
+                    </div>
+                    <span class="crdash-stat-ico"><iconify-icon icon="solar:sticker-smile-circle-bold-duotone"></iconify-icon></span>
+                </div>
+                <div class="crdash-stat-bar"><span style="width:@(rejectedPct)%;"></span></div>
+                <div class="crdash-stat-foot"><i class="ri-percent-line"></i>@(rejectedPct)% of total</div>
+            </div>
+        </div><!-- end col -->
+    </div><!-- end row -->
+
+    <div class="row g-3 mt-1">
+        <div class="col-xl-6">
+            <div class="card crdash-chart-card mb-0">
+                <div class="card-header">
+                    <h4 class="crdash-chart-title"><i class="ri-bar-chart-grouped-line"></i>CR Statistics</h4>
+                    <p class="crdash-chart-sub">Income vs expenditure trend by month</p>
+                </div>
+                <div class="card-body px-2 pt-2">
+                    <div dir="ltr">
+                        <div id="statistics-chart" class="apex-charts" data-colors="#3b5bdb,#45bbe0"></div>
                     </div>
                 </div>
             </div>
         </div>
-    </div><!-- end col -->
 
-    <div class="col">
-        <div class="card">
-            <div class="card-body">
-                <div class="d-flex align-items-center gap-2 justify-content-between">
-                    <div>
-                        <h5 class="text-muted fs-13 fw-bold text-uppercase" title="Revenue">
-                            Approved CRs
-                        </h5>
-                        <h3 class="my-2 py-1 fw-bold">@Model.PendingApprovals</h3>
-                    </div>
-                    <div class="avatar-xl flex-shrink-0">
-                        <span class="avatar-title bg-success-subtle text-success rounded-circle fs-42">
-                            <iconify-icon icon="solar:armchair-2-bold"></iconify-icon>
-                        </span>
-                    </div>
+        <div class="col-xl-6">
+            <div class="card crdash-chart-card mb-0">
+                <div class="card-header">
+                    <h4 class="crdash-chart-title"><i class="ri-pie-chart-2-line"></i>CR Breakdown</h4>
+                    <p class="crdash-chart-sub">Share of requests by current state</p>
                 </div>
-            </div>
-        </div>
-    </div><!-- end col -->
-
-    <div class="col">
-        <div class="card">
-            <div class="card-body">
-                <div class="d-flex align-items-center gap-2 justify-content-between">
-                    <div>
-                        <h5 class="text-muted fs-13 fw-bold text-uppercase" title="New Users">
-                            Deployed CRs
-                        </h5>
-                        <h3 class="my-2 py-1 fw-bold">@Model.TotalHolds</h3>
+                <div class="card-body">
+                    <div dir="ltr">
+                        <div id="simple-pie" class="apex-charts" data-colors="#3b5bdb,#45bbe0,#0acf97,#fa5c7c"></div>
                     </div>
-                    <div class="avatar-xl flex-shrink-0">
-                        <span class="avatar-title bg-warning-subtle text-success rounded-circle fs-42">
-                            <iconify-icon icon="solar:golf-bold-duotone"></iconify-icon>
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div><!-- end col -->
-
-    <div class="col">
-        <div class="card">
-            <div class="card-body">
-                <div class="d-flex align-items-center gap-2 justify-content-between">
-                    <div>
-                        <h5 class="text-muted fs-13 fw-bold text-uppercase"
-                            title="Customer Satisfaction">
-                            Rejected CRs
-                        </h5>
-                        <h3 class="my-2 py-1 fw-bold">@Model.RejectedCRs</h3>
-                    </div>
-                    <div class="avatar-xl flex-shrink-0">
-                        <span class="avatar-title bg-info-subtle text-danger rounded-circle fs-42">
-                            <iconify-icon icon="solar:sticker-smile-circle-bold-duotone"></iconify-icon>
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div><!-- end col -->
-</div><!-- end row -->
-
-<div class="row">
-    <div class="col-xl-6">
-        <div class="card">
-            <div class="d-flex card-header justify-content-between align-items-center">
-                <div>
-                    <h4 class="header-title">CR Statistics</h4>
-                </div>
-            </div>
-            <div class="card-body px-0 pt-0">
-                <div dir="ltr" class="px-1">
-                    <div id="statistics-chart" class="apex-charts" data-colors="#02c0ce,#777edd"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-xl-6">
-        <div class="card">
-            <div class="d-flex card-header justify-content-between align-items-center">
-                <div>
-                    <h4 class="header-title">CR Breakdown</h4>
-                </div>
-            </div>
-            <div class="card-body">
-                <div dir="ltr">
-                    <div id="simple-pie" class="apex-charts"
-                         data-colors="#777edd,#45bbe0,#0acf97,#fa5c7c"></div>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 @section Scripts {
@@ -125,39 +400,65 @@
         // Single source of truth, injected from the server model
         const crStats = @Html.Raw(JsonSerializer.Serialize(new
         {
-                totalCRs = Model.TotalCRs,
-                pending = Model.PendingApprovals,
-                holds = Model.TotalHolds,
-                rejected = Model.RejectedCRs
+                    totalCRs = Model.TotalCRs,
+                    pending = Model.PendingApprovals,
+                    holds = Model.TotalHolds,
+                    rejected = Model.RejectedCRs
         }));
 
     document.addEventListener("DOMContentLoaded", function () {
 
+            // Animate the stat bars in after load (width is set via inline style already,
+            // this just gives the "grow in" effect by re-triggering a transition frame).
+            requestAnimationFrame(function () {
+                document.querySelectorAll('.crdash-stat-bar > span').forEach(function (el) {
+                    var target = el.style.width;
+                    el.style.width = '0%';
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(function () {
+                            el.style.width = target;
+                        });
+                    });
+                });
+            });
+
             // Statistics (bar) chart - unrelated data, keep separate
             new ApexCharts(document.querySelector("#statistics-chart"), {
-                chart: { type: "bar", height: 300, toolbar: { show: false } },
+                chart: { type: "bar", height: 300, toolbar: { show: false }, fontFamily: "inherit" },
                 series: [
                     { name: "Income", data: [30, 40, 35, 50, 49, 60, 70, 91, 45] },
                     { name: "Expenditure", data: [20, 30, 25, 40, 39, 50, 60, 71, 35] }
                 ],
                 xaxis: { categories: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep"] },
-                colors: ["#02c0ce", "#777edd"],
-                plotOptions: { bar: { columnWidth: "45%", borderRadius: 4 } },
+                colors: ["#3b5bdb", "#45bbe0"],
+                plotOptions: { bar: { columnWidth: "45%", borderRadius: 5 } },
                 dataLabels: { enabled: false },
+                grid: { borderColor: "rgba(120,130,150,.15)", strokeDashArray: 4 },
                 legend: { position: "top" }
             }).render();
 
-            // Pie chart - now driven directly by the same stats as the cards
+            // Pie chart - driven directly by the same stats as the cards
             new ApexCharts(document.querySelector("#simple-pie"), {
-                chart: { type: "pie", height: 320 },
+                chart: { type: "donut", height: 320, fontFamily: "inherit" },
                 series: [crStats.totalCRs, crStats.pending, crStats.holds, crStats.rejected],
                 labels: ["Total CRs", "Pending Approvals", "Total Holds", "Rejected CRs"],
-                colors: ["#777edd", "#45bbe0", "#0acf97", "#fa5c7c"],
+                colors: ["#3b5bdb", "#45bbe0", "#0acf97", "#fa5c7c"],
                 legend: { position: "bottom" },
                 dataLabels: {
                     enabled: true,
                     formatter: function (val) {
                         return val.toFixed(1) + "%";
+                    }
+                },
+                plotOptions: {
+                    pie: {
+                        donut: {
+                            size: "62%",
+                            labels: {
+                                show: true,
+                                total: { show: true, label: "Total", fontWeight: 700 }
+                            }
+                        }
                     }
                 },
                 responsive: [{
