@@ -15,6 +15,7 @@ namespace VF_CR_Management_System.Data.Models
         public string AssignedTo { get; set; }        // username from Approval
         public string AssignedToName { get; set; }    // full name (resolved)
         public DateTime? AssignedDate { get; set; }
+        public DateTime? ApprovalDate { get; set; }
         public DateTime? TargetDate { get; set; }
         public string Decision { get; set; }
         public bool? IsApproved { get; set; }

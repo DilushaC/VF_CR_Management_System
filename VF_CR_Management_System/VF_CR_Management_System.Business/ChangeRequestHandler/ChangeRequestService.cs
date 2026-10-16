@@ -2911,6 +2911,99 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             await Task.Run(() => _connectionService.ExecuteWithPara(updateApprovalSql, updateApprovalParameters));
 
+            // 3a. Close the latest pending Developer Documentation row for this CR too.
+            // Developer Documentation can have multiple Approval rows over the life of a CR; only the
+            // LATEST still-pending row should be closed here, never a blanket "StepID = X" update.
+            var devDocStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Developer Documentation" });
+
+            if (devDocStepIdObj == null || devDocStepIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Workflow step 'Developer Documentation' was not found or is inactive.");
+            }
+
+            int devDocStepId = Convert.ToInt32(devDocStepIdObj);
+
+            const string findLatestDevDocRowSql = @"
+                SELECT TOP (1) ApprovalID
+                FROM Approval
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1
+                  AND IsApproved IS NULL
+                ORDER BY ApprovalID DESC";
+
+            var findDevDocParameters = new DynamicParameters();
+            findDevDocParameters.Add("@CRID", crId);
+            findDevDocParameters.Add("@StepID", devDocStepId);
+
+            var devDocRowTable = _connectionService.ReturnWithPara(findLatestDevDocRowSql, findDevDocParameters);
+
+            if (devDocRowTable != null && devDocRowTable.Rows.Count > 0)
+            {
+                var devDocApprovalId = devDocRowTable.Rows[0].Field<int>("ApprovalID");
+
+                const string closeDevDocRowSql = @"
+                    UPDATE Approval
+                    SET IsApproved   = 1,
+                        ApprovalDate = @ApprovalDate
+                    WHERE ApprovalID = @ApprovalID";
+
+                var closeDevDocParameters = new DynamicParameters();
+                closeDevDocParameters.Add("@ApprovalDate", DateTime.Now);
+                closeDevDocParameters.Add("@ApprovalID", devDocApprovalId);
+
+                await Task.Run(() => _connectionService.ExecuteWithPara(closeDevDocRowSql, closeDevDocParameters));
+            }
+
+            // 3b. Close the latest pending Division Head Approval row for this CR too (e.g. row 990:
+            // a row reopened by InsertDevelopmentApprovalStepAsync to hand the CR back to the approver
+            // after the developer finished, which otherwise stays open - IsApproved NULL - forever once
+            // the CR moves on past this point via Final Approver assignment). Same pattern as 3a: find
+            // only the single latest still-pending row for this step and close exactly that ApprovalID,
+            // never a blanket "StepID = X" update that could re-close an unrelated earlier cycle.
+            var deptHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
+
+            if (deptHeadStepIdObj == null || deptHeadStepIdObj == DBNull.Value)
+            {
+                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
+            }
+
+            int deptHeadStepId = Convert.ToInt32(deptHeadStepIdObj);
+
+            const string findLatestDeptHeadRowSql = @"
+                SELECT TOP (1) ApprovalID
+                FROM Approval
+                WHERE CRID = @CRID
+                  AND StepID = @StepID
+                  AND Active = 1
+                  AND IsApproved IS NULL
+                ORDER BY ApprovalID DESC";
+
+            var findDeptHeadParameters = new DynamicParameters();
+            findDeptHeadParameters.Add("@CRID", crId);
+            findDeptHeadParameters.Add("@StepID", deptHeadStepId);
+
+            var deptHeadRowTable = _connectionService.ReturnWithPara(findLatestDeptHeadRowSql, findDeptHeadParameters);
+
+            if (deptHeadRowTable != null && deptHeadRowTable.Rows.Count > 0)
+            {
+                var deptHeadApprovalId = deptHeadRowTable.Rows[0].Field<int>("ApprovalID");
+
+                const string closeDeptHeadRowSql = @"
+                    UPDATE Approval
+                    SET IsApproved   = 1,
+                        Decision     = @Decision,
+                        ApprovalDate = @ApprovalDate
+                    WHERE ApprovalID = @ApprovalID";
+
+                var closeDeptHeadParameters = new DynamicParameters();
+                closeDeptHeadParameters.Add("@Decision", "Division Head Approved");
+                closeDeptHeadParameters.Add("@ApprovalDate", DateTime.Now);
+                closeDeptHeadParameters.Add("@ApprovalID", deptHeadApprovalId);
+
+                await Task.Run(() => _connectionService.ExecuteWithPara(closeDeptHeadRowSql, closeDeptHeadParameters));
+            }
+
             // 4. Fetch the 'Final Approval' StepID for the new assignment row.
             var finalApprovalStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Final Approval" });
 
@@ -2940,7 +3033,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return nextStepRowsAffected > 0;
         }
-
         public async Task<bool> AcceptDevAssessment(int crId, string empNo, string securityOfficerId)
         {
             if (crId <= 0)
@@ -3422,25 +3514,25 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (updatedRows <= 0)
                 return false;
 
-            // 5. Insert the new Approval record: AssignedBy = me, AssignedTo = the previous AssignedBy
-            const string insertApprovalSql = @"
-                INSERT INTO Approval
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+            //// 5. Insert the new Approval record: AssignedBy = me, AssignedTo = the previous AssignedBy
+            //const string insertApprovalSql = @"
+            //    INSERT INTO Approval
+            //        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+            //    VALUES
+            //        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
 
-            var insertApprovalParameters = new DynamicParameters();
-            insertApprovalParameters.Add("@CRID", crId);
-            insertApprovalParameters.Add("@StepID", developerDocStepId);
-            insertApprovalParameters.Add("@AssignedBy", empNo);
-            insertApprovalParameters.Add("@AssignedTo", previousAssignedBy);
-            insertApprovalParameters.Add("@AssignedDate", DateTime.Now);
-            insertApprovalParameters.Add("@Active", true);
+            //var insertApprovalParameters = new DynamicParameters();
+            //insertApprovalParameters.Add("@CRID", crId);
+            //insertApprovalParameters.Add("@StepID", developerDocStepId);
+            //insertApprovalParameters.Add("@AssignedBy", empNo);
+            //insertApprovalParameters.Add("@AssignedTo", previousAssignedBy);
+            //insertApprovalParameters.Add("@AssignedDate", DateTime.Now);
+            //insertApprovalParameters.Add("@Active", true);
 
-            int approvalInserted = _connectionService.ExecuteWithPara(insertApprovalSql, insertApprovalParameters);
+            //int approvalInserted = _connectionService.ExecuteWithPara(insertApprovalSql, insertApprovalParameters);
 
-            if (approvalInserted <= 0)
-                return false;
+            //if (approvalInserted <= 0)
+            //    return false;
 
             // 6. Insert the Testing record: cycle number + UAT link, Active = 1, everything else NULL
             //    Cycle = next number for this CR (the first time this is 1)
