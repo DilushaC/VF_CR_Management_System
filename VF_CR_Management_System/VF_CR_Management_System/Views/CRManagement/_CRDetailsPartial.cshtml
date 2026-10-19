@@ -353,6 +353,23 @@
         Model.ExpectedBenefit, Model.RollbackPlan, Model.RiskAssessment, Model.ActivitiesTasks, Model.FixedAssets
     }.Any(v => !string.IsNullOrWhiteSpace(v));
 
+
+    var hasSecurityData = new[]
+    {
+        Model.SecurityUserName, Model.ChangeImpact
+    }.Any(v => !string.IsNullOrWhiteSpace(v)) || securityStep != null;
+
+    var testingRecords = (ViewBag.TestingRecords as List<Testing>) ?? new List<Testing>();
+    var activeTestingRecords = testingRecords
+        .Where(t => t.Active)
+        .OrderBy(t => t.TestCycleNumber)
+        .ToList();
+
+    var hasTestingData = new[]
+    {
+        Model.TestingUserName, Model.TesterUserName, Model.TestingApproverUserName
+    }.Any(v => !string.IsNullOrWhiteSpace(v)) || testingStep != null || activeTestingRecords.Any();
+
     var isOverdue = Model.DueDate.HasValue && Model.DueDate.Value.Date < DateTime.Today && !isReleased && !isRejected;
 
     // ---------- Small helpers ----------
@@ -595,6 +612,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 background: #e7e9ef;
                 color: #4a4f5e;
             }
+
     .cr-hero, .cr-body {
         --cr-ink: #451423;
         --cr-accent: #3b5bdb;
@@ -1372,7 +1390,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
     <ul class="nav cr-tabs" role="tablist">
         <li class="nav-item" role="presentation">
             <button type="button" class="nav-link active" data-bs-toggle="tab" data-bs-target="#cr-tab-overview" role="tab">
-                <i class="ri-file-list-3-line"></i>Overview
+                <i class="ri-file-list-3-line"></i>Request Details
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -1387,6 +1405,16 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 {
                     <span class="cr-tab-badge">@attachmentCount</span>
                 }
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#cr-tab-security" role="tab">
+                <i class="ri-shield-check-line"></i>Security
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#cr-tab-testing" role="tab">
+                <i class="ri-test-tube-line"></i>Testing
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -1476,6 +1504,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }
         </div>
 
+
         @* ----- People ----- *@
         <div class="tab-pane fade" id="cr-tab-people" role="tabpanel">
             @if (!hasAssignedUsers)
@@ -1496,6 +1525,81 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         Person("Final CR approver", "ri-medal-line", Model.FinalApproverUserName);
                     }
                 </div>
+            }
+        </div>
+
+        @* ----- Security ----- *@
+        <div class="tab-pane fade" id="cr-tab-security" role="tabpanel">
+            @if (!hasSecurityData)
+            {
+                <div class="cr-empty"><i class="ri-shield-check-line"></i>No security assessment has been submitted yet.</div>
+            }
+            else
+            {
+                <div class="cr-facts">
+                    @{
+                        Fact("ri-shield-user-line", "InfoSec officer", DisplayUser(Model.SecurityUserName));
+                        Fact("ri-pulse-line", "Change impact", Model.ChangeImpact);
+                        if (securityStep != null)
+                        {
+                            var secState = StepState(securityStep);
+                            Fact("ri-flag-2-line", "Security status", secState.Label, secState.Css == "bad" ? "is-overdue" : "");
+                            Fact("ri-time-line", "Last updated", FormatStepTime(securityStep));
+                        }
+                    }
+                </div>
+            }
+        </div>
+
+        @* ----- Testing ----- *@
+        <div class="tab-pane fade" id="cr-tab-testing" role="tabpanel">
+            @if (!hasTestingData)
+            {
+                <div class="cr-empty"><i class="ri-test-tube-line"></i>No testing / QA results have been submitted yet.</div>
+            }
+            else
+            {
+                <div class="cr-facts">
+                    @{
+                        Fact("ri-test-tube-line", "QA tester", DisplayUser(Model.TestingUserName));
+                        Fact("ri-user-shared-line", "QA assigned by", DisplayUser(Model.TesterUserName));
+                        Fact("ri-user-star-line", "QA approved by", DisplayUser(Model.TestingApproverUserName));
+                        if (testingStep != null)
+                        {
+                            var testState = StepState(testingStep);
+                            Fact("ri-flag-2-line", "Testing status", testState.Label, testState.Css == "bad" ? "is-overdue" : "");
+                            Fact("ri-time-line", "Last updated", FormatStepTime(testingStep));
+                        }
+                    }
+                </div>
+
+                @if (activeTestingRecords.Any())
+                {
+                    @foreach (var t in activeTestingRecords)
+                    {
+                        <section class="cr-block">
+                            <h6 class="cr-block-title"><i class="ri-repeat-line"></i>Test cycle @t.TestCycleNumber</h6>
+                            <div class="cr-facts" style="margin-bottom:.75rem;">
+                                @{
+                                    Fact("ri-calendar-line", "Tested on", t.TestingDate?.ToString("yyyy/MM/dd"));
+                                    Fact("ri-arrow-go-back-line", "Returned from", t.ReturnedFrom);
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(t.TestResult))
+                            {
+                                <p class="cr-block-text">@t.TestResult</p>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(t.UATLink))
+                            {
+                                <p class="cr-block-text">
+                                    <a href="@t.UATLink" target="_blank" rel="noopener">
+                                        <i class="ri-link-m"></i> @t.UATLink
+                                    </a>
+                                </p>
+                            }
+                        </section>
+                    }
+                }
             }
         </div>
 
@@ -1661,13 +1765,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                                        foreach (var user in ViewBag.Users)
-                                        {
-                                                                    string uId = user.UserName;
-                                                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                                                    if (string.IsNullOrEmpty(uId)) { continue; }
-                                                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                                        }
+                                                    foreach (var user in ViewBag.Users)
+                                                    {
+                                                                                            string uId = user.UserName;
+                                                                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                                                                            if (string.IsNullOrEmpty(uId)) { continue; }
+                                                                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                                                    }
             }
         ];
 
