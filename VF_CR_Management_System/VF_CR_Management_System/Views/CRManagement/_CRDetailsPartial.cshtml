@@ -389,6 +389,7 @@
 
     (string Label, string Css) StepState(WorkflowStepAssignment s)
     {
+        if (isRejected) { return ("Rejected", "bad"); }
         if (s.IsApproved == true) { return ("Approved", "ok"); }
         if (IsPending(s)) { return ("Pending", "wait"); }
         var d = (s.Decision ?? string.Empty).Trim();
@@ -507,6 +508,93 @@ void FileGroup(string title, string icon, List<Attachment> items)
 }
 
 <style>
+    /* ===== Footer action buttons (same look as the SweetAlert confirm buttons) ===== */
+    .cr-action-btn {
+        padding: .6rem 1.2rem;
+        border-radius: .6rem;
+        font-weight: 600;
+        font-size: .88rem;
+        border: 0;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        color: #fff;
+        text-decoration: none;
+        transition: transform .1s, box-shadow .15s;
+    }
+
+        .cr-action-btn i {
+            font-size: 1rem;
+        }
+
+        .cr-action-btn:hover {
+            transform: translateY(-1px);
+            color: #fff;
+        }
+
+        .cr-action-btn.is-approve {
+            background: linear-gradient(135deg, #198754, #11603b);
+            box-shadow: 0 6px 16px -6px rgba(25,135,84,.6);
+        }
+
+        .cr-action-btn.is-danger {
+            background: linear-gradient(135deg, #dc3545, #a52834);
+            box-shadow: 0 6px 16px -6px rgba(220,53,69,.6);
+        }
+
+        .cr-action-btn.is-primary {
+            background: linear-gradient(135deg, #3b5bdb, #2f49b8);
+            box-shadow: 0 6px 16px -6px rgba(59,91,219,.6);
+        }
+
+        .cr-action-btn.is-warning {
+            background: linear-gradient(135deg, #ffb020, #d9900a);
+            box-shadow: 0 6px 16px -6px rgba(255,176,32,.6);
+            color: #3a2600;
+        }
+
+            .cr-action-btn.is-warning:hover {
+                color: #3a2600;
+            }
+
+        .cr-action-btn.is-info {
+            background: linear-gradient(135deg, #0dcaf0, #0a95b3);
+            box-shadow: 0 6px 16px -6px rgba(13,202,240,.6);
+        }
+
+        .cr-action-btn.is-final {
+            background: linear-gradient(135deg, #0acf97, #089b73);
+            box-shadow: 0 6px 16px -6px rgba(10,207,151,.6);
+        }
+
+        .cr-action-btn.is-live {
+            background: linear-gradient(135deg, #0ca678, #0b8c64);
+            box-shadow: 0 6px 16px -6px rgba(12,166,120,.6);
+        }
+
+        .cr-action-btn.is-outline {
+            background: #fff;
+            color: #0a95b3;
+            box-shadow: none;
+            border: 1.5px solid rgba(13,202,240,.5);
+        }
+
+            .cr-action-btn.is-outline:hover {
+                color: #0a95b3;
+                background: rgba(13,202,240,.08);
+            }
+
+        .cr-action-btn.is-secondary {
+            background: #f1f2f6;
+            color: #4a4f5e;
+            box-shadow: none;
+        }
+
+            .cr-action-btn.is-secondary:hover {
+                background: #e7e9ef;
+                color: #4a4f5e;
+            }
     .cr-hero, .cr-body {
         --cr-ink: #451423;
         --cr-accent: #3b5bdb;
@@ -1474,90 +1562,96 @@ void FileGroup(string title, string icon, List<Attachment> items)
 <div class="modal-footer">
     @if (canApprove)
     {
-        <button type="button" id="modal-approve-btn" class="btn btn-success" data-id="@Model.CRID">Approve</button>
-        <button type="button" id="modal-reject-btn" class="btn btn-danger" data-id="@Model.CRID">Reject</button>
+        <button type="button" id="modal-approve-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
+            <i class="ri-check-line"></i>Approve
+        </button>
+        <button type="button" id="modal-reject-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
+            <i class="ri-close-circle-line"></i>Reject
+        </button>
     }
     @if (canDeptHeadDecideAgain)
     {
-        <button type="button" id="modal-depthead-approve-btn" class="btn btn-success" data-id="@Model.CRID">
-            <i class="ri-check-line me-1"></i>Accept
+        <button type="button" id="modal-depthead-approve-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
+            <i class="ri-check-line"></i>Accept
         </button>
-        <button type="button" id="modal-depthead-return-btn" class="btn btn-danger" data-id="@Model.CRID">
-            <i class="ri-arrow-go-back-line me-1"></i>Return
+        <button type="button" id="modal-depthead-return-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
+            <i class="ri-arrow-go-back-line"></i>Return
         </button>
     }
     @if (canGoAssessment)
     {
-        <a href="@Url.Action("Assessment", "CRManagement", new { id = Model.CRID })" class="btn btn-warning">Go to Assessment</a>
+        <a href="@Url.Action("Assessment", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-warning">
+            <i class="ri-file-search-line"></i>Go to Assessment
+        </a>
     }
     @if (canProceedToDevelopment)
     {
-        <button type="button" id="modal-proceed-dev-btn" class="btn btn-warning" data-id="@Model.CRID">
-            <i class="ri-code-s-slash-line me-1"></i>Proceed to Development
+        <button type="button" id="modal-proceed-dev-btn" class="cr-action-btn is-primary" data-id="@Model.CRID">
+            <i class="ri-code-s-slash-line"></i>Proceed to Development
         </button>
     }
     @if (canGoSecurity)
     {
-        <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = Model.CRID })" class="btn btn-info">
-            <i class="ri-shield-check-line me-1"></i>Proceed to Security Assessment
+        <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-info">
+            <i class="ri-shield-check-line"></i>Security Assessment
         </a>
     }
     @if (canEditSecurityDraft)
     {
         <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = Model.CRID })"
-           class="btn btn-outline-info" title="Edit Security Assessment">
-            <i class="ri-pencil-line me-1"></i>Edit Security Assessment
+           class="cr-action-btn is-outline" title="Edit Security Assessment">
+            <i class="ri-pencil-line"></i>Edit Security Assessment
         </a>
     }
     @if (canHandoverToTester)
     {
-        <button type="button" id="modal-handover-tester-btn" class="btn btn-primary" data-id="@Model.CRID">
-            <i class="ri-user-shared-line me-1"></i>Handover to Tester
+        <button type="button" id="modal-handover-tester-btn" class="cr-action-btn is-primary" data-id="@Model.CRID">
+            <i class="ri-user-shared-line"></i>Handover to Tester
         </button>
     }
     @if (canHandoverToFinalApprover)
     {
-        <button type="button" id="modal-handover-final-btn" class="btn btn-success" data-id="@Model.CRID">
-            <i class="ri-send-plane-line me-1"></i>Send to Final Approval
+        <button type="button" id="modal-handover-final-btn" class="cr-action-btn is-final" data-id="@Model.CRID">
+            <i class="ri-send-plane-line"></i>Send to Final Approval
         </button>
-        <button type="button" id="modal-return-qa-btn" class="btn btn-danger" data-id="@Model.CRID">
-            <i class="ri-arrow-go-back-line me-1"></i>Reject - Return to QA
+        <button type="button" id="modal-return-qa-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
+            <i class="ri-arrow-go-back-line"></i>Return to QA
         </button>
     }
     @if (canFinalApprove)
     {
-        <button type="button" id="modal-final-approve-btn" class="btn btn-success" data-id="@Model.CRID">
-            <i class="ri-check-double-line me-1"></i>Final Approval
+        <button type="button" id="modal-final-approve-btn" class="cr-action-btn is-final" data-id="@Model.CRID">
+            <i class="ri-check-double-line"></i>Final Approval
         </button>
     }
     @if (canGoQA)
     {
-        <a href="@Url.Action("Testing", "CRManagement", new { id = Model.CRID })" class="btn btn-primary">
-            <i class="ri-test-tube-line me-1"></i>Proceed to QA Test
+        <a href="@Url.Action("Testing", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-primary">
+            <i class="ri-test-tube-line"></i>Proceed to QA Test
         </a>
     }
     @if (canApproveToDevelopment)
     {
-        <button type="button" id="modal-approve-dev-btn" class="btn btn-success" data-id="@Model.CRID">
-            <i class="ri-check-double-line me-1"></i>Approve to Development
+        <button type="button" id="modal-approve-dev-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
+            <i class="ri-check-double-line"></i>Approve to Development
         </button>
     }
     @if (canDevDocDecide)
     {
-        <button type="button" id="modal-devdoc-approve-btn" class="btn btn-success" data-id="@Model.CRID">
-            <i class="ri-check-line me-1"></i>Accept
+        <button type="button" id="modal-devdoc-approve-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
+            <i class="ri-check-line"></i>Accept
         </button>
-        <button type="button" id="modal-devdoc-return-btn" class="btn btn-danger" data-id="@Model.CRID">
-            <i class="ri-arrow-go-back-line me-1"></i>Return
+        <button type="button" id="modal-devdoc-return-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
+            <i class="ri-arrow-go-back-line"></i>Return
         </button>
     }
     @if (canSubmitLiveLink)
     {
-        <button type="button" id="modal-live-link-btn" class="btn btn-success" data-id="@Model.CRID">
-            <i class="ri-links-line me-1"></i>Add Live Link
+        <button type="button" id="modal-live-link-btn" class="cr-action-btn is-live" data-id="@Model.CRID">
+            <i class="ri-links-line"></i>Add Live Link
         </button>
     }
-    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+    <button type="button" class="cr-action-btn is-secondary" data-bs-dismiss="modal">Close</button>
 </div>
 
 <script>

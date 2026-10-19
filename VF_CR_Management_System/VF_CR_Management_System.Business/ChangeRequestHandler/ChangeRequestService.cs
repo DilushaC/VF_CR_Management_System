@@ -300,7 +300,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ?.AssignedToName;
 
             changeRequest.ApproverUserName = GetAssigneeByStepName("Division Head Approval"); // CR approved by
-            changeRequest.AssessmentUserName = new[] { "Assessment", "Developer Documentation" }
+            changeRequest.AssessmentUserName = new[] { "Developer Documentation" }
              .Select(GetAssigneeByStepName)
              .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));           // Developer
             changeRequest.SecurityUserName = GetAssigneeByStepName("Security");               // InfoSec officer
@@ -3829,25 +3829,25 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             int pendingApprovalId = Convert.ToInt32(pendingTable.Rows[0]["ApprovalID"]);
 
-            // ---- 4. Release Closure owner = AssignedBy of the LATEST Developer Documentation record ----
-            const string latestDevDocSql = @"
-                SELECT TOP (1) AssignedBy
+            // ---- 4. Release Closure owner = AssignedTo of the FIRST Developer Documentation record ----
+            const string firstDevDocSql = @"
+                SELECT TOP (1) AssignedTo
                 FROM Approval
                 WHERE CRID = @CRID
                   AND StepID = @StepID
                   AND Active = 1
-                ORDER BY ApprovalID DESC";
+                ORDER BY ApprovalID ASC";
 
             var devDocParams = new DynamicParameters();
             devDocParams.Add("@CRID", crId);
             devDocParams.Add("@StepID", developerDocStepId);
 
-            var devDocTable = _connectionService.ReturnWithPara(latestDevDocSql, devDocParams);
+            var devDocTable = _connectionService.ReturnWithPara(firstDevDocSql, devDocParams);
             if (devDocTable == null || devDocTable.Rows.Count == 0)
                 throw new InvalidOperationException(
                     $"No Developer Documentation record was found for CR {crId}.");
 
-            string releaseClosureUser = CleanId(Convert.ToString(devDocTable.Rows[0]["AssignedBy"]));
+            string releaseClosureUser = CleanId(Convert.ToString(devDocTable.Rows[0]["AssignedTo"]));
             if (string.IsNullOrWhiteSpace(releaseClosureUser))
                 throw new InvalidOperationException(
                     $"The user for the Release Closure step of CR {crId} could not be determined.");
@@ -3922,7 +3922,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return true;
         }
-
         public async Task<bool> SubmitLiveLink(int crId, string liveLink, string empNo)
         {
             if (crId <= 0)
