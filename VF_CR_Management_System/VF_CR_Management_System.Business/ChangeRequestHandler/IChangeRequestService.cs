@@ -38,5 +38,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<bool> ReturnToQAAsync(int crId, string reason, string empNo);
         Task<bool> FinalApproval(int crId, string empNo);
         Task<bool> SubmitLiveLink(int crId, string liveLink, string empNo);
+        Task<DashboardMetrics> GetDashboardMetricsAsync();
+        Task<IEnumerable<DashboardMetrics>> GetSubmissionTrendAsync(string period);
     }
 }

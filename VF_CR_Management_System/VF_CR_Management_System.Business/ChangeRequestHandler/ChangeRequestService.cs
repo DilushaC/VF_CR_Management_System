@@ -4071,5 +4071,167 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         }
 
 
+        public async Task<DashboardMetrics> GetDashboardMetricsAsync()
+        {
+            // Single round-trip: count all active CRs, then bucket them by CRStatus.StatusName.
+            //   - ApprovedCRs : CRs currently sitting in the "Approved" status
+            //   - DeployedCRs : CRs that have gone live / been closed out
+            //   - RejectedCRs : CRs currently in the "Rejected" status
+            // Adjust the status names in the CASE WHEN clauses below if your CRStatus table
+            // uses different labels for "deployed" (e.g. just "Closed").
+            const string sql = @"
+                SELECT
+                    COUNT(*) AS TotalCRs,
+                    SUM(CASE WHEN s.StatusName = 'Approved' THEN 1 ELSE 0 END) AS ApprovedCRs,
+                    SUM(CASE WHEN s.StatusName IN ('Closed', 'Released', 'Completed', 'ReleaseClosed', 'LiveLinkSubmitted')
+                              THEN 1 ELSE 0 END) AS DeployedCRs,
+                    SUM(CASE WHEN s.StatusName = 'Rejected' THEN 1 ELSE 0 END) AS RejectedCRs
+                FROM [CRManagementDB].[dbo].[ChangeRequest] cr
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus] s ON s.StatusID = cr.StatusID
+                WHERE cr.Active = 1";
+
+            var table = _connectionService.ReturnWithPara(sql, null);
+
+            if (table == null || table.Rows.Count == 0)
+            {
+                return new DashboardMetrics();
+            }
+
+            var row = table.Rows[0];
+
+            int SafeInt(object val) => val == null || val == DBNull.Value ? 0 : Convert.ToInt32(val);
+
+            return await Task.FromResult(new DashboardMetrics
+            {
+                TotalCRs = SafeInt(row["TotalCRs"]),
+                ApprovedCRs = SafeInt(row["ApprovedCRs"]),
+                DeployedCRs = SafeInt(row["DeployedCRs"]),
+                RejectedCRs = SafeInt(row["RejectedCRs"])
+            });
+        }
+
+        public async Task<IEnumerable<DashboardMetrics>> GetSubmissionTrendAsync(string period)
+        {
+            period = (period ?? "month").Trim().ToLowerInvariant();
+
+            return period switch
+            {
+                "week" => await GetWeeklyTrendAsync(),
+                "year" => await GetYearlyTrendAsync(),
+                _ => await GetMonthlyTrendAsync()
+            };
+        }
+
+        // Last 8 weeks (Mon-Sun buckets), including the current week
+        private async Task<IEnumerable<DashboardMetrics>> GetWeeklyTrendAsync()
+        {
+            const string sql = @"
+                SELECT
+                    DATEADD(WEEK, DATEDIFF(WEEK, 0, cr.RequestedDate), 0) AS WeekStart,
+                    COUNT(*) AS Cnt
+                FROM [CRManagementDB].[dbo].[ChangeRequest] cr
+                WHERE cr.Active = 1
+                  AND cr.RequestedDate >= DATEADD(WEEK, -7, DATEADD(WEEK, DATEDIFF(WEEK, 0, GETDATE()), 0))
+                GROUP BY DATEADD(WEEK, DATEDIFF(WEEK, 0, cr.RequestedDate), 0)
+                ORDER BY WeekStart";
+
+            var table = _connectionService.ReturnWithPara(sql, null);
+
+            var counts = (table?.AsEnumerable() ?? Enumerable.Empty<DataRow>())
+                .ToDictionary(
+                    r => r.Field<DateTime>("WeekStart").Date,
+                    r => Convert.ToInt32(r["Cnt"]));
+
+            // Build the 8 week-start dates (Monday-based) ending with the current week
+            var today = DateTime.Today;
+            int diffToMonday = ((int)today.DayOfWeek + 6) % 7; // Mon=0 ... Sun=6
+            var currentWeekStart = today.AddDays(-diffToMonday);
+
+            var result = new List<DashboardMetrics>();
+            for (int i = 7; i >= 0; i--)
+            {
+                var weekStart = currentWeekStart.AddDays(-7 * i);
+                counts.TryGetValue(weekStart, out var cnt);
+
+                result.Add(new DashboardMetrics
+                {
+                    Label = weekStart.ToString("MMM dd"),
+                    Count = cnt
+                });
+            }
+
+            return await Task.FromResult(result);
+        }
+
+        // Jan-Dec of the current year
+        private async Task<IEnumerable<DashboardMetrics>> GetMonthlyTrendAsync()
+        {
+            const string sql = @"
+                SELECT
+                    MONTH(cr.RequestedDate) AS MonthNum,
+                    COUNT(*) AS Cnt
+                FROM [CRManagementDB].[dbo].[ChangeRequest] cr
+                WHERE cr.Active = 1
+                  AND YEAR(cr.RequestedDate) = YEAR(GETDATE())
+                GROUP BY MONTH(cr.RequestedDate)";
+
+            var table = _connectionService.ReturnWithPara(sql, null);
+
+            var counts = (table?.AsEnumerable() ?? Enumerable.Empty<DataRow>())
+                .ToDictionary(
+                    r => Convert.ToInt32(r["MonthNum"]),
+                    r => Convert.ToInt32(r["Cnt"]));
+
+            var monthNames = new[] { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+            var result = new List<DashboardMetrics>();
+            for (int m = 1; m <= 12; m++)
+            {
+                counts.TryGetValue(m, out var cnt);
+                result.Add(new DashboardMetrics
+                {
+                    Label = monthNames[m - 1],
+                    Count = cnt
+                });
+            }
+
+            return await Task.FromResult(result);
+        }
+
+        // Last 6 years including the current year
+        private async Task<IEnumerable<DashboardMetrics>> GetYearlyTrendAsync()
+        {
+            const string sql = @"
+                SELECT
+                    YEAR(cr.RequestedDate) AS Yr,
+                    COUNT(*) AS Cnt
+                FROM [CRManagementDB].[dbo].[ChangeRequest] cr
+                WHERE cr.Active = 1
+                  AND YEAR(cr.RequestedDate) >= YEAR(GETDATE()) - 5
+                GROUP BY YEAR(cr.RequestedDate)";
+
+            var table = _connectionService.ReturnWithPara(sql, null);
+
+            var counts = (table?.AsEnumerable() ?? Enumerable.Empty<DataRow>())
+                .ToDictionary(
+                    r => Convert.ToInt32(r["Yr"]),
+                    r => Convert.ToInt32(r["Cnt"]));
+
+            int currentYear = DateTime.Today.Year;
+            var result = new List<DashboardMetrics>();
+            for (int y = currentYear - 5; y <= currentYear; y++)
+            {
+                counts.TryGetValue(y, out var cnt);
+                result.Add(new DashboardMetrics
+                {
+                    Label = y.ToString(),
+                    Count = cnt
+                });
+            }
+
+            return await Task.FromResult(result);
+        }
+
+
     }
 }

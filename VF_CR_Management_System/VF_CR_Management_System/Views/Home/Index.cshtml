@@ -366,13 +366,20 @@
     <div class="row g-3 mt-1">
         <div class="col-xl-6">
             <div class="card crdash-chart-card mb-0">
-                <div class="card-header">
-                    <h4 class="crdash-chart-title"><i class="ri-bar-chart-grouped-line"></i>CR Statistics</h4>
-                    <p class="crdash-chart-sub">Income vs expenditure trend by month</p>
+                <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div>
+                        <h4 class="crdash-chart-title"><i class="ri-bar-chart-grouped-line"></i>CR Submissions</h4>
+                        <p class="crdash-chart-sub" id="trend-sub">Monthly submissions for @DateTime.Now.Year</p>
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Submission trend filter">
+                        <button type="button" class="btn btn-outline-secondary crdash-trend-btn" data-period="week">Weekly</button>
+                        <button type="button" class="btn btn-outline-secondary crdash-trend-btn active" data-period="month">Monthly</button>
+                        <button type="button" class="btn btn-outline-secondary crdash-trend-btn" data-period="year">Yearly</button>
+                    </div>
                 </div>
                 <div class="card-body px-2 pt-2">
                     <div dir="ltr">
-                        <div id="statistics-chart" class="apex-charts" data-colors="#3b5bdb,#45bbe0"></div>
+                        <div id="statistics-chart" class="apex-charts" data-colors="#3b5bdb"></div>
                     </div>
                 </div>
             </div>
@@ -397,19 +404,17 @@
 
 @section Scripts {
     <script>
-        // Single source of truth, injected from the server model
         const crStats = @Html.Raw(JsonSerializer.Serialize(new
         {
-                    totalCRs = Model.TotalCRs,
-                    pending = Model.PendingApprovals,
-                    holds = Model.TotalHolds,
-                    rejected = Model.RejectedCRs
+                        totalCRs = Model.TotalCRs,
+                        pending = Model.PendingApprovals,
+                        holds = Model.TotalHolds,
+                        rejected = Model.RejectedCRs
         }));
 
     document.addEventListener("DOMContentLoaded", function () {
 
-            // Animate the stat bars in after load (width is set via inline style already,
-            // this just gives the "grow in" effect by re-triggering a transition frame).
+            // Animate the stat bars in after load
             requestAnimationFrame(function () {
                 document.querySelectorAll('.crdash-stat-bar > span').forEach(function (el) {
                     var target = el.style.width;
@@ -422,22 +427,64 @@
                 });
             });
 
-            // Statistics (bar) chart - unrelated data, keep separate
-            new ApexCharts(document.querySelector("#statistics-chart"), {
+            // ===== CR Submissions bar chart: single series, Week/Month/Year filter =====
+            var trendChart = new ApexCharts(document.querySelector("#statistics-chart"), {
                 chart: { type: "bar", height: 300, toolbar: { show: false }, fontFamily: "inherit" },
-                series: [
-                    { name: "Income", data: [30, 40, 35, 50, 49, 60, 70, 91, 45] },
-                    { name: "Expenditure", data: [20, 30, 25, 40, 39, 50, 60, 71, 35] }
-                ],
-                xaxis: { categories: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep"] },
-                colors: ["#3b5bdb", "#45bbe0"],
+                series: [{ name: "Submissions", data: [] }],
+                xaxis: { categories: [] },
+                colors: ["#3b5bdb"],
                 plotOptions: { bar: { columnWidth: "45%", borderRadius: 5 } },
                 dataLabels: { enabled: false },
                 grid: { borderColor: "rgba(120,130,150,.15)", strokeDashArray: 4 },
-                legend: { position: "top" }
-            }).render();
+                legend: { show: false }
+            });
+            trendChart.render();
 
-            // Pie chart - driven directly by the same stats as the cards
+            var trendSubLabels = {
+                week: "Last 8 weeks",
+                month: "Monthly submissions for @DateTime.Now.Year",
+                year: "Submissions by year"
+            };
+
+            function loadTrend(period) {
+                $.ajax({
+                    url: '@Url.Action("GetSubmissionTrend", "Home")',
+                    type: 'GET',
+                    data: { period: period },
+                    success: function (response) {
+                        if (!response || response.success === false) { return; }
+
+                        trendChart.updateOptions({
+                            xaxis: { categories: response.labels }
+                        });
+                        trendChart.updateSeries([
+                            { name: "Submissions", data: response.counts }
+                        ]);
+
+                        document.getElementById('trend-sub').textContent =
+                            trendSubLabels[period] || 'Submissions';
+                    },
+                    error: function () {
+                        console.error('Failed to load submission trend for period: ' + period);
+                    }
+                });
+            }
+
+            // Filter button clicks
+            document.querySelectorAll('.crdash-trend-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    document.querySelectorAll('.crdash-trend-btn').forEach(function (b) {
+                        b.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    loadTrend(this.dataset.period);
+                });
+            });
+
+            // Initial load: monthly
+            loadTrend('month');
+
+            // Pie chart - unchanged
             new ApexCharts(document.querySelector("#simple-pie"), {
                 chart: { type: "donut", height: 320, fontFamily: "inherit" },
                 series: [crStats.totalCRs, crStats.pending, crStats.holds, crStats.rejected],
