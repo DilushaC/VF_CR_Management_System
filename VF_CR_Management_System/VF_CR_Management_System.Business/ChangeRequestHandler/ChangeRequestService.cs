@@ -690,20 +690,20 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsDraftsAsync(string empNo)
         {
-            // 1. Fetch Rejected StatusID dynamically from CRStatus
-            const string getRejectedStatusSql = @"
-                SELECT TOP 1 StatusID 
-                FROM [CRManagementDB].[dbo].[CRStatus] 
-                WHERE StatusName LIKE '%Reject%' AND Active = 1";
+            //// 1. Fetch Rejected StatusID dynamically from CRStatus
+            //const string getRejectedStatusSql = @"
+            //    SELECT TOP 1 StatusID 
+            //    FROM [CRManagementDB].[dbo].[CRStatus] 
+            //    WHERE StatusName LIKE '%Reject%' AND Active = 1";
 
-            var rejectedStatusObj = _connectionService.ExecuteScalar(getRejectedStatusSql);
+            //var rejectedStatusObj = _connectionService.ExecuteScalar(getRejectedStatusSql);
 
-            if (rejectedStatusObj == null || rejectedStatusObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Status 'Rejected' was not found or is inactive in CRStatus table.");
-            }
+            //if (rejectedStatusObj == null || rejectedStatusObj == DBNull.Value)
+            //{
+            //    throw new InvalidOperationException("Status 'Rejected' was not found or is inactive in CRStatus table.");
+            //}
 
-            int rejectedStatusId = Convert.ToInt32(rejectedStatusObj);
+            //int rejectedStatusId = Convert.ToInt32(rejectedStatusObj);
 
             const string sql = @"
                 SELECT
@@ -740,7 +740,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] AS s
                     ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1
-                    AND cr.StatusID <> @RejectedStatusId
                     AND cr.RequesterUserName = @EmpNo
                 ORDER BY
                     cr.CRID DESC;";
@@ -748,8 +747,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 sql,
                 new
                 {
-                    EmpNo = empNo,
-                    RejectedStatusId = rejectedStatusId
+                    EmpNo = empNo
                 }).ToList();
 
             if (!changeRequests.Any())
