@@ -24,19 +24,30 @@ namespace VF_CR_Management_System.Controllers
         private readonly IModuleService _moduleService;
         private readonly IDivisionService _divisionService;
         private readonly IVendorService _vendorService;
+        private readonly ILogger<CRManagementController> _logger;
 
-        public CRManagementController(IChangeRequestService changeRequestService, IUserService userService, IModuleService moduleService, IDivisionService divisionService, IVendorService vendorService)
+        public CRManagementController(
+            IChangeRequestService changeRequestService,
+            IUserService userService,
+            IModuleService moduleService,
+            IDivisionService divisionService,
+            IVendorService vendorService,
+            ILogger<CRManagementController> logger)
         {
             _changeRequestService = changeRequestService;
             _userService = userService;
             _moduleService = moduleService;
             _divisionService = divisionService;
             _vendorService = vendorService;
+            _logger = logger;
         }
 
         [HttpGet]
         public async Task<IActionResult> Create()
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+            _logger.LogInformation("Action: Create (GET) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
+
             var users = await _userService.GetAllUsersAsync();
             ViewBag.Users = users;
 
@@ -52,13 +63,19 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(IFormCollection collection)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo");
                 var newCrId = await _changeRequestService.CreateChangeRequestAsync(collection, empNo);
 
                 if (newCrId <= 0)
+                {
+                    _logger.LogWarning("Action: Create (failed) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                     return Json(new { success = false, message = "Failed to save the Change Request." });
+                }
+
+                _logger.LogInformation("Action: Create | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", newCrId, empNo, DateTime.Now);
 
                 return Json(new
                 {
@@ -70,6 +87,7 @@ namespace VF_CR_Management_System.Controllers
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: Create (validation error) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                 return Json(new { success = false, message = ex.Message });
             }
         }
@@ -77,6 +95,9 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> Edit(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+            _logger.LogInformation("Action: Edit (GET) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+
             var users = await _userService.GetAllUsersAsync();
             ViewBag.Users = users;
 
@@ -94,9 +115,13 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> GetChangeRequestData(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+            _logger.LogInformation("Action: GetChangeRequestData | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+
             var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id);
             if (changeRequest == null)
             {
+                _logger.LogWarning("Action: GetChangeRequestData (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return NotFound();
             }
 
@@ -122,14 +147,15 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> Edit(int id, IFormCollection collection)
         {
+            var userName = HttpContext.Session.GetString("UserName");
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
             try
             {
-                var userName = HttpContext.Session.GetString("UserName");
-                var empNo = HttpContext.Session.GetString("EmpNo");
-
                 bool updated = await _changeRequestService.UpdateChangeRequestAsync(id, collection, userName, empNo);
                 if (updated)
                 {
+                    _logger.LogInformation("Action: Edit | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return Json(new
                     {
                         success = true,
@@ -139,6 +165,7 @@ namespace VF_CR_Management_System.Controllers
                 }
                 else
                 {
+                    _logger.LogWarning("Action: Edit (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return Json(new
                     {
                         success = false,
@@ -148,6 +175,7 @@ namespace VF_CR_Management_System.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: Edit (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Json(new
                 {
                     success = false,
@@ -159,22 +187,29 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> Approve(int id, int ApproverID, int qaUserId)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.ApproveChangeRequestAsync(id, ApproverID, qaUserId, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: Approve (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
+                }
 
+                _logger.LogInformation("Action: Approve | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { success = true, message = "Change Request approved successfully." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: Approve (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: Approve (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while approving the CR." });
             }
         }
@@ -182,22 +217,29 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> Reject(int id, string RejectReason)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.RejectChangeRequestAsync(id, RejectReason, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: Reject (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { message = "Failed to reject the Change Request." });
+                }
 
+                _logger.LogInformation("Action: Reject | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { message = "Change Request rejected." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: Reject (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: Reject (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { message = "An unexpected error occurred while rejecting the CR." });
             }
         }
@@ -205,18 +247,24 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> Submit(int id)
         {
+            var empId = User?.Identity?.Name ?? string.Empty;
+
             try
             {
-                var empId = User?.Identity?.Name ?? string.Empty;
                 var success = await _changeRequestService.SubmitChangeRequestAsync(id, empId);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: Submit (failed) | CR: {CRId} | User: {EmpId} | Time: {Timestamp}", id, empId, DateTime.Now);
                     return BadRequest(new { message = "Failed to submit the Change Request." });
+                }
 
+                _logger.LogInformation("Action: Submit | CR: {CRId} | User: {EmpId} | Time: {Timestamp}", id, empId, DateTime.Now);
                 return Ok(new { message = "Change Request submitted." });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: Submit (error) | CR: {CRId} | User: {EmpId} | Time: {Timestamp}", id, empId, DateTime.Now);
                 return StatusCode(500, new { message = "An unexpected error occurred while submitting the CR." });
             }
         }
@@ -224,18 +272,24 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> Delete(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.DeleteChangeRequestAsync(id, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: Delete (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { message = "Failed to delete the Change Request." });
+                }
 
+                _logger.LogInformation("Action: Delete | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { message = "Change Request deleted." });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: Delete (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { message = "An unexpected error occurred while deleting the CR." });
             }
         }
@@ -261,6 +315,8 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> Assessment(int? id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             if (id == null)
             {
                 return RedirectToAction("Index");
@@ -271,6 +327,7 @@ namespace VF_CR_Management_System.Controllers
                 var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
                 if (changeRequest == null)
                 {
+                    _logger.LogWarning("Action: Assessment (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound();
                 }
 
@@ -292,10 +349,12 @@ namespace VF_CR_Management_System.Controllers
                 var users = await _userService.GetAllUsersAsync();
                 ViewBag.Users = users;
 
+                _logger.LogInformation("Action: Assessment (GET) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("Assessment", changeRequest);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: Assessment (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("Error");
             }
         }
@@ -303,10 +362,14 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateAssessment(IFormCollection collection)
         {
+            var userName = HttpContext.Session.GetString("UserName");
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
             try
             {
                 if (!int.TryParse(collection["id"], out int id))
                 {
+                    _logger.LogWarning("Action: CreateAssessment (invalid ID) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                     return Json(new
                     {
                         success = false,
@@ -314,12 +377,10 @@ namespace VF_CR_Management_System.Controllers
                     });
                 }
 
-                var userName = HttpContext.Session.GetString("UserName");
-                var empNo = HttpContext.Session.GetString("EmpNo");
-
                 bool updated = await _changeRequestService.CreateAssessmentAsync(id, collection, userName, empNo);
                 if (updated)
                 {
+                    _logger.LogInformation("Action: CreateAssessment | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return Json(new
                     {
                         success = true,
@@ -329,6 +390,7 @@ namespace VF_CR_Management_System.Controllers
                 }
                 else
                 {
+                    _logger.LogWarning("Action: CreateAssessment (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return Json(new
                     {
                         success = false,
@@ -338,6 +400,7 @@ namespace VF_CR_Management_System.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: CreateAssessment (error) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                 return Json(new
                 {
                     success = false,
@@ -349,6 +412,8 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> AssesmentSecurity(int? id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             if (id == null)
             {
                 return RedirectToAction("Index");
@@ -359,6 +424,7 @@ namespace VF_CR_Management_System.Controllers
                 var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
                 if (changeRequest == null)
                 {
+                    _logger.LogWarning("Action: AssesmentSecurity (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound();
                 }
 
@@ -377,10 +443,12 @@ namespace VF_CR_Management_System.Controllers
 
                 ViewBag.ChangeImpacts = await _changeRequestService.GetChangeImpactsAsync();
 
+                _logger.LogInformation("Action: AssesmentSecurity (GET) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("AssesmentSecurity", changeRequest);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: AssesmentSecurity (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("Error");
             }
         }
@@ -388,10 +456,14 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateSecurityAssessment(IFormCollection collection)
         {
+            var userName = HttpContext.Session.GetString("UserName");
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
             try
             {
                 if (!int.TryParse(collection["id"], out int id))
                 {
+                    _logger.LogWarning("Action: CreateSecurityAssessment (invalid ID) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                     return Json(new
                     {
                         success = false,
@@ -403,12 +475,10 @@ namespace VF_CR_Management_System.Controllers
                 // (required-field validation lives in the service and applies to Submit only)
                 bool isSubmit = collection["Status"].ToString() == "2";
 
-                var userName = HttpContext.Session.GetString("UserName");
-                var empNo = HttpContext.Session.GetString("EmpNo");
-
                 bool updated = await _changeRequestService.CreateAssessmentSecurityAsync(id, collection, userName, empNo);
                 if (updated)
                 {
+                    _logger.LogInformation("Action: CreateSecurityAssessment | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return Json(new
                     {
                         success = true,
@@ -420,6 +490,7 @@ namespace VF_CR_Management_System.Controllers
                 }
                 else
                 {
+                    _logger.LogWarning("Action: CreateSecurityAssessment (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return Json(new
                     {
                         success = false,
@@ -430,10 +501,12 @@ namespace VF_CR_Management_System.Controllers
             catch (ArgumentException ex)
             {
                 // Validation messages from the service are shown as-is
+                _logger.LogWarning(ex, "Action: CreateSecurityAssessment (validation error) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                 return Json(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: CreateSecurityAssessment (error) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                 return Json(new
                 {
                     success = false,
@@ -481,6 +554,9 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> EditAssessment(int? id)
         {
+            var userName = HttpContext.Session.GetString("UserName");
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
             if (id == null)
             {
                 return RedirectToAction("AssignedByMeTable");
@@ -488,12 +564,10 @@ namespace VF_CR_Management_System.Controllers
 
             try
             {
-                var userName = HttpContext.Session.GetString("UserName");
-                var empNo = HttpContext.Session.GetString("EmpNo");
-
                 var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
                 if (changeRequest == null)
                 {
+                    _logger.LogWarning("Action: EditAssessment (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound();
                 }
                 var vendors = await _vendorService.GetAllVendorsAsync();
@@ -514,10 +588,12 @@ namespace VF_CR_Management_System.Controllers
                 var users = await _userService.GetAllUsersAsync();
                 ViewBag.Users = users;
 
+                _logger.LogInformation("Action: EditAssessment | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("Assessment", changeRequest);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: EditAssessment (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("Error");
             }
         }
@@ -525,15 +601,23 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> DownloadAttachment(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
                 var attachment = await _changeRequestService.GetAttachmentByIdAsync(id);
 
                 if (attachment == null)
+                {
+                    _logger.LogWarning("Action: DownloadAttachment (not found) | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound();
+                }
 
                 if (!System.IO.File.Exists(attachment.FilePath))
+                {
+                    _logger.LogWarning("Action: DownloadAttachment (file missing) | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound("The file could not be found on the server.");
+                }
 
                 var provider = new FileExtensionContentTypeProvider();
                 if (!provider.TryGetContentType(attachment.FilePath, out var contentType))
@@ -543,10 +627,12 @@ namespace VF_CR_Management_System.Controllers
 
                 var fileBytes = await System.IO.File.ReadAllBytesAsync(attachment.FilePath);
 
+                _logger.LogInformation("Action: DownloadAttachment | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return File(fileBytes, contentType, attachment.FileName);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: DownloadAttachment (error) | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, "An error occurred while downloading the file.");
             }
         }
@@ -554,21 +640,24 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> DeleteAttachment(int id)
         {
+            var userName = HttpContext.Session.GetString("UserName");
+
             try
             {
-                var userName = HttpContext.Session.GetString("UserName");
-
                 var success = await _changeRequestService.DeleteAttachmentAsync(id, userName);
 
                 if (!success)
                 {
+                    _logger.LogWarning("Action: DeleteAttachment (not found) | Attachment: {AttachmentId} | User: {UserName} | Time: {Timestamp}", id, userName, DateTime.Now);
                     return Json(new { success = false, message = "Attachment not found or already removed." });
                 }
 
+                _logger.LogInformation("Action: DeleteAttachment | Attachment: {AttachmentId} | User: {UserName} | Time: {Timestamp}", id, userName, DateTime.Now);
                 return Json(new { success = true, message = "Attachment removed." });
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: DeleteAttachment (error) | Attachment: {AttachmentId} | User: {UserName} | Time: {Timestamp}", id, userName, DateTime.Now);
                 return Json(new { success = false, message = $"Error: {ex.Message}" });
             }
         }
@@ -576,15 +665,23 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> PreviewAttachment(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
                 var attachment = await _changeRequestService.GetAttachmentByIdAsync(id);
 
                 if (attachment == null)
+                {
+                    _logger.LogWarning("Action: PreviewAttachment (not found) | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound();
+                }
 
                 if (!System.IO.File.Exists(attachment.FilePath))
+                {
+                    _logger.LogWarning("Action: PreviewAttachment (file missing) | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound("The file could not be found on the server.");
+                }
 
                 // Only allow inline preview for images and PDFs — anything else falls
                 // back to a normal download rather than being rendered in the browser.
@@ -593,6 +690,7 @@ namespace VF_CR_Management_System.Controllers
 
                 if (!previewableExtensions.Contains(extension))
                 {
+                    _logger.LogWarning("Action: PreviewAttachment (unsupported type) | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest("Preview is only available for image or PDF files.");
                 }
 
@@ -604,12 +702,15 @@ namespace VF_CR_Management_System.Controllers
 
                 var fileBytes = await System.IO.File.ReadAllBytesAsync(attachment.FilePath);
 
+                _logger.LogInformation("Action: PreviewAttachment | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+
                 // No fileDownloadName here — this is what keeps the response "inline"
                 // instead of forcing Content-Disposition: attachment.
                 return File(fileBytes, contentType);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: PreviewAttachment (error) | Attachment: {AttachmentId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, "An error occurred while loading the preview.");
             }
         }
@@ -617,6 +718,9 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> EditSecurity(int? id)
         {
+            var userName = HttpContext.Session.GetString("UserName");
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
             if (id == null)
             {
                 return RedirectToAction("SecurityTable");
@@ -624,12 +728,10 @@ namespace VF_CR_Management_System.Controllers
 
             try
             {
-                var userName = HttpContext.Session.GetString("UserName");
-                var empNo = HttpContext.Session.GetString("EmpNo");
-
                 var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
                 if (changeRequest == null)
                 {
+                    _logger.LogWarning("Action: EditSecurity (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound();
                 }
 
@@ -643,10 +745,12 @@ namespace VF_CR_Management_System.Controllers
 
                 ViewBag.ChangeImpacts = await _changeRequestService.GetChangeImpactsAsync();
 
+                _logger.LogInformation("Action: EditSecurity | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("AssesmentSecurity", changeRequest);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: EditSecurity (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("Error");
             }
         }
@@ -654,6 +758,8 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> Testing(int? id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             if (id == null)
             {
                 return RedirectToAction("Index");
@@ -664,6 +770,7 @@ namespace VF_CR_Management_System.Controllers
                 var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id.Value);
                 if (changeRequest == null)
                 {
+                    _logger.LogWarning("Action: Testing (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound();
                 }
 
@@ -675,10 +782,12 @@ namespace VF_CR_Management_System.Controllers
 
                 ViewBag.ChangeImpacts = await _changeRequestService.GetChangeImpactsAsync();
 
+                _logger.LogInformation("Action: Testing (GET) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("Testing", changeRequest);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: Testing (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return View("Error");
             }
         }
@@ -686,10 +795,14 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateTesting(IFormCollection collection)
         {
+            var userName = HttpContext.Session.GetString("UserName");
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
             try
             {
                 if (!int.TryParse(collection["Id"], out int id))
                 {
+                    _logger.LogWarning("Action: CreateTesting (invalid ID) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                     return Json(new
                     {
                         success = false,
@@ -699,11 +812,9 @@ namespace VF_CR_Management_System.Controllers
 
                 bool isSubmit = collection["Status"].ToString() == "2";
 
-                var userName = HttpContext.Session.GetString("UserName");
-                var empNo = HttpContext.Session.GetString("EmpNo");
-
                 if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(empNo))
                 {
+                    _logger.LogWarning("Action: CreateTesting (session expired) | CR: {CRId} | Time: {Timestamp}", id, DateTime.Now);
                     return Json(new
                     {
                         success = false,
@@ -715,6 +826,7 @@ namespace VF_CR_Management_System.Controllers
 
                 if (updated)
                 {
+                    _logger.LogInformation("Action: CreateTesting | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return Json(new
                     {
                         success = true,
@@ -726,6 +838,7 @@ namespace VF_CR_Management_System.Controllers
                 }
                 else
                 {
+                    _logger.LogWarning("Action: CreateTesting (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return Json(new
                     {
                         success = false,
@@ -735,10 +848,12 @@ namespace VF_CR_Management_System.Controllers
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: CreateTesting (validation error) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                 return Json(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: CreateTesting (error) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
                 return Json(new
                 {
                     success = false,
@@ -750,22 +865,29 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> AssignFinalApprover(int id, int finalApproverId)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.AssignFinalApproverAsync(id, finalApproverId, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: AssignFinalApprover (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { message = "Failed to approve the Change Request." });
+                }
 
+                _logger.LogInformation("Action: AssignFinalApprover | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { message = "Change Request approved successfully." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: AssignFinalApprover (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: AssignFinalApprover (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { message = "An unexpected error occurred while approving the CR." });
             }
         }
@@ -774,26 +896,31 @@ namespace VF_CR_Management_System.Controllers
         [HttpGet]
         public async Task<IActionResult> CRDetailsPartial(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
                 var cr = await _changeRequestService.GetChangeRequestByIdAsync(id);
                 if (cr == null)
+                {
+                    _logger.LogWarning("Action: CRDetailsPartial (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return NotFound();
+                }
 
                 var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id);
                 cr.Attachments = attachments?.ToList() ?? new List<Attachment>();
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
 
                 ViewBag.CurrentEmpNo = empNo;
                 ViewBag.CurrentUserName = empNo;
                 ViewBag.CurrentDisplayName = HttpContext.Session.GetString("UserName") ?? string.Empty;
                 ViewBag.Users = await _userService.GetAllUsersAsync();
 
+                _logger.LogInformation("Action: CRDetailsPartial | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return PartialView("_CRDetailsPartial", cr);
             }
             catch (Exception ex)
             {
-
+                _logger.LogError(ex, "Action: CRDetailsPartial (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 throw;
             }
 
@@ -803,26 +930,34 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> AcceptDevAssessment(int id, string securityOfficerId)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.AcceptDevAssessment(id, empNo, securityOfficerId);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: AcceptDevAssessment (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { success = false, message = "Failed to accept the Change Request." });
+                }
 
+                _logger.LogInformation("Action: AcceptDevAssessment | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { success = true, message = "Assessment accepted and assigned to the IS Officer." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: AcceptDevAssessment (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {
+                _logger.LogWarning(ex, "Action: AcceptDevAssessment (invalid operation) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: AcceptDevAssessment (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while accepting the CR." });
             }
         }
@@ -830,26 +965,34 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> ReturnDevAssessment(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.ReturnDevAssessment(id, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: ReturnDevAssessment (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { success = false, message = "Failed to return the Change Request." });
+                }
 
+                _logger.LogInformation("Action: ReturnDevAssessment | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { success = true, message = "Change Request returned to the developer." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: ReturnDevAssessment (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {
+                _logger.LogWarning(ex, "Action: ReturnDevAssessment (invalid operation) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: ReturnDevAssessment (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while returning the CR." });
             }
         }
@@ -875,22 +1018,29 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> ApproveToDevelopment(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
-                var success = await _changeRequestService.ApproveToDevelopmentAsync(id,empNo);
+                var success = await _changeRequestService.ApproveToDevelopmentAsync(id, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: ApproveToDevelopment (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { success = false, message = "Failed to approve the Change Request." });
+                }
 
+                _logger.LogInformation("Action: ApproveToDevelopment | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { success = true, message = "Change Request approved successfully." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: ApproveToDevelopment (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: ApproveToDevelopment (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while approving the CR." });
             }
         }
@@ -898,22 +1048,29 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> ProceedToDevelopment(int id, string uatLink)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.ProceedToDevelopmentAsync(id, uatLink, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: ProceedToDevelopment (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { message = "Failed to send UAT Link." });
+                }
 
+                _logger.LogInformation("Action: ProceedToDevelopment | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { message = "UAT handover to QA." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: ProceedToDevelopment (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: ProceedToDevelopment (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { message = "An unexpected error occurred while rejecting the CR." });
             }
         }
@@ -922,26 +1079,34 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> ReturnToQA(int id, string reason)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.ReturnToQAAsync(id, reason, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: ReturnToQA (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { success = false, message = "Failed to return the Change Request to QA." });
+                }
 
+                _logger.LogInformation("Action: ReturnToQA | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { success = true, message = "Change Request returned to QA." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: ReturnToQA (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {
+                _logger.LogWarning(ex, "Action: ReturnToQA (invalid operation) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: ReturnToQA (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while returning the CR to QA." });
             }
         }
@@ -949,26 +1114,34 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> FinalApproval(int id)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.FinalApproval(id, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: FinalApproval (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { success = false, message = "Failed to approve the CR ." });
+                }
 
+                _logger.LogInformation("Action: FinalApproval | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { success = true, message = "CR Final Approve Success." });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: FinalApproval (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {
+                _logger.LogWarning(ex, "Action: FinalApproval (invalid operation) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { success = false, message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: FinalApproval (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { success = false, message = "An unexpected error occurred while accepting the CR." });
             }
         }
@@ -976,22 +1149,29 @@ namespace VF_CR_Management_System.Controllers
         [HttpPost]
         public async Task<IActionResult> SubmitLiveLink(int id, string liveLink)
         {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
             try
             {
-                var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
                 var success = await _changeRequestService.SubmitLiveLink(id, liveLink, empNo);
 
                 if (!success)
+                {
+                    _logger.LogWarning("Action: SubmitLiveLink (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                     return BadRequest(new { message = "Failed to send LIVE Link." });
+                }
 
+                _logger.LogInformation("Action: SubmitLiveLink | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return Ok(new { message = "Live link Deployed" });
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Action: SubmitLiveLink (validation error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return BadRequest(new { message = ex.Message });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Action: SubmitLiveLink (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { message = "An unexpected error occurred while rejecting the CR." });
             }
         }
