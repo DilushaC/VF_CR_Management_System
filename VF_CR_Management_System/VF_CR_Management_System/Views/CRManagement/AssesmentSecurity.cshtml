@@ -382,6 +382,14 @@
             box-shadow: 0 0 0 3px var(--csec-accent-soft) !important;
         }
 
+        .csec-page .form-control.is-invalid {
+            border-color: #d6384a !important;
+        }
+
+            .csec-page .form-control.is-invalid:focus {
+                box-shadow: 0 0 0 3px rgba(214,56,74,.15) !important;
+            }
+
     .csec-counter {
         display: flex;
         justify-content: flex-end;
@@ -389,6 +397,25 @@
         font-size: .8rem;
         color: var(--csec-muted);
     }
+
+    /* ===== Inline field errors ===== */
+    .csec-field-error {
+        display: none;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .35rem;
+        font-size: .8rem;
+        font-weight: 500;
+        color: #d6384a;
+    }
+
+        .csec-field-error.is-visible {
+            display: flex;
+        }
+
+        .csec-field-error i {
+            font-size: .95rem;
+        }
 
     /* ===== Attachments ===== */
     .csec-attgroup + .csec-attgroup {
@@ -456,6 +483,10 @@
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
         gap: .65rem;
     }
+
+        .csec-tiles.is-invalid .csec-tile {
+            border-color: #d6384a;
+        }
 
     .csec-opt {
         position: relative;
@@ -757,6 +788,13 @@
             font-weight: 600;
         }
 
+            .csec-actions .btn:disabled,
+            .csec-actions .btn.disabled {
+                opacity: .55;
+                cursor: not-allowed;
+                box-shadow: none;
+            }
+
     @@media (prefers-reduced-motion: reduce) {
         .csec-sec {
             animation: none;
@@ -777,7 +815,7 @@
         </div>
     </div>
 
-    <form id="securityAssessmentForm">
+    <form id="securityAssessmentForm" novalidate>
 
         <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
 
@@ -856,6 +894,7 @@
                         <textarea name="RiskAssessment" id="securityRiskAssessment" class="form-control" rows="8"
                                   placeholder="Write the explanation here...">@Model.RiskAssessment</textarea>
                         <div class="csec-counter"><span id="csecWords">0 words</span></div>
+                        <div class="csec-field-error" id="err-risk"><i class="ri-error-warning-line"></i><span>Please enter the information security risk assessment.</span></div>
                     </div>
                 </section>
 
@@ -871,7 +910,7 @@
                     <div class="csec-sec-body">
                         @if (changeImpacts != null && changeImpacts.Any())
                         {
-                            <div class="csec-tiles">
+                            <div class="csec-tiles" id="impactTiles">
                                 @foreach (var impact in changeImpacts)
                                 {
                                     var style = ImpactStyle(impact.ChangeImpactName);
@@ -888,6 +927,7 @@
                                     </div>
                                 }
                             </div>
+                            <div class="csec-field-error" id="err-impact"><i class="ri-error-warning-line"></i><span>Please select a change impact.</span></div>
                         }
                         else
                         {
@@ -963,7 +1003,8 @@
                 <button type="submit"
                         id="submitBtn"
                         class="btn btn-primary"
-                        data-status="2">
+                        data-status="2"
+                        disabled>
                     <i class="ri-send-plane-line me-1"></i>Submit
                 </button>
             </div>
@@ -1034,9 +1075,17 @@
                 });
             });
 
-            // ---- Progress ring + checklist ----
+            // ---- Progress ring + checklist + inline validation ----
             var RING_LEN = 276.46;
             var riskInput = document.getElementById('securityRiskAssessment');
+            var impactTiles = document.getElementById('impactTiles');
+            var submitBtn = document.getElementById('submitBtn');
+
+            function showErr(key, isValid, $fieldEl) {
+                var errEl = document.getElementById('err-' + key);
+                if (errEl) { errEl.classList.toggle('is-visible', !isValid); }
+                if ($fieldEl) { $fieldEl.classList.toggle('is-invalid', !isValid); }
+            }
 
             function refreshProgress() {
                 var risk = (riskInput.value || '').trim();
@@ -1045,9 +1094,12 @@
                 var words = risk ? risk.split(/\s+/).length : 0;
                 document.getElementById('csecWords').textContent = words + (words === 1 ? ' word' : ' words');
 
+                var riskOk = risk.length > 0;
+                var impactOk = !!impact;
+
                 var state = {
-                    risk: risk.length > 0,
-                    impact: !!impact
+                    risk: riskOk,
+                    impact: impactOk
                 };
 
                 var done = 0, total = 0;
@@ -1066,6 +1118,15 @@
                 document.getElementById('csecHeadline').textContent =
                     done === total ? 'Ready to submit' :
                     done === 0 ? "Let's get started" : 'Almost there';
+
+                // ----- Inline field validation -----
+                showErr('risk', riskOk, riskInput);
+                showErr('impact', impactOk, null);
+                if (impactTiles) { impactTiles.classList.toggle('is-invalid', !impactOk); }
+
+                var allValid = riskOk && impactOk;
+                submitBtn.disabled = !allValid;
+                submitBtn.classList.toggle('disabled', !allValid);
             }
 
             document.getElementById('securityAssessmentForm').addEventListener('input', refreshProgress);
@@ -1074,7 +1135,6 @@
 
             // ---- Save / Submit security assessment ----
             var saveBtn = document.getElementById('btn-save');
-            var submitBtn = document.getElementById('submitBtn');
 
             function handleSecuritySubmission(btnElement, isSubmit) {
                 var crId = document.getElementById('crIdField').value;
@@ -1090,30 +1150,11 @@
                     return;
                 }
 
-                // Client-side validation only on Submit; Save allows a partial draft.
+                // Safety net: Submit is disabled while invalid, but re-check here too
+                // in case it was somehow re-enabled programmatically.
                 if (isSubmit) {
-                    var risk = document.getElementById('securityRiskAssessment').value.trim();
-                    var impact = document.querySelector('input[name="ImpactID"]:checked');
-
-                    if (!risk) {
-                        Swal.fire({
-                            title: 'Missing information',
-                            text: 'Please enter the Information Security Risk Assessment.',
-                            icon: 'warning',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        });
-                        return;
-                    }
-
-                    if (!impact) {
-                        Swal.fire({
-                            title: 'Missing information',
-                            text: 'Please select a Change Impact.',
-                            icon: 'warning',
-                            customClass: { confirmButton: 'btn btn-primary' },
-                            buttonsStyling: false
-                        });
+                    refreshProgress();
+                    if (submitBtn.disabled) {
                         return;
                     }
                 }
@@ -1178,7 +1219,7 @@
                             });
                         },
                         complete: function () {
-                            btnElement.disabled = false;
+                            btnElement.disabled = (btnElement === submitBtn) ? submitBtn.disabled : false;
                             btnElement.textContent = originalText;
                         }
                     });

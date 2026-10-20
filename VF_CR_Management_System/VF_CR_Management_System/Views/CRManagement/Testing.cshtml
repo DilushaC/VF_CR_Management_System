@@ -466,6 +466,14 @@
             box-shadow: 0 0 0 3px var(--ctst-accent-soft) !important;
         }
 
+        .ctst-page .form-control.is-invalid {
+            border-color: #d6384a !important;
+        }
+
+            .ctst-page .form-control.is-invalid:focus {
+                box-shadow: 0 0 0 3px rgba(214,56,74,.15) !important;
+            }
+
     .ctst-counter {
         display: flex;
         justify-content: flex-end;
@@ -473,6 +481,25 @@
         font-size: .8rem;
         color: var(--ctst-muted);
     }
+
+    /* ===== Inline field errors ===== */
+    .ctst-field-error {
+        display: none;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .35rem;
+        font-size: .8rem;
+        font-weight: 500;
+        color: #d6384a;
+    }
+
+        .ctst-field-error.is-visible {
+            display: flex;
+        }
+
+        .ctst-field-error i {
+            font-size: .95rem;
+        }
 
     /* ===== Attachments ===== */
     .ctst-attgroup + .ctst-attgroup {
@@ -872,8 +899,10 @@
         }
 
         #submitBtn:disabled, #btn-fail:disabled {
-            opacity: .7;
+            opacity: .55;
             transform: none;
+            cursor: not-allowed;
+            box-shadow: none;
         }
 
     @@media (prefers-reduced-motion: reduce) {
@@ -900,7 +929,7 @@
         </div>
     </div>
 
-    <form id="testingForm" enctype="multipart/form-data">
+    <form id="testingForm" enctype="multipart/form-data" novalidate>
         @Html.AntiForgeryToken()
 
         <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
@@ -1040,6 +1069,7 @@
                             <textarea name="Test" id="testPlanResults" class="form-control" rows="8"
                                       placeholder="Describe the test plan and results (if the test failed, explain why):"></textarea>
                             <div class="ctst-counter"><span id="ctstWords">0 words</span></div>
+                            <div class="ctst-field-error" id="err-plan"><i class="ri-error-warning-line"></i><span>Please describe the test plan and results.</span></div>
                         </div>
 
                         <div>
@@ -1158,13 +1188,15 @@
                 <button type="button"
                         id="btn-fail"
                         class="btn"
-                        data-status="3">
+                        data-status="3"
+                        disabled>
                     <i class="ri-arrow-go-back-line me-1"></i>Test Failed
                 </button>
                 <button type="button"
                         id="submitBtn"
                         class="btn"
-                        data-status="2">
+                        data-status="2"
+                        disabled>
                     <i class="ri-check-line me-1"></i>Test Passed
                 </button>
             </div>
@@ -1306,19 +1338,30 @@
                 });
             });
 
-            // ---- Progress ring + checklist ----
+            // ---- Progress ring + checklist + inline validation ----
             var RING_LEN = 276.46;
             var testPlanInput = document.getElementById('testPlanResults');
             var hasExistingQaFiles = @(testResultFiles.Any() ? "true" : "false");
+            var submitBtn = document.getElementById('submitBtn');   // Test Passed
+            var failBtn   = document.getElementById('btn-fail');    // Test Failed
+
+            function showErr(key, isValid, $fieldEl) {
+                var errEl = document.getElementById('err-' + key);
+                if (errEl) { errEl.classList.toggle('is-visible', !isValid); }
+                if ($fieldEl) { $fieldEl.classList.toggle('is-invalid', !isValid); }
+            }
 
             function refreshProgress() {
                 var plan = (testPlanInput.value || '').trim();
                 var words = plan ? plan.split(/\s+/).length : 0;
                 document.getElementById('ctstWords').textContent = words + (words === 1 ? ' word' : ' words');
 
+                var planOk = plan.length > 0;
+                var attachmentsOk = hasExistingQaFiles || selectedFiles.length > 0;
+
                 var state = {
-                    plan: plan.length > 0,
-                    attachments: hasExistingQaFiles || selectedFiles.length > 0
+                    plan: planOk,
+                    attachments: attachmentsOk
                 };
 
                 var done = 0, total = 0;
@@ -1337,6 +1380,15 @@
                 document.getElementById('ctstHeadline').textContent =
                     done === total ? 'Ready to submit' :
                     done === 0 ? "Let's get started" : 'Almost there';
+
+                // ----- Inline field validation -----
+                // Test plan & results is required for both Test Passed and Test Failed.
+                showErr('plan', planOk, testPlanInput);
+
+                submitBtn.disabled = !planOk;
+                submitBtn.classList.toggle('disabled', !planOk);
+                failBtn.disabled = !planOk;
+                failBtn.classList.toggle('disabled', !planOk);
             }
 
             document.getElementById('testingForm').addEventListener('input', refreshProgress);
@@ -1433,9 +1485,6 @@
             refreshProgress();
 
             // ---- Test Passed / Test Failed ----
-            var submitBtn = document.getElementById('submitBtn');   // Test Passed
-            var failBtn   = document.getElementById('btn-fail');    // Test Failed
-
             // Per-button alert settings
             var modeConfig = {
                 pass: {
@@ -1483,18 +1532,12 @@
                     return;
                 }
 
-                // Validation per button
-                var testPlan = document.getElementById('testPlanResults').value.trim();
-
-                if (cfg.requireTestPlan && !testPlan) {
-                    showAlert('Missing information',
-                        mode === 'fail'
-                            ? 'Please enter the Test Plan and Test Results, including why the test failed.'
-                            : 'Please enter the Test Plan and Test Results.',
-                        'warning');
+                // Safety net: both buttons are disabled while the test plan is empty,
+                // but re-check here too in case they were re-enabled programmatically.
+                refreshProgress();
+                if (cfg.requireTestPlan && btnElement.disabled) {
                     return;
                 }
-
 
                 function performSubmission() {
                     var form = document.getElementById('testingForm');
@@ -1543,8 +1586,10 @@
                             showAlert('Error', msg, 'error');
                         },
                         complete: function () {
-                            allBtns.forEach(function (b) { b.disabled = false; });
                             btnElement.innerHTML = originalHtml;
+                            // Re-apply the validation-driven disabled state rather than
+                            // unconditionally re-enabling both buttons.
+                            refreshProgress();
                         }
                     });
                 }

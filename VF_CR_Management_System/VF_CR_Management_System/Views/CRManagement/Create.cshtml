@@ -341,6 +341,14 @@
             box-shadow: 0 0 0 3px rgba(59,91,219,.15);
         }
 
+        .crf-page .form-control.is-invalid {
+            border-color: #d6384a !important;
+        }
+
+            .crf-page .form-control.is-invalid:focus {
+                box-shadow: 0 0 0 3px rgba(214,56,74,.15);
+            }
+
     .crf-counter {
         display: flex;
         justify-content: space-between;
@@ -348,6 +356,25 @@
         font-size: .8rem;
         color: var(--crf-muted);
     }
+
+    /* ===== Inline field errors ===== */
+    .crf-field-error {
+        display: none;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .35rem;
+        font-size: .8rem;
+        font-weight: 500;
+        color: #d6384a;
+    }
+
+        .crf-field-error.is-visible {
+            display: flex;
+        }
+
+        .crf-field-error i {
+            font-size: .95rem;
+        }
 
     /* ===== Selectable tiles (radios) ===== */
     .crf-tiles {
@@ -385,6 +412,10 @@
             transform: translateY(-2px);
             border-color: var(--crf-accent);
         }
+
+    .crf-tiles.is-invalid .crf-tile {
+        border-color: #d6384a;
+    }
 
     .crf-tile-ico {
         flex: 0 0 auto;
@@ -685,6 +716,14 @@
             font-weight: 600;
         }
 
+            .crf-actions .btn:disabled,
+            .crf-actions .btn.disabled {
+                opacity: .55;
+                cursor: not-allowed;
+                box-shadow: none;
+                transform: none;
+            }
+
     @@media (prefers-reduced-motion: reduce) {
         .crf-sec {
             animation: none;
@@ -711,15 +750,13 @@
         </div>
     </div>
 
-    <form id="crForm" action="@formAction" method="post" autocomplete="off">
+    <form id="crForm" action="@formAction" method="post" autocomplete="off" novalidate>
         @Html.AntiForgeryToken()
 
         <!-- Holds 1 (Save) or 2 (Submit & Approve), set by JS right before submission -->
         <input type="hidden" id="StatusID" name="StatusID" value="">
         <!-- Present only when editing an existing draft; used client-side to know whether to fetch/populate the form via AJAX -->
         <input type="hidden" id="CRID" name="CRID" value="@crId">
-
-        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
         <div class="crf-grid">
 
@@ -773,14 +810,14 @@
                             <label class="crf-label" for="ChangeTitle">Change request title</label>
                             <input id="ChangeTitle" name="ChangeTitle" class="form-control" value="@Model?.ChangeTitle"
                                    placeholder="e.g. Add Excel export to the invoice report">
-                            <span asp-validation-for="ChangeTitle" class="text-danger"></span>
+                            <div class="crf-field-error" id="err-title"><i class="ri-error-warning-line"></i><span>Please enter a title.</span></div>
                         </div>
                         <div>
                             <label class="crf-label" for="Summary">Change summary &amp; business justification</label>
                             <textarea id="Summary" name="Summary" class="form-control" rows="10"
                                       placeholder="What should change, why it matters, and who it affects...">@Model?.Summary</textarea>
                             <div class="crf-counter"><span>Be specific. It helps the approver decide faster.</span><span id="crfWords">0 words</span></div>
-                            <span asp-validation-for="Summary" class="text-danger"></span>
+                            <div class="crf-field-error" id="err-summary"><i class="ri-error-warning-line"></i><span>Please describe the change.</span></div>
                         </div>
                     </div>
                 </section>
@@ -794,7 +831,7 @@
                         </div>
                     </div>
                     <div class="crf-sec-body">
-                        <div class="crf-tiles">
+                        <div class="crf-tiles" id="typeTiles">
                             @foreach (var t in typeOptions)
                             {
                                 <div class="crf-opt">
@@ -813,9 +850,9 @@
 
                         <div id="otherTextareaWrapper" class="crf-other" style="display: none;">
                             <textarea id="otherTextarea" name="OtherChangeType" class="form-control" rows="2" placeholder="Please specify the type of change..."></textarea>
+                            <div class="crf-field-error" id="err-othertype"><i class="ri-error-warning-line"></i><span>Please specify the change type.</span></div>
                         </div>
-                        <span asp-validation-for="ChangeTypeID" class="text-danger"></span>
-                        <span asp-validation-for="OtherChangeType" class="text-danger"></span>
+                        <div class="crf-field-error" id="err-type"><i class="ri-error-warning-line"></i><span>Please select a change type.</span></div>
                     </div>
                 </section>
 
@@ -828,7 +865,7 @@
                         </div>
                     </div>
                     <div class="crf-sec-body">
-                        <div class="crf-tiles">
+                        <div class="crf-tiles" id="priorityTiles">
                             @foreach (var p in priorityOptions)
                             {
                                 <div class="crf-opt">
@@ -844,7 +881,7 @@
                                 </div>
                             }
                         </div>
-                        <span asp-validation-for="PriorityID" class="text-danger d-block mt-2"></span>
+                        <div class="crf-field-error" id="err-priority"><i class="ri-error-warning-line"></i><span>Please select a priority.</span></div>
                     </div>
                 </section>
 
@@ -870,7 +907,7 @@
                                         }
                                     }
                                 </select>
-                                <span asp-validation-for="DivisionID" class="text-danger"></span>
+                                <div class="crf-field-error" id="err-division"><i class="ri-error-warning-line"></i><span>Please select a division.</span></div>
                             </div>
 
                             <div class="col-md-6" id="moduleCard" style="display: none;">
@@ -878,7 +915,7 @@
                                 <select id="ModuleID" name="ModuleID" class="form-control select2" data-toggle="select2">
                                     <option value="" selected disabled hidden>Select Module</option>
                                 </select>
-                                <span asp-validation-for="ModuleID" class="text-danger"></span>
+                                <div class="crf-field-error" id="err-module"><i class="ri-error-warning-line"></i><span>Please select a module.</span></div>
                             </div>
                         </div>
 
@@ -927,7 +964,7 @@
                     </ul>
                 </div>
 
-@*                 <div class="crf-card">
+                @*                 <div class="crf-card">
                     <h6><i class="ri-eye-line"></i>Live preview</h6>
                     <div class="crf-pv-top">
                         <span class="crf-pv-num">@(crId > 0 ? $"Draft #{crId}" : "WAITING")</span>
@@ -950,7 +987,7 @@
             <button type="button" class="btn btn-outline-danger" onclick="window.location.href='@Url.Action("DraftTable")'">Cancel</button>
             <div class="d-flex gap-2">
                 <button type="button" id="btn-save" class="btn btn-danger" data-status="1"><i class="ri-save-3-line me-1"></i>Save</button>
-                <button type="button" id="btn-submit" class="btn btn-primary" data-status="2"><i class="ri-send-plane-line me-1"></i>Submit</button>
+                <button type="button" id="btn-submit" class="btn btn-primary" data-status="2" disabled><i class="ri-send-plane-line me-1"></i>Submit</button>
             </div>
         </div>
     </form>
@@ -981,8 +1018,16 @@
             var $moduleCard = $('#moduleCard');
             var $module = $('#ModuleID');
 
-            // ===== Live preview + progress ring =====
+            // ===== Live preview + progress ring + inline validation =====
             var RING_LEN = 276.46;
+
+            function showErr(key, isValid, $fieldEl) {
+                var $err = $('#err-' + key);
+                $err.toggleClass('is-visible', !isValid);
+                if ($fieldEl && $fieldEl.length) {
+                    $fieldEl.toggleClass('is-invalid', !isValid);
+                }
+            }
 
             function refreshPreview() {
                 var title = ($('#ChangeTitle').val() || '').trim();
@@ -991,7 +1036,9 @@
 
                 var $type = $('input[name="ChangeTypeID"]:checked');
                 var typeLabel = $type.length ? $('label[for="' + $type.attr('id') + '"] .crf-tile-name').text() : '';
-                var typeDone = $type.length > 0 && ($type.val() !== '5' || otherText.length > 0);
+                var typeSelected = $type.length > 0;
+                var otherOk = $type.val() !== '5' || otherText.length > 0;
+                var typeDone = typeSelected && otherOk;
                 if ($type.val() === '5' && otherText) { typeLabel = 'Other: ' + otherText; }
 
                 var $prio = $('input[name="PriorityID"]:checked');
@@ -1001,10 +1048,11 @@
                 var divText = $division.val() ? $.trim($division.find('option:selected').text()) : '';
                 var modText = $module.val() ? $.trim($module.find('option:selected').text()) : '';
 
+                var moduleRequired = $moduleCard.is(':visible');
                 var moduleOptions = $module.find('option').filter(function () { return this.value !== ''; }).length;
-                var moduleDone = !!$module.val() || ($moduleCard.is(':visible') && moduleOptions === 0);
+                var moduleDone = !!$module.val() || (moduleRequired && moduleOptions === 0);
 
-                // Preview card
+                // Preview card (safe no-ops if the preview card markup isn't present)
                 $('#pvTitle').text(title || 'Untitled change request').toggleClass('is-empty', !title);
                 $('#pvType').text(typeLabel);
                 $('#pvSummary').text(summary || 'Your summary will appear here as you type.');
@@ -1022,7 +1070,7 @@
                 var words = summary ? summary.split(/\s+/).length : 0;
                 $('#crfWords').text(words + (words === 1 ? ' word' : ' words'));
 
-                // Checklist
+                // Checklist / completion state
                 var state = {
                     title: title.length > 0,
                     summary: summary.length > 0,
@@ -1055,6 +1103,24 @@
                 $('[data-sec="3"]').toggleClass('is-done', state.type);
                 $('[data-sec="4"]').toggleClass('is-done', state.priority);
                 $('[data-sec="5"]').toggleClass('is-done', state.division && state.module);
+
+                // ----- Inline field validation -----
+                showErr('title', state.title, $('#ChangeTitle'));
+                showErr('summary', state.summary, $('#Summary'));
+                showErr('type', typeSelected, null);
+                $('#typeTiles').toggleClass('is-invalid', !typeSelected);
+                showErr('othertype', otherOk, $('#otherTextarea'));
+                showErr('priority', state.priority, null);
+                $('#priorityTiles').toggleClass('is-invalid', !state.priority);
+                showErr('division', state.division, $division);
+                showErr('module', !moduleRequired || state.module, $module);
+
+                var allValid = state.title && state.summary && typeDone &&
+                    state.priority && state.division &&
+                    (!moduleRequired || state.module);
+
+                submitBtn.disabled = !allValid;
+                $(submitBtn).toggleClass('disabled', !allValid);
             }
 
             $('#crForm').on('input change', refreshPreview);
@@ -1112,7 +1178,7 @@
                 loadModulesForDivision(divisionId, null);
             });
 
-            // Save (Draft) execution
+            // Save (Draft) execution — always allowed, partial drafts are fine
             saveBtn.addEventListener('click', function () {
                 Swal.fire({
                     title: 'Save this Change Request?',
@@ -1135,6 +1201,13 @@
             });
 
             submitBtn.addEventListener('click', function () {
+                // Safety net: the button is disabled while the form is incomplete,
+                // but guard here too in case it's re-enabled programmatically elsewhere.
+                if (submitBtn.disabled) {
+                    refreshPreview();
+                    return;
+                }
+
                 if (!$division.val()) {
                     Swal.fire({
                         title: 'Select a Division',
@@ -1436,7 +1509,7 @@
                 refreshPreview();
             }
 
-            // First paint of the preview / progress ring
+            // First paint of the preview / progress ring / validation state
             refreshPreview();
         });
     </script>

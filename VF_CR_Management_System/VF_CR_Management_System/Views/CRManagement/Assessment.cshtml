@@ -357,6 +357,35 @@
             box-shadow: 0 0 0 3px var(--casm-accent-soft) !important;
         }
 
+        .casm-page .form-control.is-invalid,
+        .casm-page .form-select.is-invalid {
+            border-color: #d6384a !important;
+        }
+
+            .casm-page .form-control.is-invalid:focus,
+            .casm-page .form-select.is-invalid:focus {
+                box-shadow: 0 0 0 3px rgba(214,56,74,.15) !important;
+            }
+
+    /* ===== Inline field errors ===== */
+    .casm-field-error {
+        display: none;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .35rem;
+        font-size: .8rem;
+        font-weight: 500;
+        color: #d6384a;
+    }
+
+        .casm-field-error.is-visible {
+            display: flex;
+        }
+
+        .casm-field-error i {
+            font-size: .95rem;
+        }
+
     /* ===== Upload dropzones ===== */
     .casm-upload {
         border: 1.5px dashed var(--casm-line);
@@ -368,6 +397,10 @@
         .casm-upload:hover {
             border-color: var(--casm-accent);
             background: var(--casm-accent-soft);
+        }
+
+        .casm-upload.is-invalid {
+            border-color: #d6384a;
         }
 
     .casm-filelist {
@@ -703,6 +736,13 @@
             font-weight: 600;
         }
 
+            .casm-actions .btn:disabled,
+            .casm-actions .btn.disabled {
+                opacity: .55;
+                cursor: not-allowed;
+                box-shadow: none;
+            }
+
     @@media (prefers-reduced-motion: reduce) {
         .casm-sec {
             animation: none;
@@ -723,7 +763,7 @@
         </div>
     </div>
 
-    <form id="assessmentForm">
+    <form id="assessmentForm" novalidate>
 
         <input type="hidden" name="Id" id="crIdField" value="@Model.CRID" />
 
@@ -782,6 +822,7 @@
                                 <input type="number" name="EffortEstimateDays" id="effortEstimateDays"
                                        class="form-control" min="0"
                                        value="@effortEstimateDays">
+                                <div class="casm-field-error" id="err-effort"><i class="ri-error-warning-line"></i><span>Please enter an effort estimate greater than 0.</span></div>
                             </div>
                         </div>
 
@@ -789,11 +830,13 @@
                             <label class="casm-label" for="activitiesTasks">Activities &amp; tasks</label>
                             <textarea name="ActivitiesTasks" id="activitiesTasks" class="form-control" rows="6"
                                       placeholder="Write the explanation here...">@Model.ActivitiesTasks</textarea>
+                            <div class="casm-field-error" id="err-activities"><i class="ri-error-warning-line"></i><span>Please describe the activities and tasks.</span></div>
                         </div>
                         <div>
                             <label class="casm-label" for="fixedAssetInfo">Fixed asset information</label>
                             <textarea name="FixedAssetInfo" id="fixedAssetInfo" class="form-control" rows="6"
                                       placeholder="Write the explanation here...">@Model.FixedAssets</textarea>
+                            <div class="casm-field-error" id="err-fixedAsset"><i class="ri-error-warning-line"></i><span>Please enter fixed asset information.</span></div>
                         </div>
                     </div>
                 </section>
@@ -811,22 +854,24 @@
                         <div class="row g-3">
                             <div class="col-md-6" id="srsSection">
                                 <label class="casm-label">SRS document</label>
-                                <div class="casm-upload">
+                                <div class="casm-upload" id="srsUploadBox">
                                     <input type="file" name="srsFile" id="srsFileInput" class="form-control" multiple>
                                     @{
                                         RenderAttachmentList("existingSrsList", srsAttachments);
                                     }
                                 </div>
+                                <div class="casm-field-error" id="err-srs"><i class="ri-error-warning-line"></i><span>Please attach the SRS document.</span></div>
                             </div>
 
                             <div class="col-md-6" id="baSection">
                                 <label class="casm-label">BA document</label>
-                                <div class="casm-upload">
+                                <div class="casm-upload" id="baUploadBox">
                                     <input type="file" name="baFile" id="baFileInput" class="form-control" multiple>
                                     @{
                                         RenderAttachmentList("existingBaList", baAttachments);
                                     }
                                 </div>
+                                <div class="casm-field-error" id="err-ba"><i class="ri-error-warning-line"></i><span>Please attach the BA document.</span></div>
                             </div>
                         </div>
                     </div>
@@ -912,7 +957,7 @@
                                 }
                             }
                         </select>
-                        <span id="vendorIdError" class="text-danger"></span>
+                        <div class="casm-field-error" id="err-vendor"><i class="ri-error-warning-line"></i><span>Please select a vendor.</span></div>
                     </div>
 
                     <div id="proposalNumber" class="mb-3"
@@ -955,7 +1000,8 @@
                 <button type="submit"
                         id="submitBtn"
                         class="btn btn-primary"
-                        data-status="2">
+                        data-status="2"
+                        disabled>
                     <i class="ri-send-plane-line me-1"></i>Submit
                 </button>
             </div>
@@ -1023,7 +1069,13 @@
                 $(vendorSelect).val(String(selectedVendorId)).trigger('change.select2');
             }
 
-            // ---- Progress ring + checklist ----
+            // Re-validate whenever select2 changes the underlying <select> (native 'change'
+            // doesn't always fire the same way for select2-driven updates).
+            if (window.jQuery && $(vendorSelect).length) {
+                $(vendorSelect).on('change', function () { refreshProgress(); });
+            }
+
+            // ---- Progress ring + checklist + inline validation ----
             var RING_LEN = 276.46;
             var effortInput = document.getElementById('effortEstimateDays');
             var activitiesInput = document.getElementById('activitiesTasks');
@@ -1040,14 +1092,27 @@
                 return !!(input && input.files && input.files.length > 0);
             }
 
+            function showErr(key, isValid, $fieldEl) {
+                var errEl = document.getElementById('err-' + key);
+                if (errEl) { errEl.classList.toggle('is-visible', !isValid); }
+                if ($fieldEl) { $fieldEl.classList.toggle('is-invalid', !isValid); }
+            }
+
             function refreshProgress() {
+                var effortOk = !!(effortInput && parseFloat(effortInput.value) > 0);
+                var activitiesOk = !!(activitiesInput && activitiesInput.value.trim().length > 0);
+                var fixedAssetOk = !!(fixedAssetInput && fixedAssetInput.value.trim().length > 0);
+                var srsOk = hasExistingFiles('existingSrsList') || hasNewFiles(srsFileInput);
+                var baOk = hasExistingFiles('existingBaList') || hasNewFiles(baFileInput);
+                var vendorOk = vendorNo.checked || (vendorYes.checked && !!vendorSelect.value);
+
                 var state = {
-                    effort: !!(effortInput && parseFloat(effortInput.value) > 0),
-                    activities: !!(activitiesInput && activitiesInput.value.trim().length > 0),
-                    fixedAsset: !!(fixedAssetInput && fixedAssetInput.value.trim().length > 0),
-                    srs: hasExistingFiles('existingSrsList') || hasNewFiles(srsFileInput),
-                    ba: hasExistingFiles('existingBaList') || hasNewFiles(baFileInput),
-                    vendor: vendorNo.checked || (vendorYes.checked && !!vendorSelect.value)
+                    effort: effortOk,
+                    activities: activitiesOk,
+                    fixedAsset: fixedAssetOk,
+                    srs: srsOk,
+                    ba: baOk,
+                    vendor: vendorOk
                 };
 
                 var done = 0;
@@ -1068,6 +1133,23 @@
                     done === total ? 'Ready to submit' :
                     done === 0 ? "Let's get started" :
                     done >= Math.ceil(total * 0.6) ? 'Almost there' : 'Looking good';
+
+                // ----- Inline field validation -----
+                showErr('effort', effortOk, effortInput);
+                showErr('activities', activitiesOk, activitiesInput);
+                showErr('fixedAsset', fixedAssetOk, fixedAssetInput);
+                showErr('srs', srsOk, null);
+                document.getElementById('srsUploadBox').classList.toggle('is-invalid', !srsOk);
+                showErr('ba', baOk, null);
+                document.getElementById('baUploadBox').classList.toggle('is-invalid', !baOk);
+
+                // Vendor error only matters while vendor support is "Yes"
+                var vendorFieldInvalid = vendorYes.checked && !vendorSelect.value;
+                showErr('vendor', !vendorFieldInvalid, vendorSelect);
+
+                var allValid = effortOk && activitiesOk && fixedAssetOk && srsOk && baOk && vendorOk;
+                submitBtn.disabled = !allValid;
+                submitBtn.classList.toggle('disabled', !allValid);
             }
 
             ['input', 'change'].forEach(function (evt) {
@@ -1091,12 +1173,13 @@
                     return;
                 }
 
-                var vendorError = document.getElementById('vendorIdError');
-                if (vendorError) { vendorError.textContent = ''; }
-
-                if (vendorYes.checked && (!vendorSelect.value || vendorSelect.value === '')) {
-                    if (vendorError) { vendorError.textContent = 'Please select a vendor.'; }
-                    return;
+                if (isSubmit) {
+                    // Safety net: Submit is disabled while invalid, but re-check here too
+                    // in case it was somehow re-enabled programmatically.
+                    refreshProgress();
+                    if (submitBtn.disabled) {
+                        return;
+                    }
                 }
 
                 function performSubmission() {
@@ -1159,7 +1242,7 @@
                             });
                         },
                         complete: function () {
-                            btnElement.disabled = false;
+                            btnElement.disabled = (btnElement === submitBtn) ? submitBtn.disabled : false;
                             btnElement.textContent = originalText;
                         }
                     });
