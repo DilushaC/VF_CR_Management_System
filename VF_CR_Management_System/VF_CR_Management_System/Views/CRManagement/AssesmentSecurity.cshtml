@@ -53,6 +53,20 @@
 
     var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" };
 
+    // ---- Implementer (same resolution logic as the CR details modal) ----
+    var devDocRows = (Model.StepAssignments ?? new List<WorkflowStepAssignment>())
+        .Where(s => string.Equals(
+                        (s.StepName ?? string.Empty).Replace(" ", string.Empty),
+                        "DeveloperDocumentation",
+                        StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var implementerName = devDocRows.FirstOrDefault()?.AssignedTo;
+    if (string.IsNullOrWhiteSpace(implementerName))
+    {
+        implementerName = Model.AssessmentUserName;
+    }
+
     // Renders one attachment group (heading + file list). Nothing is rendered when the group is empty.
     void RenderAttachmentGroup(string title, IEnumerable<Attachment> items)
     {
@@ -975,6 +989,7 @@
                         <div class="csec-kv-row"><span class="csec-kv-label">Requested by</span><span class="csec-kv-val">@Model.RequestedBy</span></div>
                         <div class="csec-kv-row"><span class="csec-kv-label">Requested date</span><span class="csec-kv-val">@Model.RequestedDate.ToString("yyyy/MM/dd")</span></div>
                         <div class="csec-kv-row"><span class="csec-kv-label">Approver</span><span class="csec-kv-val">@Model.ApproverUserName</span></div>
+                        <div class="csec-kv-row"><span class="csec-kv-label">Implementer</span><span class="csec-kv-val">@(string.IsNullOrWhiteSpace(Model.AssessmentUserName) ? "—" : Model.AssessmentUserName)</span></div>
                         <div class="csec-kv-row"><span class="csec-kv-label">Due date</span><span class="csec-kv-val">@(Model.DueDate.HasValue? Model.DueDate.Value.ToString("yyyy/MM/dd") : "—")</span></div>
                     </div>
 

@@ -356,10 +356,10 @@
 
     var hasSecurityData = new[]
     {
-        Model.SecurityUserName, Model.ChangeImpact
+        Model.SecurityUserName, Model.ChangeImpact, Model.RiskAssessment
     }.Any(v => !string.IsNullOrWhiteSpace(v)) || securityStep != null;
 
-    var testingRecords = (ViewBag.TestingRecords as List<Testing>) ?? new List<Testing>();
+    var testingRecords = Model.Tests ?? new List<Testing>();
     var activeTestingRecords = testingRecords
         .Where(t => t.Active)
         .OrderBy(t => t.TestCycleNumber)
@@ -1307,6 +1307,62 @@ void FileGroup(string title, string icon, List<Attachment> items)
         }
     }
 
+    /* ===== Test cycle result + UAT link ===== */
+    .cr-test-result-label {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        margin: 0 0 .4rem;
+        font-weight: 700;
+        font-size: .82rem;
+        color: var(--cr-muted);
+        text-transform: uppercase;
+        letter-spacing: .03em;
+    }
+
+        .cr-test-result-label i {
+            color: var(--cr-accent);
+            font-size: 1rem;
+        }
+
+    .cr-test-result {
+        margin: 0 0 .75rem;
+        padding: .85rem 1rem;
+        border: 1px solid var(--cr-line);
+        border-radius: .6rem;
+        background: var(--cr-surface);
+        line-height: 1.6;
+        white-space: pre-line;
+        word-break: break-word;
+        font-size: .9rem;
+    }
+
+    .cr-test-link {
+        display: inline-flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .55rem .85rem;
+        border: 1px solid var(--cr-line);
+        border-radius: .6rem;
+        color: var(--cr-accent);
+        font-weight: 600;
+        font-size: .88rem;
+        text-decoration: none;
+        word-break: break-all;
+        transition: border-color .15s, background .15s;
+    }
+
+        .cr-test-link:hover {
+            border-color: var(--cr-accent);
+            background: rgba(59,91,219,.06);
+            color: var(--cr-accent);
+        }
+
+        .cr-test-link i {
+            flex: 0 0 auto;
+            font-size: 1.1rem;
+        }
+
     @@media (prefers-reduced-motion: reduce) {
         .cr-step.is-done::before, .cr-step.is-current::before {
             animation: none;
@@ -1548,6 +1604,15 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         }
                     }
                 </div>
+
+                {
+                    TextBlock("ri-alert-line", "Information security risk assessment", Model.RiskAssessment, highlight: true);
+                }
+
+                @if (string.IsNullOrWhiteSpace(Model.RiskAssessment))
+                {
+                    <div class="cr-empty"><i class="ri-file-search-line"></i>No risk assessment has been submitted yet.</div>
+                }
             }
         </div>
 
@@ -1582,20 +1647,21 @@ void FileGroup(string title, string icon, List<Attachment> items)
                             <div class="cr-facts" style="margin-bottom:.75rem;">
                                 @{
                                     Fact("ri-calendar-line", "Tested on", t.TestingDate?.ToString("yyyy/MM/dd"));
-                                    Fact("ri-arrow-go-back-line", "Returned from", t.ReturnedFrom);
+                                    Fact("ri-checkbox-circle-line", "Result",
+                                    t.IsPassed == true ? "Passed" : t.IsPassed == false ? "Failed" : "Pending",
+                                    t.IsPassed == true ? "" : t.IsPassed == false ? "is-overdue" : "");
                                 }
                             </div>
                             @if (!string.IsNullOrWhiteSpace(t.TestResult))
                             {
-                                <p class="cr-block-text">@t.TestResult</p>
+                                <div class="cr-test-result-label"><i class="ri-file-list-3-line"></i>Test Results</div>
+                                <div class="cr-test-result">@t.TestResult</div>
                             }
                             @if (!string.IsNullOrWhiteSpace(t.UATLink))
                             {
-                                <p class="cr-block-text">
-                                    <a href="@t.UATLink" target="_blank" rel="noopener">
-                                        <i class="ri-link-m"></i> @t.UATLink
-                                    </a>
-                                </p>
+                                <a href="@t.UATLink" target="_blank" rel="noopener" class="cr-test-link">
+                                    <i class="ri-link-m"></i>@t.UATLink
+                                </a>
                             }
                         </section>
                     }

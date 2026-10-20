@@ -177,6 +177,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.ProposalNumber,
                     cr.RiskAssessment,
                     cr.ImpactID,
+                    ci.ImpactName     AS ChangeImpact,
                     ct.ChangeTypeName AS ChangeType,
                     cr.PriorityID,
                     p.PriorityName    AS Priority,
@@ -191,11 +192,12 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.RequestedDate,
                     cr.DueDate
                 FROM [CRManagementDB].[dbo].[ChangeRequest] cr
-                LEFT JOIN [CRManagementDB].[dbo].[ChangeType] ct ON ct.ChangeTypeID = cr.ChangeTypeID
-                LEFT JOIN [CRManagementDB].[dbo].[Priority]   p  ON p.PriorityID   = cr.PriorityID
-                LEFT JOIN [CRManagementDB].[dbo].[Division]   dv ON dv.DivisionID  = cr.DivisionID
-                LEFT JOIN [CRManagementDB].[dbo].[Module]     m  ON m.ModuleID     = cr.ModuleID
-                LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   s  ON s.StatusID     = cr.StatusID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeType]   ct ON ct.ChangeTypeID = cr.ChangeTypeID
+                LEFT JOIN [CRManagementDB].[dbo].[Priority]     p  ON p.PriorityID   = cr.PriorityID
+                LEFT JOIN [CRManagementDB].[dbo].[Division]     dv ON dv.DivisionID  = cr.DivisionID
+                LEFT JOIN [CRManagementDB].[dbo].[Module]       m  ON m.ModuleID     = cr.ModuleID
+                LEFT JOIN [CRManagementDB].[dbo].[CRStatus]     s  ON s.StatusID     = cr.StatusID
+                LEFT JOIN [CRManagementDB].[dbo].[ChangeImpact] ci ON ci.ImpactID    = cr.ImpactID
                 WHERE cr.Active = 1
                   AND cr.CRID = @CRID";
 
@@ -311,7 +313,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             // ---------- Testing records ----------
             const string testingQuery = @"
-                SELECT TestID, CRID, TestCycleNumber, TestResult, UATLink, TestingDate, ReturnedFrom, Active
+                SELECT TestID, CRID, TestCycleNumber, TestResult, UATLink, TestingDate, IsPassed, ReturnedFrom, Active
                 FROM [CRManagementDB].[dbo].[Testing]
                 WHERE CRID = @CRID AND Active = 1
                 ORDER BY TestCycleNumber DESC";
@@ -330,6 +332,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     TestResult = r.Field<string>("TestResult"),
                     UATLink = r.Field<string>("UATLink"),
                     TestingDate = r.Field<DateTime?>("TestingDate"),
+                    IsPassed = r.Field<bool?>("IsPassed"),
                     ReturnedFrom = r.Field<string>("ReturnedFrom"),
                     Active = r.Field<bool>("Active")
                 }).ToList();
