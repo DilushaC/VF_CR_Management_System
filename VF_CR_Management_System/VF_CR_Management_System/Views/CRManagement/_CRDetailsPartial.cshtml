@@ -645,6 +645,27 @@ void FileGroup(string title, string icon, List<Attachment> items)
         opacity: .8;
     }
 
+    .cr-close-form-btn {
+        position: absolute;
+        top: 1rem;
+        right: 3.2rem;
+        z-index: 3;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: rgba(255,255,255,.12);
+        color: #fff;
+        font-size: 1.1rem;
+        text-decoration: none;
+    }
+
+        .cr-close-form-btn:hover {
+            background: rgba(255,255,255,.22);
+            color: #fff;
+        }
+
     .cr-hero-top {
         padding: 1.4rem 3.2rem 0 1.5rem;
     }
@@ -1822,6 +1843,12 @@ void FileGroup(string title, string icon, List<Attachment> items)
         </button>
     }
     <button type="button" class="cr-action-btn is-secondary" data-bs-dismiss="modal">Close</button>
+    <a class="cr-close-form-btn"
+       href="@Url.Action("DownloadCRForm", "CRManagement", new { id = Model.CRID })"
+       target="_blank"
+       title="Download CR Form (PDF)">
+        <i class="ri-download-2-line"></i>
+    </a>
 </div>
 
 <script>
@@ -1831,13 +1858,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                                                    foreach (var user in ViewBag.Users)
-                                                    {
-                                                                                            string uId = user.UserName;
-                                                                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                                                                            if (string.IsNullOrEmpty(uId)) { continue; }
-                                                                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                                                    }
+                foreach (var user in ViewBag.Users)
+                {
+                    string uId = user.UserName;
+                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                    if (string.IsNullOrEmpty(uId)) { continue; }
+                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                }
             }
         ];
 

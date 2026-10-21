@@ -14,6 +14,7 @@ using VF_CR_Management_System.Business.UserHandler;
 using VF_CR_Management_System.Business.VendorHandler;
 using VF_CR_Management_System.Data.Models;
 using Attachment = VF_CR_Management_System.Data.Models.Attachment;
+using Rotativa.AspNetCore;
 
 namespace VF_CR_Management_System.Controllers
 {
@@ -1173,6 +1174,50 @@ namespace VF_CR_Management_System.Controllers
             {
                 _logger.LogError(ex, "Action: SubmitLiveLink (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
                 return StatusCode(500, new { message = "An unexpected error occurred while rejecting the CR." });
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadCRForm(int id)
+        {
+            var empNo = HttpContext.Session.GetString("EmpNo") ?? string.Empty;
+
+            try
+            {
+                var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id);
+                if (changeRequest == null)
+                {
+                    _logger.LogWarning("Action: DownloadCRForm (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+                    return NotFound();
+                }
+
+                var attachments = await _changeRequestService.GetAttachmentsByCrIdAsync(id);
+                changeRequest.Attachments = attachments?.ToList() ?? new List<Attachment>();
+
+                ViewBag.Users = await _userService.GetAllUsersAsync();
+                ViewBag.ApproverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id);
+
+                double effortEstimateDays = 0;
+                if (changeRequest.DueDate.HasValue)
+                {
+                    effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
+                }
+                ViewBag.EffortEstimateDays = effortEstimateDays;
+
+                _logger.LogInformation("Action: DownloadCRForm | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+
+                return new Rotativa.AspNetCore.ViewAsPdf("CRFormPrint", changeRequest)
+                {
+                    FileName = $"CR_{changeRequest.CRNumber}.pdf",
+                    PageSize = Rotativa.AspNetCore.Options.Size.A4,
+                    PageMargins = new Rotativa.AspNetCore.Options.Margins(15, 10, 15, 10),
+                    CustomSwitches = "--disable-smart-shrinking"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Action: DownloadCRForm (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+                return View("Error");
             }
         }
     }

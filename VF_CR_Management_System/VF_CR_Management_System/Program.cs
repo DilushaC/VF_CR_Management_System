@@ -1,3 +1,6 @@
+using Rotativa.AspNetCore;
+using Serilog;
+using Serilog.Events;
 using VF_CR_Management_System.Business.Authentication;
 using VF_CR_Management_System.Business.ChangeRequestHandler;
 using VF_CR_Management_System.Business.ConnectionHandler;
@@ -6,8 +9,6 @@ using VF_CR_Management_System.Business.ModuleHandler;
 using VF_CR_Management_System.Business.UserHandler;
 using VF_CR_Management_System.Business.VendorHandler;
 using VF_CR_Management_System.Data.Context;
-using Serilog;
-using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,6 +55,8 @@ builder.Services.AddSession(options =>
 });
 
 var app = builder.Build();
+
+RotativaConfiguration.Setup(app.Environment.WebRootPath, "Rotativa");
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
