@@ -176,6 +176,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     cr.VendorID,
                     cr.ProposalNumber,
                     cr.RiskAssessment,
+                    cr.SecurityRequirements,
+                    cr.SecurityRisksIdentified,
+                    cr.RiskTreatmentControls,
+                    cr.DependenciesImpact,
                     cr.ImpactID,
                     ci.ImpactName     AS ChangeImpact,
                     ct.ChangeTypeName AS ChangeType,
@@ -2486,6 +2490,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             var targetStatusName = isSubmit ? "SecurityApproved" : "SecurityDraft";
 
             var riskAssessment = collection["RiskAssessment"].ToString().Trim();
+            var securityRequirements = collection["SecurityRequirements"].ToString().Trim();
+            var securityRisksIdentified = collection["SecurityRisksIdentified"].ToString().Trim();
+            var riskTreatmentControls = collection["RiskTreatmentControls"].ToString().Trim();
+            var dependenciesImpact = collection["DependenciesImpact"].ToString().Trim();
 
             int? changeImpactId = int.TryParse(collection["ImpactID"], out var parsedImpactId)
                 ? parsedImpactId
@@ -2495,6 +2503,14 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 if (string.IsNullOrWhiteSpace(riskAssessment))
                     throw new ArgumentException("Please fill out the Information Security Risk Assessment.");
+                if (string.IsNullOrWhiteSpace(securityRequirements))
+                    throw new ArgumentException("Please fill out the Security Requirements.");
+                if (string.IsNullOrWhiteSpace(securityRisksIdentified))
+                    throw new ArgumentException("Please fill out the Security Risks Identified.");
+                if (string.IsNullOrWhiteSpace(riskTreatmentControls))
+                    throw new ArgumentException("Please fill out the Risk Treatment Controls.");
+                if (string.IsNullOrWhiteSpace(dependenciesImpact))
+                    throw new ArgumentException("Please fill out the Dependencies Impact.");
 
                 if (changeImpactId == null)
                     throw new ArgumentException("Please select a Change Impact.");
@@ -2518,13 +2534,21 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 UPDATE ChangeRequest
                 SET 
                     RiskAssessment = @RiskAssessment,
+                    SecurityRequirements = @SecurityRequirements,
+                    SecurityRisksIdentified = @SecurityRisksIdentified,
+                    RiskTreatmentControls = @RiskTreatmentControls,
+                    DependenciesImpact = @DependenciesImpact,
                     ImpactID = @ImpactID,
-                    StatusID       = @StatusID
+                    StatusID = @StatusID
                 WHERE CRID = @CRID
                   AND Active = 1";
 
             var crParameters = new DynamicParameters();
             crParameters.Add("@RiskAssessment", riskAssessment);
+            crParameters.Add("@SecurityRequirements", securityRequirements);
+            crParameters.Add("@SecurityRisksIdentified", securityRisksIdentified);
+            crParameters.Add("@RiskTreatmentControls", riskTreatmentControls);
+            crParameters.Add("@DependenciesImpact", dependenciesImpact);
             crParameters.Add("@ImpactID", changeImpactId, DbType.Int32);
             crParameters.Add("@StatusID", targetStatusId);
             crParameters.Add("@CRID", crId);

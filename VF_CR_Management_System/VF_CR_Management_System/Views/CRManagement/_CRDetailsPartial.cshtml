@@ -1629,6 +1629,18 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 {
                     TextBlock("ri-alert-line", "Information security risk assessment", Model.RiskAssessment, highlight: true);
                 }
+                {
+                    TextBlock("ri-alert-line", "Security Requirements", Model.SecurityRequirements, highlight: true);
+                }
+                {
+                    TextBlock("ri-alert-line", "Security Risks Identified", Model.SecurityRisksIdentified, highlight: true);
+                }
+                {
+                    TextBlock("ri-alert-line", "Risk Treatment Controls", Model.RiskTreatmentControls, highlight: true);
+                }
+                {
+                    TextBlock("ri-alert-line", "Dependencies Impact", Model.DependenciesImpact, highlight: true);
+                }
 
                 @if (string.IsNullOrWhiteSpace(Model.RiskAssessment))
                 {

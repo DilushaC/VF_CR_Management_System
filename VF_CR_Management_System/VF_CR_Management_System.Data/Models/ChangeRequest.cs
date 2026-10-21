@@ -49,6 +49,12 @@ namespace VF_CR_Management_System.Data.Models
         public string RiskAssessment { get; set; }
         public string ChangeImpact { get; set; }
 
+        //SRS additional sections
+        public string SecurityRequirements { get; set; }
+        public string SecurityRisksIdentified { get; set; }
+        public string RiskTreatmentControls { get; set; }
+        public string DependenciesImpact { get; set; }
+
         // Existing (kept as they are)
         public string? ApproverUserName { get; set; }        
         public string? ImplementerUserName { get; set; }

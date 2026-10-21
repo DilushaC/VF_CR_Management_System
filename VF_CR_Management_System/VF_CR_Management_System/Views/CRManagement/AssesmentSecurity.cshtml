@@ -279,6 +279,10 @@
             animation-delay: .18s;
         }
 
+        .csec-sec:nth-of-type(5) {
+            animation-delay: .24s;
+        }
+
     @@keyframes csec-rise {
         from {
             opacity: 0;
@@ -912,7 +916,53 @@
                     </div>
                 </section>
 
-                <!-- 4. Change impact -->
+                <!-- 4. Additional security details -->
+                <section class="csec-sec">
+                    <div class="csec-sec-head">
+                        <span class="csec-step"><i class="ri-list-check-2"></i></span>
+                        <div>
+                            <h5 class="csec-sec-title">SRS Document Security Details</h5>
+                            <p class="csec-sec-sub">Capture the specific requirements, risks, controls and dependencies for this change</p>
+                        </div>
+                    </div>
+                    <div class="csec-sec-body">
+
+                        <div class="mb-4">
+                            <label class="csec-label-sm" for="securityRequirements">Security Requirements</label>
+                            <textarea name="SecurityRequirements" id="securityRequirements" class="form-control" rows="5"
+                                      placeholder="List the security requirements that apply to this change...">@Model.SecurityRequirements</textarea>
+                            <div class="csec-counter"><span id="csecWordsRequirements">0 words</span></div>
+                            <div class="csec-field-error" id="err-securityRequirements"><i class="ri-error-warning-line"></i><span>Please enter the security requirements.</span></div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="csec-label-sm" for="securityRisksIdentified">Security Risks Identified</label>
+                            <textarea name="SecurityRisksIdentified" id="securityRisksIdentified" class="form-control" rows="5"
+                                      placeholder="Describe the security risks identified for this change...">@Model.SecurityRisksIdentified</textarea>
+                            <div class="csec-counter"><span id="csecWordsRisksIdentified">0 words</span></div>
+                            <div class="csec-field-error" id="err-securityRisksIdentified"><i class="ri-error-warning-line"></i><span>Please enter the security risks identified.</span></div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="csec-label-sm" for="riskTreatmentControls">Risk Treatment / Controls</label>
+                            <textarea name="RiskTreatmentControls" id="riskTreatmentControls" class="form-control" rows="5"
+                                      placeholder="Describe the controls or treatment plan put in place to mitigate the identified risks...">@Model.RiskTreatmentControls</textarea>
+                            <div class="csec-counter"><span id="csecWordsTreatment">0 words</span></div>
+                            <div class="csec-field-error" id="err-riskTreatmentControls"><i class="ri-error-warning-line"></i><span>Please enter the risk treatment / controls.</span></div>
+                        </div>
+
+                        <div>
+                            <label class="csec-label-sm" for="dependenciesImpact">Dependencies &amp; Impact to Other Systems</label>
+                            <textarea name="DependenciesImpact" id="dependenciesImpact" class="form-control" rows="5"
+                                      placeholder="Describe any dependencies and the impact this change may have on other systems...">@Model.DependenciesImpact</textarea>
+                            <div class="csec-counter"><span id="csecWordsDependencies">0 words</span></div>
+                            <div class="csec-field-error" id="err-dependenciesImpact"><i class="ri-error-warning-line"></i><span>Please enter dependencies &amp; impact to other systems.</span></div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- 5. Change impact -->
                 <section class="csec-sec">
                     <div class="csec-sec-head">
                         <span class="csec-step"><i class="ri-git-branch-line"></i></span>
@@ -966,11 +1016,15 @@
                         </div>
                         <div class="csec-progress-text">
                             <strong id="csecHeadline">Let's get started</strong>
-                            <span id="csecSubline">0 of 2 steps done</span>
+                            <span id="csecSubline">0 of 6 steps done</span>
                         </div>
                     </div>
                     <ul class="csec-checklist" id="csecChecklist">
                         <li data-key="risk"><i class="ri-check-line"></i>Risk assessment</li>
+                        <li data-key="securityRequirements"><i class="ri-check-line"></i>Security requirements</li>
+                        <li data-key="securityRisksIdentified"><i class="ri-check-line"></i>Security risks identified</li>
+                        <li data-key="riskTreatmentControls"><i class="ri-check-line"></i>Risk treatment / controls</li>
+                        <li data-key="dependenciesImpact"><i class="ri-check-line"></i>Dependencies &amp; impact</li>
                         <li data-key="impact"><i class="ri-check-line"></i>Change impact</li>
                     </ul>
                 </div>
@@ -1092,9 +1146,23 @@
 
             // ---- Progress ring + checklist + inline validation ----
             var RING_LEN = 276.46;
+
             var riskInput = document.getElementById('securityRiskAssessment');
+            var securityRequirementsInput = document.getElementById('securityRequirements');
+            var securityRisksIdentifiedInput = document.getElementById('securityRisksIdentified');
+            var riskTreatmentControlsInput = document.getElementById('riskTreatmentControls');
+            var dependenciesImpactInput = document.getElementById('dependenciesImpact');
             var impactTiles = document.getElementById('impactTiles');
             var submitBtn = document.getElementById('submitBtn');
+
+            // Fields that share the simple "textarea -> word counter + required" pattern.
+            var wordCountedFields = [
+                { input: riskInput, counterId: 'csecWords', key: 'risk' },
+                { input: securityRequirementsInput, counterId: 'csecWordsRequirements', key: 'securityRequirements' },
+                { input: securityRisksIdentifiedInput, counterId: 'csecWordsRisksIdentified', key: 'securityRisksIdentified' },
+                { input: riskTreatmentControlsInput, counterId: 'csecWordsTreatment', key: 'riskTreatmentControls' },
+                { input: dependenciesImpactInput, counterId: 'csecWordsDependencies', key: 'dependenciesImpact' }
+            ];
 
             function showErr(key, isValid, $fieldEl) {
                 var errEl = document.getElementById('err-' + key);
@@ -1102,20 +1170,32 @@
                 if ($fieldEl) { $fieldEl.classList.toggle('is-invalid', !isValid); }
             }
 
+            function wordCount(value) {
+                var trimmed = (value || '').trim();
+                return trimmed ? trimmed.split(/\s+/).length : 0;
+            }
+
             function refreshProgress() {
-                var risk = (riskInput.value || '').trim();
+                var state = {};
+
+                wordCountedFields.forEach(function (field) {
+                    var value = field.input ? field.input.value : '';
+                    var words = wordCount(value);
+                    var counterEl = document.getElementById(field.counterId);
+                    if (counterEl) {
+                        counterEl.textContent = words + (words === 1 ? ' word' : ' words');
+                    }
+
+                    var ok = words > 0;
+                    state[field.key] = ok;
+                    showErr(field.key, ok, field.input);
+                });
+
                 var impact = document.querySelector('input[name="ImpactID"]:checked');
-
-                var words = risk ? risk.split(/\s+/).length : 0;
-                document.getElementById('csecWords').textContent = words + (words === 1 ? ' word' : ' words');
-
-                var riskOk = risk.length > 0;
                 var impactOk = !!impact;
-
-                var state = {
-                    risk: riskOk,
-                    impact: impactOk
-                };
+                state.impact = impactOk;
+                showErr('impact', impactOk, null);
+                if (impactTiles) { impactTiles.classList.toggle('is-invalid', !impactOk); }
 
                 var done = 0, total = 0;
                 document.querySelectorAll('#csecChecklist li').forEach(function (li) {
@@ -1134,12 +1214,7 @@
                     done === total ? 'Ready to submit' :
                     done === 0 ? "Let's get started" : 'Almost there';
 
-                // ----- Inline field validation -----
-                showErr('risk', riskOk, riskInput);
-                showErr('impact', impactOk, null);
-                if (impactTiles) { impactTiles.classList.toggle('is-invalid', !impactOk); }
-
-                var allValid = riskOk && impactOk;
+                var allValid = Object.keys(state).every(function (key) { return state[key]; });
                 submitBtn.disabled = !allValid;
                 submitBtn.classList.toggle('disabled', !allValid);
             }
