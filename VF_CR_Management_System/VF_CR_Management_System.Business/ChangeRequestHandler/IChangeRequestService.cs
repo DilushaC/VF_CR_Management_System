@@ -26,6 +26,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<bool> DeleteChangeRequestAsync(int crId, string requestedByEmpId);
         Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empNo);
         Task<bool> CreateAssessmentSecurityAsync(int crId, IFormCollection collection, string userName, string empId);
+        Task<bool> RejectAssessmentSecurityAsync(int crId, IFormCollection collection, string userName, string empId);
         Task<bool> CreateTestingAsync(int crId, IFormCollection collection, string userName, string empId);
         Task<IEnumerable<ChangeRequest>> GetChangeImpactsAsync();
         Task<IEnumerable<Attachment>> GetAttachmentsByCrIdAsync(int crId);

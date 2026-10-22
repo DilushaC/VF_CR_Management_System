@@ -1,0 +1,858 @@
+﻿@using VF_CR_Management_System.Data.Models
+@model IEnumerable<VF_CR_Management_System.Data.Models.ChangeImpact>
+@{
+    ViewData["Title"] = "Change Impact Management";
+
+    var impacts = Model == null ? new List<ChangeImpact>() : Model.ToList();
+    var totalCount = impacts.Count;
+    var activeCount = impacts.Count(i => i.Active);
+    var inactiveCount = totalCount - activeCount;
+}
+
+@Html.AntiForgeryToken()
+
+<style>
+    .ci-page {
+        --ci-ink: #17213b;
+        --ci-accent: #3b5bdb;
+        --ci-ok: #1f9d6b;
+        --ci-warn: #d99100;
+        --ci-bad: #d6384a;
+        --ci-line: var(--bs-border-color, #e3e6ec);
+        --ci-muted: var(--bs-secondary-color, #6b7385);
+        --ci-surface: var(--bs-tertiary-bg, #f5f7fb);
+        --ci-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+        --ci-hover: var(--bs-tertiary-bg, #f1f4fb);
+    }
+
+        .ci-page .tone-ok {
+            --t: #1f9d6b;
+            --t-bg: rgba(31,157,107,.14);
+        }
+
+        .ci-page .tone-bad {
+            --t: #d6384a;
+            --t-bg: rgba(255,93,108,.16);
+        }
+
+        .ci-page .tone-info {
+            --t: #4a63d6;
+            --t-bg: rgba(59,91,219,.13);
+        }
+
+    [data-bs-theme="dark"] .ci-page .tone-ok {
+        --t: #3ddc97;
+    }
+
+    [data-bs-theme="dark"] .ci-page .tone-bad {
+        --t: #ff7b88;
+    }
+
+    [data-bs-theme="dark"] .ci-page .tone-info {
+        --t: #9db0ff;
+    }
+
+    /* ===== Page header ===== */
+    .ci-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: .75rem;
+        margin-bottom: 1.1rem;
+    }
+
+    .ci-head-title {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+    }
+
+    .ci-head-sub {
+        margin: .15rem 0 0;
+        font-size: .88rem;
+        color: var(--ci-muted);
+    }
+
+    .ci-add-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        padding: .6rem 1.1rem;
+        border-radius: .6rem;
+        background: var(--ci-accent);
+        color: #fff;
+        font-weight: 700;
+        font-size: .9rem;
+        border: none;
+        text-decoration: none;
+        transition: transform .12s ease, box-shadow .12s ease;
+        box-shadow: 0 6px 16px -7px rgba(59,91,219,.6);
+    }
+
+        .ci-add-btn:hover {
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px -8px rgba(59,91,219,.55);
+        }
+
+    /* ===== Summary cards ===== */
+    .ci-kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: .75rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .ci-kpi {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        padding: .9rem 1rem;
+        border: 1px solid var(--ci-line);
+        border-radius: .85rem;
+        background: var(--ci-card);
+    }
+
+    .ci-kpi-ico {
+        flex: 0 0 auto;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: .7rem;
+        font-size: 1.35rem;
+        color: var(--t);
+        background: var(--t-bg);
+    }
+
+    .ci-kpi-num {
+        display: block;
+        font-size: 1.7rem;
+        font-weight: 700;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ci-kpi-label {
+        display: block;
+        font-size: .82rem;
+        color: var(--ci-muted);
+    }
+
+    /* ===== Table shell ===== */
+    .ci-table-wrap {
+        border: 1px solid var(--ci-line);
+        border-radius: .85rem;
+        background: var(--ci-card);
+        overflow: hidden;
+    }
+
+    .ci-dt-top, .ci-dt-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: .75rem;
+        padding: .85rem 1rem;
+    }
+
+    .ci-dt-bottom {
+        border-top: 1px solid var(--ci-line);
+    }
+
+    .ci-dt-top .dataTables_filter label {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        color: var(--ci-muted);
+        font-size: .88rem;
+    }
+
+    .ci-dt-top .dataTables_filter input {
+        width: 320px;
+        max-width: 100%;
+        margin: 0;
+        padding: .5rem .8rem .5rem 2.2rem;
+        border-radius: 999px;
+        border: 1px solid var(--ci-line);
+        background-color: var(--ci-surface);
+        background-repeat: no-repeat;
+        background-position: .75rem center;
+        background-size: 16px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7385' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+    }
+
+        .ci-dt-top .dataTables_filter input:focus {
+            outline: 0;
+            border-color: var(--ci-accent);
+            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        }
+
+    .ci-dt-bottom .dataTables_info {
+        color: var(--ci-muted);
+        font-size: .85rem;
+        padding: 0;
+    }
+
+    .ci-dt-bottom .pagination {
+        margin: 0;
+        gap: .2rem;
+    }
+
+    .ci-dt-bottom .page-link {
+        border: 0;
+        border-radius: .5rem;
+        background: transparent;
+        color: inherit;
+    }
+
+    .ci-dt-bottom .page-item.active .page-link {
+        background: var(--ci-accent);
+        color: #fff;
+    }
+
+    .ci-dt-bottom .page-item.disabled .page-link {
+        opacity: .4;
+    }
+
+    /* ===== Table ===== */
+    #ci-datatable {
+        --bs-table-bg: transparent;
+        margin: 0 !important;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+        #ci-datatable > thead > tr > th {
+            padding: .8rem 1rem;
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--ci-muted);
+            white-space: nowrap;
+            background: var(--ci-surface);
+            border-top: 1px solid var(--ci-line);
+            border-bottom: 1px solid var(--ci-line);
+        }
+
+        #ci-datatable > tbody > tr > td {
+            padding: .85rem 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--ci-line);
+            background: transparent;
+        }
+
+        #ci-datatable > tbody > tr:last-child > td {
+            border-bottom: 0;
+        }
+
+        #ci-datatable > tbody > tr:hover > td {
+            background: var(--ci-hover);
+        }
+
+        #ci-datatable > tbody > tr.ci-row-editing > td {
+            background: rgba(59,91,219,.06);
+        }
+
+    .ci-id-pill {
+        display: inline-block;
+        padding: .25rem .65rem;
+        border-radius: .5rem;
+        font-weight: 700;
+        font-size: .85rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--ci-accent);
+        background: rgba(59,91,219,.1);
+    }
+
+    .ci-name-text {
+        font-weight: 600;
+    }
+
+    .ci-name-input {
+        width: 100%;
+        max-width: 360px;
+        padding: .45rem .7rem;
+        border-radius: .5rem;
+        border: 1.5px solid var(--ci-accent);
+        background: var(--ci-card);
+        font-size: .9rem;
+        font-weight: 600;
+        outline: none;
+    }
+
+        .ci-name-input:focus {
+            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        }
+
+        .ci-name-input.is-invalid {
+            border-color: var(--ci-bad);
+        }
+
+    .ci-row-error {
+        display: none;
+        margin-top: .3rem;
+        font-size: .76rem;
+        font-weight: 600;
+        color: var(--ci-bad);
+    }
+
+        .ci-row-error.is-visible {
+            display: block;
+        }
+
+    /* Pill (read-only state) */
+    .ci-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .22rem .7rem;
+        border-radius: 999px;
+        font-size: .8rem;
+        font-weight: 600;
+        white-space: nowrap;
+        color: var(--t);
+        background: var(--t-bg);
+    }
+
+    .ci-pill-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    /* Toggle switch */
+    .ci-switch {
+        position: relative;
+        display: inline-block;
+        width: 42px;
+        height: 24px;
+        flex: 0 0 auto;
+    }
+
+        .ci-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+    .ci-switch-track {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background: var(--ci-line);
+        border-radius: 999px;
+        transition: background .15s ease;
+    }
+
+        .ci-switch-track::before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform .15s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,.25);
+        }
+
+    .ci-switch input:checked + .ci-switch-track {
+        background: var(--ci-ok);
+    }
+
+        .ci-switch input:checked + .ci-switch-track::before {
+            transform: translateX(18px);
+        }
+
+    .ci-switch input:disabled + .ci-switch-track {
+        opacity: .5;
+        cursor: not-allowed;
+    }
+
+    .ci-status-cell {
+        display: flex;
+        align-items: center;
+        gap: .7rem;
+    }
+
+    /* Actions */
+    .ci-actions {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    .ci-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: .5rem;
+        border: 1px solid var(--ci-line);
+        background: transparent;
+        color: var(--ci-muted);
+        transition: background .12s, border-color .12s, color .12s;
+    }
+
+        .ci-icon-btn:hover {
+            background: var(--ci-hover);
+        }
+
+        .ci-icon-btn.ci-edit:hover {
+            border-color: var(--ci-accent);
+            color: var(--ci-accent);
+        }
+
+        .ci-icon-btn.ci-save {
+            border-color: var(--ci-ok);
+            color: var(--ci-ok);
+        }
+
+            .ci-icon-btn.ci-save:hover {
+                background: var(--ci-ok);
+                color: #fff;
+            }
+
+        .ci-icon-btn.ci-cancel:hover {
+            border-color: var(--ci-muted);
+            color: var(--ci-ink);
+        }
+
+        .ci-icon-btn.ci-delete:hover {
+            border-color: var(--ci-bad);
+            color: var(--ci-bad);
+        }
+
+        .ci-icon-btn:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+
+    /* New row (Add) */
+    #ci-new-row > td {
+        background: rgba(31,157,107,.06);
+    }
+
+    .ci-empty-row td {
+        text-align: center;
+        padding: 2.5rem 1rem;
+        color: var(--ci-muted);
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .ci-switch-track, .ci-switch-track::before, .ci-icon-btn, .ci-add-btn {
+            transition: none;
+        }
+    }
+</style>
+
+<div class="row ci-page">
+    <div class="col-12">
+
+        <div class="ci-head">
+            <div>
+                <h4 class="ci-head-title">Change Impact</h4>
+                <p class="ci-head-sub">Master list of impact levels used across Change Requests.</p>
+            </div>
+            <button type="button" class="ci-add-btn" id="ci-add-btn">
+                <i class="ri-add-line"></i> Add impact
+            </button>
+        </div>
+
+        <div class="ci-kpis">
+            <div class="ci-kpi tone-info">
+                <span class="ci-kpi-ico"><i class="ri-stack-line"></i></span>
+                <span><span class="ci-kpi-num" id="ci-kpi-total">@totalCount</span><span class="ci-kpi-label">Total impacts</span></span>
+            </div>
+            <div class="ci-kpi tone-ok">
+                <span class="ci-kpi-ico"><i class="ri-checkbox-circle-line"></i></span>
+                <span><span class="ci-kpi-num" id="ci-kpi-active">@activeCount</span><span class="ci-kpi-label">Active</span></span>
+            </div>
+            <div class="ci-kpi tone-bad">
+                <span class="ci-kpi-ico"><i class="ri-close-circle-line"></i></span>
+                <span><span class="ci-kpi-num" id="ci-kpi-inactive">@inactiveCount</span><span class="ci-kpi-label">Inactive</span></span>
+            </div>
+        </div>
+
+        <div class="ci-table-wrap">
+            <div class="table-responsive">
+                <table id="ci-datatable" class="table nowrap w-100">
+                    <thead>
+                        <tr>
+                            <th style="width:110px;">ID</th>
+                            <th>Impact name</th>
+                            <th style="width:160px;">Status</th>
+                            <th style="width:120px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!impacts.Any())
+                        {
+                            <tr class="ci-empty-row">
+                                <td colspan="4"><i class="ri-inbox-line me-1"></i>No impact levels yet. Click "Add impact" to create one.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var impact in impacts)
+                            {
+                                <tr class="ci-row" data-id="@impact.ImpactID">
+                                    <td><span class="ci-id-pill">#@impact.ImpactID</span></td>
+                                    <td>
+                                        <span class="ci-name-text ci-name-display">@impact.ImpactName</span>
+                                        <input type="text" class="ci-name-input d-none" value="@impact.ImpactName" maxlength="200" />
+                                        <div class="ci-row-error"></div>
+                                    </td>
+                                    <td>
+                                        <div class="ci-status-cell">
+                                            <label class="ci-switch">
+                                                <input type="checkbox" class="ci-active-toggle" @(impact.Active ? "checked" : "") />
+                                                <span class="ci-switch-track"></span>
+                                            </label>
+                                            <span class="ci-pill tone-@(impact.Active ? "ok" : "bad") ci-status-pill">
+                                                <span class="ci-pill-dot"></span>@(impact.Active ? "Active" : "Inactive")
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="ci-actions">
+                                            <button type="button" class="ci-icon-btn ci-edit" title="Edit"><i class="ri-pencil-line"></i></button>
+                                            <button type="button" class="ci-icon-btn ci-save d-none" title="Save"><i class="ri-check-line"></i></button>
+                                            <button type="button" class="ci-icon-btn ci-cancel d-none" title="Cancel"><i class="ri-close-line"></i></button>
+                                            <button type="button" class="ci-icon-btn ci-delete" title="Delete"><i class="ri-delete-bin-line"></i></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(document).ready(function () {
+
+            var table = $('#ci-datatable').DataTable({
+                responsive: false,
+                autoWidth: false,
+                paging: true,
+                pageLength: 10,
+                lengthChange: false,
+                order: [[0, 'asc']],
+                columnDefs: [
+                    { orderable: false, targets: [2, 3] }
+                ],
+                dom: "<'ci-dt-top'f>rt<'ci-dt-bottom'ip>",
+                language: {
+                    search: '',
+                    searchPlaceholder: 'Search impact name...',
+                    zeroRecords: 'No impact levels match your search.',
+                    emptyTable: 'No impact levels yet.',
+                    info: 'Showing _START_ to _END_ of _TOTAL_',
+                    infoEmpty: 'No impact levels',
+                    infoFiltered: '(filtered from _MAX_)'
+                }
+            });
+
+            var token = function () {
+                var t = $('input[name="__RequestVerificationToken"]').val();
+                return t ? { "RequestVerificationToken": t } : {};
+            };
+
+            function refreshKpis() {
+                var total = 0, active = 0;
+                $('#ci-datatable tbody tr.ci-row').each(function () {
+                    total++;
+                    if ($(this).find('.ci-active-toggle').is(':checked')) { active++; }
+                });
+                $('#ci-kpi-total').text(total);
+                $('#ci-kpi-active').text(active);
+                $('#ci-kpi-inactive').text(total - active);
+            }
+
+            function showRowError($row, msg) {
+                var $err = $row.find('.ci-row-error');
+                $err.text(msg).addClass('is-visible');
+                $row.find('.ci-name-input').addClass('is-invalid');
+            }
+
+            function clearRowError($row) {
+                $row.find('.ci-row-error').removeClass('is-visible').text('');
+                $row.find('.ci-name-input').removeClass('is-invalid');
+            }
+
+            function enterEditMode($row) {
+                $row.addClass('ci-row-editing');
+                $row.find('.ci-name-display').addClass('d-none');
+                $row.find('.ci-name-input').removeClass('d-none').focus().select();
+                $row.find('.ci-edit').addClass('d-none');
+                $row.find('.ci-delete').addClass('d-none');
+                $row.find('.ci-save, .ci-cancel').removeClass('d-none');
+            }
+
+            function exitEditMode($row) {
+                $row.removeClass('ci-row-editing');
+                $row.find('.ci-name-display').removeClass('d-none');
+                $row.find('.ci-name-input').addClass('d-none');
+                $row.find('.ci-save, .ci-cancel').addClass('d-none');
+                $row.find('.ci-edit, .ci-delete').removeClass('d-none');
+                clearRowError($row);
+            }
+
+            // ===== Edit =====
+            $('#ci-datatable').on('click', '.ci-edit', function () {
+                var $row = $(this).closest('tr');
+                $row.data('original-name', $row.find('.ci-name-display').text().trim());
+                enterEditMode($row);
+            });
+
+            // ===== Cancel =====
+            $('#ci-datatable').on('click', '.ci-cancel', function () {
+                var $row = $(this).closest('tr');
+
+                // Brand-new unsaved row: remove it entirely
+                if ($row.attr('id') === 'ci-new-row') {
+                    $row.remove();
+                    return;
+                }
+
+                var original = $row.data('original-name') || $row.find('.ci-name-display').text().trim();
+                $row.find('.ci-name-input').val(original);
+                exitEditMode($row);
+            });
+
+            // Enter saves, Escape cancels, while editing the name field
+            $('#ci-datatable').on('keydown', '.ci-name-input', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    $(this).closest('tr').find('.ci-save').trigger('click');
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    $(this).closest('tr').find('.ci-cancel').trigger('click');
+                }
+            });
+
+            // ===== Save (Add or Update) =====
+            $('#ci-datatable').on('click', '.ci-save', function () {
+                var $btn = $(this);
+                var $row = $btn.closest('tr');
+                var $input = $row.find('.ci-name-input');
+                var name = $input.val().trim();
+                var isNew = $row.attr('id') === 'ci-new-row';
+                var id = $row.data('id');
+
+                clearRowError($row);
+
+                if (name.length === 0) {
+                    showRowError($row, 'Impact name is required.');
+                    return;
+                }
+                if (name.length > 200) {
+                    showRowError($row, 'Maximum 200 characters.');
+                    return;
+                }
+
+                // Duplicate name check against the other visible rows
+                var duplicate = false;
+                $('#ci-datatable tbody tr.ci-row, #ci-datatable tbody tr#ci-new-row').not($row).each(function () {
+                    var otherName = ($(this).find('.ci-name-display').text() || $(this).find('.ci-name-input').val() || '').trim();
+                    if (otherName.toLowerCase() === name.toLowerCase()) { duplicate = true; }
+                });
+                if (duplicate) {
+                    showRowError($row, 'This impact name already exists.');
+                    return;
+                }
+
+                $btn.prop('disabled', true);
+                $row.find('.ci-cancel').prop('disabled', true);
+
+                var isActive = $row.find('.ci-active-toggle').is(':checked');
+
+                var url = isNew ? '@Url.Action("CreateChangeImpact", "ChangeImpact")'
+                                : '@Url.Action("UpdateChangeImpact", "ChangeImpact")';
+                var payload = isNew
+                    ? { impactName: name, active: isActive }
+                    : { impactId: id, impactName: name, active: isActive };
+
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    data: payload,
+                    headers: token(),
+                    success: function (res) {
+                        if (!res || res.success === false) {
+                            showRowError($row, (res && res.message) || 'Failed to save. Please try again.');
+                            $btn.prop('disabled', false);
+                            $row.find('.ci-cancel').prop('disabled', false);
+                            return;
+                        }
+
+                        if (isNew) {
+                            var newId = res.id || (res.data && res.data.impactId);
+                            $row.removeAttr('id').addClass('ci-row').attr('data-id', newId);
+                            $row.find('td:first').html('<span class="ci-id-pill">#' + newId + '</span>');
+                        }
+
+                        $row.find('.ci-name-display').text(name);
+                        exitEditMode($row);
+                        refreshKpis();
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: isNew ? 'Impact added' : 'Impact updated',
+                            showConfirmButton: false,
+                            timer: 1200
+                        });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to save. Please try again.';
+                        showRowError($row, msg);
+                    },
+                    complete: function () {
+                        $btn.prop('disabled', false);
+                        $row.find('.ci-cancel').prop('disabled', false);
+                    }
+                });
+            });
+
+            // ===== Active / Inactive toggle (instant save) =====
+            $('#ci-datatable').on('change', '.ci-active-toggle', function () {
+                var $toggle = $(this);
+                var $row = $toggle.closest('tr');
+
+                // Ignore toggles on a brand-new row that hasn't been saved yet
+                if ($row.attr('id') === 'ci-new-row') { return; }
+
+                var id = $row.data('id');
+                var isActive = $toggle.is(':checked');
+                var $pill = $row.find('.ci-status-pill');
+
+                $toggle.prop('disabled', true);
+
+                $.ajax({
+                    url: '@Url.Action("ToggleChangeImpactStatus", "ChangeImpact")',
+                    type: 'POST',
+                    data: { impactId: id, active: isActive },
+                    headers: token(),
+                    success: function (res) {
+                        if (!res || res.success === false) {
+                            $toggle.prop('checked', !isActive); // revert
+                            Swal.fire('Error', (res && res.message) || 'Failed to update status.', 'error');
+                            return;
+                        }
+                        $pill.attr('class', 'ci-pill tone-' + (isActive ? 'ok' : 'bad') + ' ci-status-pill')
+                             .html('<span class="ci-pill-dot"></span>' + (isActive ? 'Active' : 'Inactive'));
+                        refreshKpis();
+                    },
+                    error: function () {
+                        $toggle.prop('checked', !isActive); // revert
+                        Swal.fire('Error', 'Failed to update status. Please try again.', 'error');
+                    },
+                    complete: function () {
+                        $toggle.prop('disabled', false);
+                    }
+                });
+            });
+
+            // ===== Delete =====
+            $('#ci-datatable').on('click', '.ci-delete', function () {
+                var $row = $(this).closest('tr');
+                var id = $row.data('id');
+                var name = $row.find('.ci-name-display').text().trim();
+
+                Swal.fire({
+                    title: 'Delete this impact level?',
+                    html: 'This will permanently remove <strong>' + $('<div>').text(name).html() + '</strong>. This cannot be undone.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, delete it',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#d6384a',
+                    cancelButtonColor: '#6c757d'
+                }).then(function (result) {
+                    if (!result.isConfirmed) return;
+
+                    $.ajax({
+                        url: '@Url.Action("DeleteChangeImpact", "ChangeImpact")',
+                        type: 'POST',
+                        data: { impactId: id },
+                        headers: token(),
+                        success: function (res) {
+                            if (!res || res.success === false) {
+                                Swal.fire('Error', (res && res.message) || 'Failed to delete. It may be in use by existing Change Requests.', 'error');
+                                return;
+                            }
+                            table.row($row).remove().draw(false);
+                            $row.remove();
+                            refreshKpis();
+
+                            if ($('#ci-datatable tbody tr.ci-row').length === 0) {
+                                $('#ci-datatable tbody').html(
+                                    '<tr class="ci-empty-row"><td colspan="4"><i class="ri-inbox-line me-1"></i>No impact levels yet. Click "Add impact" to create one.</td></tr>'
+                                );
+                            }
+
+                            Swal.fire({ icon: 'success', title: 'Deleted', showConfirmButton: false, timer: 1200 });
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete. It may be in use by existing Change Requests.';
+                            Swal.fire('Error', msg, 'error');
+                        }
+                    });
+                });
+            });
+
+            // ===== Add new row =====
+            $('#ci-add-btn').on('click', function () {
+                if ($('#ci-new-row').length) {
+                    $('#ci-new-row .ci-name-input').focus();
+                    return;
+                }
+
+                $('.ci-empty-row').remove();
+
+                var rowHtml =
+                    '<tr id="ci-new-row">' +
+                        '<td><span class="ci-id-pill">New</span></td>' +
+                        '<td>' +
+                            '<span class="ci-name-text ci-name-display d-none"></span>' +
+                            '<input type="text" class="ci-name-input" placeholder="Enter impact name" maxlength="200" />' +
+                            '<div class="ci-row-error"></div>' +
+                        '</td>' +
+                        '<td>' +
+                            '<div class="ci-status-cell">' +
+                                '<label class="ci-switch">' +
+                                    '<input type="checkbox" class="ci-active-toggle" checked />' +
+                                    '<span class="ci-switch-track"></span>' +
+                                '</label>' +
+                                '<span class="ci-pill tone-ok ci-status-pill"><span class="ci-pill-dot"></span>Active</span>' +
+                            '</div>' +
+                        '</td>' +
+                        '<td>' +
+                            '<div class="ci-actions">' +
+                                '<button type="button" class="ci-icon-btn ci-save" title="Save"><i class="ri-check-line"></i></button>' +
+                                '<button type="button" class="ci-icon-btn ci-cancel" title="Cancel"><i class="ri-close-line"></i></button>' +
+                            '</div>' +
+                        '</td>' +
+                    '</tr>';
+
+                // Prepend so the new row is immediately visible regardless of sort/page
+                $('#ci-datatable tbody').prepend(rowHtml);
+                $('#ci-new-row .ci-name-input').focus();
+            });
+
+            refreshKpis();
+        });
+    </script>
+}

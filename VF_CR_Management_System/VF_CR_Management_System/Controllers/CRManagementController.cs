@@ -516,6 +516,61 @@ namespace VF_CR_Management_System.Controllers
             }
         }
 
+        [HttpPost]
+        public async Task<IActionResult> RejectSecurityAssessment(IFormCollection collection)
+        {
+            var userName = HttpContext.Session.GetString("UserName");
+            var empNo = HttpContext.Session.GetString("EmpNo");
+
+            try
+            {
+                if (!int.TryParse(collection["id"], out int id))
+                {
+                    _logger.LogWarning("Action: RejectSecurityAssessment (invalid ID) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Invalid or missing ID in form payload."
+                    });
+                }
+
+                bool rejected = await _changeRequestService.RejectAssessmentSecurityAsync(id, collection, userName, empNo);
+                if (rejected)
+                {
+                    _logger.LogInformation("Action: RejectSecurityAssessment | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+                    return Json(new
+                    {
+                        success = true,
+                        message = "Security assessment rejected and returned to the developer.",
+                        redirectUrl = Url.Action("AssignedToMeTable", "CRManagement")
+                    });
+                }
+                else
+                {
+                    _logger.LogWarning("Action: RejectSecurityAssessment (failed) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Failed to reject Change Request"
+                    });
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Action: RejectSecurityAssessment (validation error) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
+                return Json(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Action: RejectSecurityAssessment (error) | User: {EmpNo} | Time: {Timestamp}", empNo, DateTime.Now);
+                return Json(new
+                {
+                    success = false,
+                    message = $"Error: {ex.Message}"
+                });
+            }
+        }
+
         [HttpGet]
         public IActionResult ReleaseDeployment()
         {

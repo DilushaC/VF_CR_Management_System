@@ -1064,6 +1064,11 @@
             </button>
             <div class="d-flex gap-2">
                 <button type="button"
+                        id="btn-reject"
+                        class="btn btn-outline-danger">
+                    <i class="ri-close-circle-line me-1"></i>Reject
+                </button>
+                <button type="button"
                         id="btn-save"
                         class="btn btn-danger"
                         data-status="1">
@@ -1344,6 +1349,115 @@
             saveBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 handleSecuritySubmission(saveBtn, false);
+            });
+
+                    // ---- Reject security assessment ----
+            var rejectBtn = document.getElementById('btn-reject');
+
+            rejectBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+
+                var crId = document.getElementById('crIdField').value;
+                if (!crId) {
+                    Swal.fire({
+                        title: 'Could not reject',
+                        text: 'Missing Change Request ID.',
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                        buttonsStyling: false
+                    });
+                    return;
+                }
+
+                Swal.fire({
+                    title: 'Reject this assessment?',
+                    html: `
+                        <p style="text-align:left;color:#6b7385;font-size:.9rem;margin-bottom:.75rem;">
+                            This Change Request will be returned to the developer and must be revised before it can come back to Security.
+                        </p>
+                        <textarea id="rejectReasonInput" class="form-control" rows="4"
+                                  placeholder="Explain why this assessment is being rejected..."
+                                  style="resize:vertical;"></textarea>
+                        <div id="rejectReasonError" style="display:none;color:#d6384a;font-size:.8rem;margin-top:.4rem;text-align:left;">
+                            Please provide a reason for rejecting this assessment.
+                        </div>
+                    `,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, reject it',
+                    cancelButtonText: 'Cancel',
+                    customClass: { confirmButton: 'btn btn-danger me-2', cancelButton: 'btn btn-outline-secondary' },
+                    buttonsStyling: false,
+                    focusConfirm: false,
+                    preConfirm: () => {
+                        var reason = document.getElementById('rejectReasonInput').value.trim();
+                        if (!reason) {
+                            document.getElementById('rejectReasonError').style.display = 'block';
+                            return false;
+                        }
+                        return reason;
+                    }
+                }).then(function (result) {
+                    if (!result.isConfirmed) return;
+
+                    var formData = new FormData();
+                    formData.append('id', crId);
+                    formData.append('RejectReason', result.value);
+
+                    rejectBtn.disabled = true;
+                    var originalText = rejectBtn.innerHTML;
+                    rejectBtn.textContent = 'Processing...';
+
+                    $.ajax({
+                        url: '@Url.Action("RejectSecurityAssessment", "CRManagement")',
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        headers: {
+                            "RequestVerificationToken": $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        success: function (data) {
+                            if (!data.success) {
+                                Swal.fire({
+                                    title: 'Could not reject',
+                                    text: data.message || 'Failed to reject the assessment.',
+                                    icon: 'error',
+                                    customClass: { confirmButton: 'btn btn-primary' },
+                                    buttonsStyling: false
+                                });
+                                return;
+                            }
+
+                            Swal.fire({
+                                title: 'Rejected',
+                                text: data.message || 'Security assessment rejected successfully.',
+                                icon: 'success',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            }).then(function () {
+                                if (data.redirectUrl) {
+                                    window.location.href = data.redirectUrl;
+                                }
+                            });
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
+                                      'Failed to reject the assessment. Please try again.';
+                            Swal.fire({
+                                title: 'Error',
+                                text: msg,
+                                icon: 'error',
+                                customClass: { confirmButton: 'btn btn-primary' },
+                                buttonsStyling: false
+                            });
+                        },
+                        complete: function () {
+                            rejectBtn.disabled = false;
+                            rejectBtn.innerHTML = originalText;
+                        }
+                    });
+                });
             });
         });
     </script>
