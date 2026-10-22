@@ -1382,13 +1382,16 @@
                     done === 0 ? "Let's get started" : 'Almost there';
 
                 // ----- Inline field validation -----
-                // Test plan & results is required for both Test Passed and Test Failed.
+                // Test plan & results is REQUIRED before either "Test Passed" or "Test Failed" can be clicked.
                 showErr('plan', planOk, testPlanInput);
 
                 submitBtn.disabled = !planOk;
                 submitBtn.classList.toggle('disabled', !planOk);
+                submitBtn.title = planOk ? '' : 'Fill in the test plan & results before submitting';
+
                 failBtn.disabled = !planOk;
                 failBtn.classList.toggle('disabled', !planOk);
+                failBtn.title = planOk ? '' : 'Fill in the test plan & results before submitting';
             }
 
             document.getElementById('testingForm').addEventListener('input', refreshProgress);
@@ -1534,6 +1537,7 @@
 
                 // Safety net: both buttons are disabled while the test plan is empty,
                 // but re-check here too in case they were re-enabled programmatically.
+                var planValue = (testPlanInput.value || '').trim();
                 refreshProgress();
                 if (cfg.requireTestPlan && btnElement.disabled) {
                     return;

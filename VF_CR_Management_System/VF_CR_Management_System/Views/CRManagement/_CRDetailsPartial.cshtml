@@ -2796,6 +2796,9 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
             var crId = $(this).data('id');
 
+            // Stricter URL check: scheme + host with at least one dot (or localhost) + optional port/path
+            var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d+)?(\/[^\s]*)?$/i;
+
             Swal.fire({
                 title: false,
                 html: `
@@ -2806,10 +2809,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         <h3 class="uat-swal-title">Proceed to Development</h3>
                         <p class="uat-swal-sub">Paste the UAT environment link so reviewers can access the build.</p>
 
-                        <div class="uat-swal-field">
+                        <div class="uat-swal-field" id="uat-link-field">
                             <i class="ri-link-m uat-swal-field-ico"></i>
                             <input id="uat-link-input" type="url" class="uat-swal-input"
                                    placeholder="https://uat.example.com/..." autocomplete="off" spellcheck="false">
+                            <i class="ri-checkbox-circle-fill uat-swal-field-valid-ico" id="uat-link-valid-ico" style="display:none;"></i>
                         </div>
                         <div id="uat-link-error" class="uat-swal-error" style="display:none;">
                             <i class="ri-error-warning-line"></i><span></span>
@@ -2824,7 +2828,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 focusConfirm: false,
                 customClass: {
                     popup: 'uat-swal-popup',
-                    confirmButton: 'uat-swal-confirm',
+                    confirmButton: 'uat-swal-confirm uat-swal-confirm-disabled',
                     cancelButton: 'uat-swal-cancel',
                     actions: 'uat-swal-actions'
                 },
@@ -2852,7 +2856,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
                             .uat-swal-field:focus-within {
                                 border-color: #3b5bdb; box-shadow: 0 0 0 4px rgba(59,91,219,.12); background: #fff;
                             }
+                            .uat-swal-field.is-invalid { border-color: #d6384a; }
+                            .uat-swal-field.is-invalid:focus-within { box-shadow: 0 0 0 4px rgba(214,56,74,.12); }
+                            .uat-swal-field.is-valid { border-color: #2f9e5c; }
                             .uat-swal-field-ico { padding: 0 .3rem 0 .85rem; color: #8891a5; font-size: 1.1rem; }
+                            .uat-swal-field-valid-ico { padding: 0 .85rem 0 .3rem; color: #2f9e5c; font-size: 1.1rem; }
                             .uat-swal-input {
                                 flex: 1; border: 0; background: transparent; outline: none;
                                 padding: .75rem .9rem .75rem .4rem; font-size: .92rem; color: #1c2030;
@@ -2866,13 +2874,16 @@ void FileGroup(string title, string icon, List<Attachment> items)
                             .uat-swal-confirm, .uat-swal-cancel {
                                 padding: .6rem 1.3rem; border-radius: .6rem; font-weight: 600; font-size: .88rem;
                                 border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
-                                transition: transform .1s, box-shadow .15s;
+                                transition: transform .1s, box-shadow .15s, opacity .15s;
                             }
                             .uat-swal-confirm {
                                 color: #fff; background: linear-gradient(135deg, #3b5bdb, #2f49b8);
                                 box-shadow: 0 6px 16px -6px rgba(59,91,219,.6);
                             }
                             .uat-swal-confirm:hover { transform: translateY(-1px); }
+                            .uat-swal-confirm-disabled {
+                                opacity: .5; cursor: not-allowed; box-shadow: none; pointer-events: none;
+                            }
                             .uat-swal-cancel { background: #f1f2f6; color: #4a4f5e; }
                             .uat-swal-cancel:hover { background: #e7e9ef; }
                         `;
@@ -2881,8 +2892,48 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
                     var $input = $('#uat-link-input');
                     var $err = $('#uat-link-error');
+                    var $field = $('#uat-link-field');
+                    var $validIco = $('#uat-link-valid-ico');
+                    var $confirmBtn = Swal.getConfirmButton();
+
+                    // Ensure button is disabled on open
+                    $confirmBtn.disabled = true;
+                    $confirmBtn.classList.add('uat-swal-confirm-disabled');
+
                     $input.trigger('focus');
-                    $input.on('input', function () { $err.hide(); });
+
+                    function validate() {
+                        var val = $input.val().trim();
+
+                        if (!val) {
+                            $err.hide();
+                            $field.removeClass('is-invalid is-valid');
+                            $validIco.hide();
+                            $confirmBtn.disabled = true;
+                            $confirmBtn.classList.add('uat-swal-confirm-disabled');
+                            return;
+                        }
+
+                        if (URL_REGEX.test(val)) {
+                            $err.hide();
+                            $field.removeClass('is-invalid').addClass('is-valid');
+                            $validIco.show();
+                            $confirmBtn.disabled = false;
+                            $confirmBtn.classList.remove('uat-swal-confirm-disabled');
+                        } else {
+                            $err.find('span').text('Enter a valid link, e.g. https://uat.example.com');
+                            $err.show();
+                            $field.removeClass('is-valid').addClass('is-invalid');
+                            $validIco.hide();
+                            $confirmBtn.disabled = true;
+                            $confirmBtn.classList.add('uat-swal-confirm-disabled');
+                        }
+                    }
+
+                    $input.on('input paste keyup', function () {
+                        // paste event fires before value is updated in some browsers, so defer
+                        setTimeout(validate, 0);
+                    });
                 },
                 preConfirm: () => {
                     var val = ($('#uat-link-input').val() || '').trim();
@@ -2893,8 +2944,8 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         $err.show();
                         return false;
                     }
-                    if (!/^https?:\/\/\S+$/i.test(val)) {
-                        $err.find('span').text('Enter a valid link starting with http:// or https://');
+                    if (!URL_REGEX.test(val)) {
+                        $err.find('span').text('Enter a valid link, e.g. https://uat.example.com');
                         $err.show();
                         return false;
                     }
@@ -2932,6 +2983,9 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
             var crId = $(this).data('id');
 
+            // Stricter URL check: scheme + host with at least one dot (or localhost) + optional port/path
+            var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d+)?(\/[^\s]*)?$/i;
+
             Swal.fire({
                 title: false,
                 html: `
@@ -2942,10 +2996,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         <h3 class="uat-swal-title">Add Live Link</h3>
                         <p class="uat-swal-sub">Paste the production link now that this change has gone live.</p>
 
-                        <div class="uat-swal-field">
+                        <div class="uat-swal-field" id="live-link-field">
                             <i class="ri-link-m uat-swal-field-ico"></i>
                             <input id="live-link-input" type="url" class="uat-swal-input"
                                    placeholder="https://live.example.com/..." autocomplete="off" spellcheck="false">
+                            <i class="ri-checkbox-circle-fill uat-swal-field-valid-ico" id="live-link-valid-ico" style="display:none;"></i>
                         </div>
                         <div id="live-link-error" class="uat-swal-error" style="display:none;">
                             <i class="ri-error-warning-line"></i><span></span>
@@ -2960,7 +3015,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 focusConfirm: false,
                 customClass: {
                     popup: 'uat-swal-popup',
-                    confirmButton: 'uat-swal-confirm uat-swal-confirm-live',
+                    confirmButton: 'uat-swal-confirm uat-swal-confirm-live uat-swal-confirm-disabled',
                     cancelButton: 'uat-swal-cancel',
                     actions: 'uat-swal-actions'
                 },
@@ -2992,7 +3047,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
                             .uat-swal-field:focus-within {
                                 border-color: #3b5bdb; box-shadow: 0 0 0 4px rgba(59,91,219,.12); background: #fff;
                             }
+                            .uat-swal-field.is-invalid { border-color: #d6384a; }
+                            .uat-swal-field.is-invalid:focus-within { box-shadow: 0 0 0 4px rgba(214,56,74,.12); }
+                            .uat-swal-field.is-valid { border-color: #2f9e5c; }
                             .uat-swal-field-ico { padding: 0 .3rem 0 .85rem; color: #8891a5; font-size: 1.1rem; }
+                            .uat-swal-field-valid-ico { padding: 0 .85rem 0 .3rem; color: #2f9e5c; font-size: 1.1rem; }
                             .uat-swal-input {
                                 flex: 1; border: 0; background: transparent; outline: none;
                                 padding: .75rem .9rem .75rem .4rem; font-size: .92rem; color: #1c2030;
@@ -3006,7 +3065,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                             .uat-swal-confirm, .uat-swal-cancel {
                                 padding: .6rem 1.3rem; border-radius: .6rem; font-weight: 600; font-size: .88rem;
                                 border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
-                                transition: transform .1s, box-shadow .15s;
+                                transition: transform .1s, box-shadow .15s, opacity .15s;
                             }
                             .uat-swal-confirm {
                                 color: #fff; background: linear-gradient(135deg, #3b5bdb, #2f49b8);
@@ -3017,6 +3076,9 @@ void FileGroup(string title, string icon, List<Attachment> items)
                                 box-shadow: 0 6px 16px -6px rgba(12,166,120,.6);
                             }
                             .uat-swal-confirm:hover { transform: translateY(-1px); }
+                            .uat-swal-confirm-disabled {
+                                opacity: .5; cursor: not-allowed; box-shadow: none; pointer-events: none;
+                            }
                             .uat-swal-cancel { background: #f1f2f6; color: #4a4f5e; }
                             .uat-swal-cancel:hover { background: #e7e9ef; }
                         `;
@@ -3025,8 +3087,47 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
                     var $input = $('#live-link-input');
                     var $err = $('#live-link-error');
+                    var $field = $('#live-link-field');
+                    var $validIco = $('#live-link-valid-ico');
+                    var $confirmBtn = Swal.getConfirmButton();
+
+                    // Ensure button is disabled on open
+                    $confirmBtn.disabled = true;
+                    $confirmBtn.classList.add('uat-swal-confirm-disabled');
+
                     $input.trigger('focus');
-                    $input.on('input', function () { $err.hide(); });
+
+                    function validate() {
+                        var val = $input.val().trim();
+
+                        if (!val) {
+                            $err.hide();
+                            $field.removeClass('is-invalid is-valid');
+                            $validIco.hide();
+                            $confirmBtn.disabled = true;
+                            $confirmBtn.classList.add('uat-swal-confirm-disabled');
+                            return;
+                        }
+
+                        if (URL_REGEX.test(val)) {
+                            $err.hide();
+                            $field.removeClass('is-invalid').addClass('is-valid');
+                            $validIco.show();
+                            $confirmBtn.disabled = false;
+                            $confirmBtn.classList.remove('uat-swal-confirm-disabled');
+                        } else {
+                            $err.find('span').text('Enter a valid link, e.g. https://live.example.com');
+                            $err.show();
+                            $field.removeClass('is-valid').addClass('is-invalid');
+                            $validIco.hide();
+                            $confirmBtn.disabled = true;
+                            $confirmBtn.classList.add('uat-swal-confirm-disabled');
+                        }
+                    }
+
+                    $input.on('input paste keyup', function () {
+                        setTimeout(validate, 0);
+                    });
                 },
                 preConfirm: () => {
                     var val = ($('#live-link-input').val() || '').trim();
@@ -3037,8 +3138,8 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         $err.show();
                         return false;
                     }
-                    if (!/^https?:\/\/\S+$/i.test(val)) {
-                        $err.find('span').text('Enter a valid link starting with http:// or https://');
+                    if (!URL_REGEX.test(val)) {
+                        $err.find('span').text('Enter a valid link, e.g. https://live.example.com');
                         $err.show();
                         return false;
                     }
