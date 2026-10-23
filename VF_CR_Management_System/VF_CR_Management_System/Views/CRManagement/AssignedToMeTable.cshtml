@@ -631,9 +631,10 @@
                             var segTone = (badge.Tone == "warn" || badge.Tone == "bad") ? badge.Tone : "info";
                             var prio = PriorityInfo(cr.Priority);
                             var isSecurityDraft = string.Equals(cr.Status, "SecurityDraft", StringComparison.OrdinalIgnoreCase);
+                            var isAssessmentDraft = string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase);
                             var isEmergency = prio.Rank == 4;
 
-                            <tr class="cr-row @(isSecurityDraft ? "" : "is-clickable") @(isEmergency ? "is-emergency" : "")" data-group="@group">
+                            <tr class="cr-row @((isSecurityDraft || isAssessmentDraft) ? "" : "is-clickable") @(isEmergency ? "is-emergency" : "")" data-group="@group">
                                 <td title="@cr.CRNumber"><span class="cr-num @(isDraft ? "is-waiting" : "")">@displayCrNumber</span></td>
                                 <td>
                                     <div class="cr-title" title="@cr.ChangeTitle">@cr.ChangeTitle</div>
@@ -677,6 +678,14 @@
                                     @if (isSecurityDraft)
                                     {
                                         <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = cr.CRID })"
+                                           class="cr-view-btn"
+                                           title="Edit">
+                                            <i class="ri-edit-line"></i>Edit
+                                        </a>
+                                    }
+                                    else if (isAssessmentDraft)
+                                    {
+                                        <a href="@Url.Action("Assessment", "CRManagement", new { id = cr.CRID })"
                                            class="cr-view-btn"
                                            title="Edit">
                                             <i class="ri-edit-line"></i>Edit

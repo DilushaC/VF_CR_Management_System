@@ -4,7 +4,6 @@
     var currentEmpNo = ViewBag.CurrentEmpNo as string ?? string.Empty;
     var imageExt = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
 
-    // ===== Attachments split by type =====
     var allAttachments = Model.Attachments ?? new List<Attachment>();
 
     var srsFiles = allAttachments
@@ -15,7 +14,6 @@
         .Where(a => string.Equals(a.AttachmentTypeName, "BA", StringComparison.OrdinalIgnoreCase))
         .ToList();
 
-    // QA / Testing attachments (add any other type names your QA upload uses)
     var qaTypeNames = new[] { "QA", "QA Report", "Testing" };
 
     var qaFiles = allAttachments
@@ -23,7 +21,6 @@
                     && qaTypeNames.Contains(a.AttachmentTypeName.Trim(), StringComparer.OrdinalIgnoreCase))
         .ToList();
 
-    // Vendor Report files (also catches older uploads that have no type recorded)
     var vendorFiles = allAttachments
         .Where(a => string.IsNullOrWhiteSpace(a.AttachmentTypeName)
                     || string.Equals(a.AttachmentTypeName, "Vendor Report", StringComparison.OrdinalIgnoreCase))
@@ -31,7 +28,6 @@
 
     var hasAnyAttachments = srsFiles.Any() || baFiles.Any() || qaFiles.Any() || vendorFiles.Any();
 
-    // Strips a DOMAIN\ prefix and whitespace so both sides compare cleanly.
     string Normalize(string? u)
     {
         u = (u ?? string.Empty).Trim();
@@ -39,7 +35,6 @@
         return slash >= 0 ? u.Substring(slash + 1) : u;
     }
 
-    // Identifiers that may identify the logged-in user in Approval.AssignedTo
     var currentIds = new[]
     {
         Normalize(ViewBag.CurrentEmpNo as string),
@@ -50,7 +45,6 @@
     .Distinct(StringComparer.OrdinalIgnoreCase)
     .ToList();
 
-    // "6407 - John Smith" -> "6407"
     string EmpNoOf(string? v)
     {
         var x = Normalize(v);
@@ -58,18 +52,6 @@
         return (i >= 0 ? x.Substring(0, i) : x).Trim();
     }
 
-    // SECURITY FIX: this used to compare EmpNoOf(v) against EmpNoOf(currentId) unconditionally.
-    // EmpNoOf falls back to returning the WHOLE normalized string when there is no " - " separator,
-    // so a bare username on one side (e.g. the logged-in user's raw AD name) could collide with an
-    // unrelated employee number or username on the other side and make the UI think the request was
-    // "assigned to you" (and expose the action buttons) when it was not.
-    //
-    // Fixed matching rules, safest first:
-    //   1. Exact match on the full normalized identifier (covers username == username, or
-    //      "empNo - name" == "empNo - name").
-    //   2. Only fall back to comparing employee numbers when BOTH sides are actually in the
-    //      "<empNo> - <name>" form, so a bare username can never be confused with someone else's
-    //      parsed employee number.
     bool IsCurrentUser(string? v)
     {
         var raw = Normalize(v);
@@ -97,64 +79,47 @@
 
     string StepKey(string? s) => (s ?? string.Empty).Replace(" ", string.Empty);
 
-    // BUG FIX: a step name (e.g. "Division Head Approval", "Testing") can have more than one
-    // Approval row when the CR goes through a step more than once (returned, reassigned,
-    // re-approved). Model.StepAssignments is ordered ASC by ApprovalID, so FirstOrDefault was
-    // grabbing the OLDEST, already-closed row instead of the current one - which made CanActOn
-    // see an already-decided row (IsPending == false) and hide the action buttons, or attribute
-    // the step to the wrong (previous) assignee. LastOrDefault picks the most recent row, i.e.
-    // the live cycle, which is what every canApprove/canGoXxx flag below actually needs.
-    WorkflowStepAssignment? StepByName(string stepName) =>
-        Model.StepAssignments?.LastOrDefault(s =>
-            string.Equals(StepKey(s.StepName), StepKey(stepName), StringComparison.OrdinalIgnoreCase));
+    var allSteps = Model.StepAssignments ?? new List<WorkflowStepAssignment>();
+
+    List<WorkflowStepAssignment> StepRows(string stepName) =>
+        allSteps
+            .Where(s => string.Equals(StepKey(s.StepName), StepKey(stepName), StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    WorkflowStepAssignment? LatestStep(string stepName) => StepRows(stepName).LastOrDefault();
+
+    WorkflowStepAssignment? PendingStep(string stepName) => StepRows(stepName).LastOrDefault(IsPending);
 
     bool CanActOn(WorkflowStepAssignment? step) =>
         step != null && IsPending(step) && IsCurrentUser(step.AssignedTo);
 
-    var deptHeadStep = StepByName("Division Head Approval");
-    var assessmentStep = StepByName("Assessment");
-    var securityStep = StepByName("Security");
-    var testingStep = StepByName("Testing");
-    var finalApprovalStep = StepByName("Final Approval");
-    var releaseClosureStep = StepByName("Release Closure");
-    var testerAssignmentStep = StepByName("TesterAssignment");
-    var testingApprovalStep = StepByName("TestingApproval");
+    var statusKey = StepKey(Model.Status);
 
-    // ===== Division Head Approval — second (or later) cycle =====
-    // A step name (e.g. Division Head Approval) can get a SECOND pending row later in the CR's
-    // life (e.g. handed back to the approver after the developer finished their documentation).
-    // deptHeadStep above already resolves to the LATEST row by name. This block figures out
-    // whether that latest row is a first-ever decision (-> Approve/Reject) or a reopened cycle
-    // (-> Accept/Return), so the two button sets are mutually exclusive.
-    var deptHeadRows = (Model.StepAssignments ?? new List<WorkflowStepAssignment>())
-        .Where(s => string.Equals(StepKey(s.StepName), StepKey("Division Head Approval"), StringComparison.OrdinalIgnoreCase))
-        .ToList();
+    bool StatusIs(params string[] names) =>
+        names.Any(n => string.Equals(statusKey, StepKey(n), StringComparison.OrdinalIgnoreCase));
 
-    var deptHeadHasPriorCycle = deptHeadRows.Count(r => r.IsApproved == true) > 0;
-    var pendingDeptHeadStep = deptHeadRows.LastOrDefault(r => IsPending(r));
+    // Real workflow steps (WorkflowStep table, WorkflowID 3):
+    // Division Head Approval, Security, Testing, Final Approval,
+    // Developer Documentation, Release Closure, Developer Implementation.
+    var deptHeadRows = StepRows("Division Head Approval");
+    var devDocRows = StepRows("Developer Documentation");
 
-    // ===== Developer Documentation step =====
-    // This step can have TWO (or more) rows for one CR, always matched by NAME (never by a hard-coded StepID):
-    //   1st row      -> AssignedTo = the DEVELOPER (approver assigned the work)
-    //   later row(s) -> the step goes back to the approver to Accept / Return after the developer submits
-    // NOTE: WorkflowStepAssignment has no ApprovalID property, so rows are used in the order they
-    // arrive in Model.StepAssignments. Make sure the controller/repository loads them ORDER BY ApprovalID ASC.
-    var devDocRows = (Model.StepAssignments ?? new List<WorkflowStepAssignment>())
-        .Where(s => string.Equals(StepKey(s.StepName), StepKey("Developer Documentation"), StringComparison.OrdinalIgnoreCase))
-        .ToList();
+    var securityStep = LatestStep("Security");
+    var testingStep = LatestStep("Testing");
+    var finalApprovalStep = LatestStep("Final Approval");
+    var releaseClosureStep = LatestStep("Release Closure");
+    var developerImplementationStep = LatestStep("Developer Implementation");
 
-    // Display only: the developer is the AssignedTo of the FIRST row
+    // Developer Documentation: 1st row -> developer does the work,
+    // later row(s) -> goes back to the approver to Accept / Return.
     var developerUser = devDocRows.FirstOrDefault()?.AssignedTo;
     if (string.IsNullOrWhiteSpace(developerUser))
     {
         developerUser = Model.AssessmentUserName;
     }
 
-    // Latest row for the step (kept for reference / debug)
-    var developerDocStep = devDocRows.LastOrDefault();
-
-    // The row that is waiting for a decision right now (the Accept / Return row)
-    var pendingDevDocStep = devDocRows.LastOrDefault(r => IsPending(r));
+    var isOriginalDeveloper = IsCurrentUser(developerUser);
+    var isAssignedDeveloper = devDocRows.Any(r => r.IsApproved == null && IsCurrentUser(r.AssignedTo));
 
     var hasAssignedUsers = new[]
     {
@@ -168,92 +133,56 @@
         Model.TestingApproverUserName
     }.Any(u => !string.IsNullOrWhiteSpace(u));
 
-    var statusKey = StepKey(Model.Status);
-
-    bool StatusIs(params string[] names) =>
-        names.Any(n => string.Equals(statusKey, StepKey(n), StringComparison.OrdinalIgnoreCase));
-
+    // Status flags
+    var isSubmitted = StatusIs("Submitted");
     var isApproved = StatusIs("Approved");
-    var isAssessmentReturned = StatusIs("AssessmentReturned", "SecurityRejected");
-    var isRejected = StatusIs("Rejected");
-    var isAssessment = StatusIs("Assessment", "AssessmentSubmitted", "AssessmentAccepted");
-    var isSecurityStatus = StatusIs("SecuritySubmitted");
+    var isAssessment = StatusIs("Assessment");
+    var isAssessmentAccepted = StatusIs("AssessmentAccepted");
+    var isAssessmentReturned = StatusIs("AssessmentReturned");
     var isSecurityDraft = StatusIs("SecurityDraft");
+    var isSecurityRejected = StatusIs("SecurityRejected");
     var isSecurityApproved = StatusIs("SecurityApproved");
-    var isTestingStatus = StatusIs("TestingSubmitted");
-    var isTestingApprovedStatus = StatusIs("TestingApproved");
-    var isPastQaStatus = isTestingStatus || isTestingApprovedStatus;
+    var isDevelopmentApproved = StatusIs("DevelopmentApproved");
+    var isDevReturn = StatusIs("DevReturn");
+    var isQaReturn = StatusIs("QAReturn");
+    var isTestingApproved = StatusIs("TestingApproved");
+    var isFinalApprovalPending = StatusIs("FinalApprovalPending");
+    var isFinalApproved = StatusIs("FinalApproved");
+    var isDeployed = StatusIs("Deployed");
+    var isReleasedStatus = StatusIs("Released");
+    var isRejected = StatusIs("Rejected");
 
-    var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
+    var isReleased = Model.CompletedDate.HasValue || isReleasedStatus || isDeployed;
+    var isReturned = isAssessmentReturned || isSecurityRejected || isQaReturn;
 
-    // Excludes reopened Division Head Approval cycles so Approve/Reject and Accept/Return
-    // never both show for the same underlying row.
-    var canApprove = !isApproved && !isRejected && !isTestingApprovedStatus
-        && !deptHeadHasPriorCycle
-        && CanActOn(deptHeadStep);
+    var canApprove = isSubmitted && CanActOn(PendingStep("Division Head Approval"));
 
-    var canDeptHeadDecideAgain = deptHeadHasPriorCycle
-        && CanActOn(pendingDeptHeadStep)
-        && !StatusIs("SecurityApproved", "TestingApproved", "FinalApproved", "Closed", "Released", "Completed", "ReleaseClosed", "LiveLinkSubmitted");
+    var canGoAssessment = isApproved && isAssignedDeveloper || isAssessmentReturned && isAssignedDeveloper || isSecurityRejected && isAssignedDeveloper;
 
-    // Developer = current user owns a still-open Developer Documentation row, or the Assessment step
-    var isAssignedDeveloper = CanActOn(assessmentStep)
-        || devDocRows.Any(r => r.IsApproved == null && IsCurrentUser(r.AssignedTo));
+    var canGoQA = isDevReturn && CanActOn(testingStep);
 
-    // The original developer (AssignedTo of the FIRST Developer Documentation row).
-    // Used for QAReturn, where the developer's old rows may already be closed.
-    var isOriginalDeveloper = IsCurrentUser(developerUser);
+    var canDevDocDecide = isAssessment && CanActOn(PendingStep("Division Head Approval"));
 
-    // "Go to Assessment": CR approved or returned from assessment, to the assigned developer
-    var canGoAssessment = (isApproved && isAssignedDeveloper) || (isAssessmentReturned && isAssignedDeveloper);
-
-    var canGoSecurity = (isAssessment || isSecurityStatus) && CanActOn(securityStep);
+    var canGoSecurity = isAssessmentAccepted && CanActOn(securityStep);
     var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
 
-    // "Proceed to Development" (opens the UAT link popup) is shown to the developer when the status is
-    //   - DevelopmentApproved, or
-    //   - QAReturn (QA sent it back, so the developer fixes it and uploads a new UAT link)
-    var isDevelopmentApproved = StatusIs("DevelopmentApproved");
-    var isQaReturned = StatusIs("QAReturn", "QAReturned", "ReturnedToQA");
-
-    // Security must be closed (approved) before Development can proceed - previously this didn't
-    // check security state at all, only developer identity, so it could appear while Security was
-    // still pending.
-    var isSecurityResolved = securityStep != null && securityStep.IsApproved == true;
+    var canApproveToDevelopment = isSecurityApproved && CanActOn(PendingStep("Division Head Approval"));
 
     var canProceedToDevelopment =
-        (isDevelopmentApproved || isQaReturned)
-        && (isAssignedDeveloper || isOriginalDeveloper)
-        && isSecurityResolved;
+        (isDevelopmentApproved || isQaReturn)
+        && CanActOn(developerImplementationStep);
 
-    var canApproveToDevelopment = isSecurityApproved;
+    var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
+    var canHandoverToTester = CanActOn(testingStep) && !testerAlreadyAssigned;
 
-    // "Proceed to QA Test" is shown when the status is DevReturn (developer has uploaded the UAT link),
-    // to the QA user whose Testing step is still pending.
-    var isDevReturn = StatusIs("DevReturn");
-    var canGoQA = isDevReturn && CanActOn(testingStep);
-    var canHandoverToTester = CanActOn(testerAssignmentStep) && !testerAlreadyAssigned;
-
-    // "Send to Final Approval": CR status is TestingApproved, and the logged-in user is the AssignedTo of the
-    // pending "Division Head Approval" approval row (created when QA passed), and no Final Approver is picked yet.
-    var canHandoverToFinalApprover = isTestingApprovedStatus
+    var canHandoverToFinalApprover = isTestingApproved
         && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
-        && CanActOn(deptHeadStep);
+        && CanActOn(PendingStep("Division Head Approval"));
 
-    // "Final Approval" button (SweetAlert confirm): status TestingApproved and the logged-in user
-    // owns the pending "Final Approval" row.
-    var canFinalApprove = isTestingApprovedStatus && CanActOn(finalApprovalStep);
+    var canFinalApprove = isFinalApprovalPending && CanActOn(finalApprovalStep);
 
-    // ===== Developer Documentation: Accept / Return =====
-    // FIX: Accept/Return must only be shown while the CR status is exactly "Assessment".
-    // Previously this also matched "AssessmentSubmitted", which let the buttons appear outside the
-    // window they're meant for. The buttons still only render for the user who owns the PENDING
-    // Developer Documentation row (the one assigned back to the approver after the developer submits).
-    var isAssessmentSubmitted = StatusIs("Assessment");
-    var canDevDocDecide = isAssessmentSubmitted && CanActOn(pendingDevDocStep);
+    var canReturnToQA = isTestingApproved && CanActOn(testingStep);
 
-    // "Add Live Link" (popup): status FinalApproved and the logged-in user owns the pending "Release Closure" row.
-    var isFinalApproved = StatusIs("FinalApproved");
     var canSubmitLiveLink = isFinalApproved && CanActOn(releaseClosureStep);
 
     var isAssignedFinalApprover = IsCurrentUser(Model.FinalApproverUserName);
@@ -293,49 +222,36 @@
     }
 
     var dbgMe = string.Join(",", currentIds);
-    var dbgSteps = Model.StepAssignments == null
-        ? "none"
-        : string.Join(" | ", Model.StepAssignments.Select(x => $"{x.StepID}:{x.StepName}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
+    var dbgSteps = string.Join(" | ", allSteps.Select(x => $"{x.StepID}:{x.StepName}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
     var dbgDevDoc = string.Join(" | ", devDocRows.Select(x => $"{x.StepID}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
 
     var showDebug = false;
 }
 
 @{
-    // ---------- Workflow stepper (derived from the existing status flags) ----------
     var stageNames = new[] { "Requested", "Approval", "Assessment", "Security", "Development", "QA", "Final approval", "Release" };
     var stageIcons = new[] { "ri-file-add-line", "ri-user-follow-line", "ri-file-search-line", "ri-shield-check-line",
                              "ri-code-s-slash-line", "ri-test-tube-line", "ri-check-double-line", "ri-rocket-line" };
 
-    var isReleased = Model.CompletedDate.HasValue
-        || StatusIs("Closed", "Released", "Completed", "ReleaseClosed", "LiveLinkSubmitted");
-    var isReturned = isAssessmentReturned || isQaReturned;
-
     int activeStage =
         isReleased ? stageNames.Length :
         isFinalApproved ? 7 :
-        isTestingApprovedStatus ? 6 :
-        (isTestingStatus || isDevReturn) ? 5 :
-        (isDevelopmentApproved || isQaReturned || isSecurityApproved) ? 4 :
-        (isSecurityDraft || isSecurityStatus) ? 3 :
+        isTestingApproved ? 6 :
+        (isDevReturn || canGoQA || Model.Status != null && StepKey(Model.Status) == StepKey("Testing")) ? 5 :
+        (isDevelopmentApproved || isQaReturn || isSecurityApproved) ? 4 :
+        (isSecurityDraft || isAssessmentAccepted) ? 3 :
         (isApproved || isAssessmentReturned || isAssessment) ? 2 :
         1;
 
-    // Is anything waiting on the logged-in user? (same flags that drive the footer buttons)
-    var hasAction = canApprove || canDeptHeadDecideAgain || canGoAssessment || canProceedToDevelopment || canGoSecurity
-        || canEditSecurityDraft || canHandoverToTester || canHandoverToFinalApprover || canFinalApprove
-        || canGoQA || canApproveToDevelopment || canDevDocDecide || canSubmitLiveLink;
+    var hasAction = canApprove || canDevDocDecide || canGoAssessment || canGoSecurity || canEditSecurityDraft
+        || canApproveToDevelopment || canProceedToDevelopment || canGoQA || canHandoverToTester
+        || canHandoverToFinalApprover || canReturnToQA || canFinalApprove || canSubmitLiveLink;
 
     var attachmentCount = srsFiles.Count + baFiles.Count + qaFiles.Count + vendorFiles.Count;
-    var stepRows = Model.StepAssignments ?? new List<WorkflowStepAssignment>();
+    var stepRows = allSteps;
 
-    // ===== Workflow tab rows =====
-    // Model.StepAssignments arrives ordered by ApprovalID ASC (chronological). ANY step can be
-    // revisited more than once (Division Head, Security and Developer Documentation all do it on
-    // real data), so we never re-sort and never dedupe: every row is shown, in arrival order, so
-    // the tab reads top-to-bottom as "initial stage -> latest" accurately.
     var displayStepRows = stepRows
-        .Where(s => !string.IsNullOrEmpty(StepKey(s.StepName))) // drop rows with no step name
+        .Where(s => !string.IsNullOrEmpty(StepKey(s.StepName)))
         .ToList();
 
     var hasAssessmentData = new[]
@@ -362,7 +278,6 @@
 
     var isOverdue = Model.DueDate.HasValue && Model.DueDate.Value.Date < DateTime.Today && !isReleased && !isRejected;
 
-    // ---------- Small helpers ----------
     string Pretty(string? s) =>
         string.IsNullOrWhiteSpace(s)
             ? string.Empty
@@ -403,12 +318,6 @@
         return (d, d.IndexOf("reject", StringComparison.OrdinalIgnoreCase) >= 0 ? "bad" : "warn");
     }
 
-    // ===== Workflow timeline timestamps =====
-    // Picks the most meaningful timestamp for a timeline entry:
-    //   - If the step has been decided (approved/returned/rejected), show WHEN that decision
-    //     happened (ApprovalDate) - that's the moment that actually matters once it's closed.
-    //   - If it's still pending, show WHEN it was handed to the current assignee (AssignedDate) -
-    //     there's no decision timestamp yet, so the handoff time is the only time there is.
     DateTime? StepTimestamp(WorkflowStepAssignment s) =>
         s.ApprovalDate ?? (DateTime?)s.AssignedDate;
 
@@ -416,12 +325,9 @@
     {
         var dt = StepTimestamp(s);
         if (!dt.HasValue) { return string.Empty; }
-
-        // Readable absolute timestamp: "16 Oct 2026, 11:09 AM"
         return dt.Value.ToString("dd MMM yyyy, hh:mm tt");
     }
 
-    // ---------- Markup helpers ----------
     void Fact(string icon, string label, string? value, string valueCss = "")
     {
         if (string.IsNullOrWhiteSpace(value)) { return; }
@@ -513,7 +419,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
 }
 
 <style>
-    /* ===== Footer action buttons (same look as the SweetAlert confirm buttons) ===== */
     .cr-action-btn {
         padding: .6rem 1.2rem;
         border-radius: .6rem;
@@ -612,7 +517,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         --cr-surface: var(--bs-tertiary-bg, #f5f7fb);
     }
 
-    /* ===== Hero header ===== */
     .modal-header.cr-hero {
         display: block;
         padding: 0;
@@ -706,7 +610,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             font-weight: 600;
         }
 
-    /* Status + priority chips */
     .cr-status, .cr-chip {
         display: inline-flex;
         align-items: center;
@@ -753,7 +656,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         color: #b4c3ff;
     }
 
-    /* ===== Stepper (the one expressive element) ===== */
     .cr-stepper {
         list-style: none;
         margin: 0;
@@ -847,7 +749,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         font-weight: 600;
     }
 
-    /* ===== Body, tabs ===== */
     .cr-body {
         padding: 0;
     }
@@ -940,7 +841,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             font-size: 1.15rem;
         }
 
-    /* ===== Facts ===== */
     .cr-facts {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -983,7 +883,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             color: #d6384a;
         }
 
-    /* ===== Text blocks ===== */
     .cr-block {
         padding: 1rem 0;
         border-top: 1px solid var(--cr-line);
@@ -1025,7 +924,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         word-break: break-word;
     }
 
-    /* ===== Attachments ===== */
     .cr-file-group + .cr-file-group {
         margin-top: 1.4rem;
     }
@@ -1103,7 +1001,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         font-size: 1.15rem;
     }
 
-    /* ===== People ===== */
     .cr-people {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -1188,7 +1085,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         background: var(--cr-accent);
     }
 
-    /* ===== Workflow timeline ===== */
     .cr-timeline {
         list-style: none;
         margin: 0;
@@ -1283,7 +1179,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         margin-top: .1rem;
     }
 
-    /* ===== Empty state ===== */
     .cr-empty {
         text-align: center;
         padding: 2.5rem 1rem;
@@ -1297,7 +1192,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             opacity: .6;
         }
 
-    /* Keep Select2 above Modals and SweetAlert */
     .select2-container--open {
         z-index: 20000 !important;
     }
@@ -1316,7 +1210,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         }
     }
 
-    /* ===== Test cycle result + UAT link ===== */
     .cr-test-result-label {
         display: flex;
         align-items: center;
@@ -1372,24 +1265,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             font-size: 1.1rem;
         }
 
-    /* =========================================================================
-           Shared SweetAlert ("uat-swal-*") styling used by EVERY custom modal below
-           (Approve, Handover to Final Approver, Final Approval, Approve to
-           Development, Proceed to Development, Add Live Link, Developer
-           Documentation Accept, etc).
-
-           FIX: this used to be duplicated inside every single didOpen() callback,
-           each copy only containing the handful of classes THAT modal needed, and
-           guarded by `if (!document.getElementById('uat-swal-style'))`. Because the
-           id is shared, only the FIRST modal a user happened to open in a page
-           session actually got its block injected - every other modal opened
-           afterwards found the id already taken and skipped injecting its own
-           (fuller) block, so classes like `.uat-swal-icon-security` or
-           `.uat-swal-confirm-security` were sometimes simply never defined and the
-           "Select IS Officer" (Developer Documentation Accept) modal rendered
-           unstyled. Declaring the complete set ONE time, here in the page's own
-           <style>, removes the race condition entirely - no JS injection needed.
-           ========================================================================= */
     .uat-swal-popup {
         border-radius: 1.1rem;
         padding: 1.75rem 1.75rem 1.5rem;
@@ -1607,7 +1482,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             background: #e7e9ef;
         }
 
-    /* Select2 styled to match the field look above */
     .uat-swal-popup .select2-container .select2-selection--single {
         height: auto;
         border: 1.5px solid #e3e6ec;
@@ -1653,7 +1527,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
     }
 </style>
 
-@* ===================== HERO: CR number, title, status, key facts, progress ===================== *@
 <div class="modal-header cr-hero">
     <button type="button" class="btn-close cr-close" data-bs-dismiss="modal" aria-label="Close"></button>
 
@@ -1710,7 +1583,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
     </ol>
 </div>
 
-@* ===================== BODY ===================== *@
 <div class="modal-body cr-body">
 
     @if (hasAction)
@@ -1769,7 +1641,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
     <div class="tab-content cr-panes">
 
-        @* ----- Overview ----- *@
         <div class="tab-pane fade show active" id="cr-tab-overview" role="tabpanel">
             <div class="cr-facts">
                 @{
@@ -1794,7 +1665,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }
         </div>
 
-        @* ----- Assessment ----- *@
         <div class="tab-pane fade" id="cr-tab-assessment" role="tabpanel">
             @if (!hasAssessmentData)
             {
@@ -1823,7 +1693,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }
         </div>
 
-        @* ----- Attachments ----- *@
         <div class="tab-pane fade" id="cr-tab-files" role="tabpanel">
             @if (!hasAnyAttachments)
             {
@@ -1838,7 +1707,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }
         </div>
 
-        @* ----- People ----- *@
         <div class="tab-pane fade" id="cr-tab-people" role="tabpanel">
             @if (!hasAssignedUsers)
             {
@@ -1861,7 +1729,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }
         </div>
 
-        @* ----- Security ----- *@
         <div class="tab-pane fade" id="cr-tab-security" role="tabpanel">
             @if (!hasSecurityData)
             {
@@ -1882,13 +1749,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
                     }
                 </div>
 
-
                 TextBlock("ri-alert-line", "Information security risk assessment", Model.RiskAssessment, highlight: true);
                 TextBlock("ri-alert-line", "Security Requirements", Model.SecurityRequirements, highlight: true);
                 TextBlock("ri-alert-line", "Security Risks Identified", Model.SecurityRisksIdentified, highlight: true);
                 TextBlock("ri-alert-line", "Risk Treatment Controls", Model.RiskTreatmentControls, highlight: true);
                 TextBlock("ri-alert-line", "Dependencies Impact", Model.DependenciesImpact, highlight: true);
-
 
                 @if (string.IsNullOrWhiteSpace(Model.RiskAssessment))
                 {
@@ -1897,7 +1762,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }
         </div>
 
-        @* ----- Testing ----- *@
         <div class="tab-pane fade" id="cr-tab-testing" role="tabpanel">
             @if (!hasTestingData)
             {
@@ -1950,7 +1814,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }
         </div>
 
-        @* ----- Workflow history ----- *@
         <div class="tab-pane fade" id="cr-tab-workflow" role="tabpanel">
             @if (!displayStepRows.Any())
             {
@@ -2002,10 +1865,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
 {
     <div class="px-3 pb-2">
         <small class="text-muted d-block" style="font-size:11px; word-break:break-all;">
-            DEBUG | status=[@Model.Status] | qaReturned=[@isQaReturned] | testingApproved=[@isTestingApprovedStatus] | finalApprover=[@Model.FinalApproverUserName] |
+            DEBUG | status=[@Model.Status] | qaReturn=[@isQaReturn] | testingApproved=[@isTestingApproved] | finalApprover=[@Model.FinalApproverUserName] |
             me=[@dbgMe] | isFinalApprover=[@isAssignedFinalApprover] |
             developer=[@developerUser] | isAssignedDev=[@isAssignedDeveloper] | isOriginalDev=[@isOriginalDeveloper] | devDocRows=[@dbgDevDoc] |
-            canApprove=[@canApprove] | canDeptHeadDecideAgain=[@canDeptHeadDecideAgain] | canGoAssessment=[@canGoAssessment] | canProceedToDevelopment=[@canProceedToDevelopment] | canDevDocDecide=[@canDevDocDecide] | canFinalApprove=[@canFinalApprove] | canSubmitLiveLink=[@canSubmitLiveLink] | steps=[@dbgSteps]
+            canApprove=[@canApprove] | canDevDocDecide=[@canDevDocDecide] | canGoAssessment=[@canGoAssessment] | canGoSecurity=[@canGoSecurity] |
+            canApproveToDevelopment=[@canApproveToDevelopment] | canProceedToDevelopment=[@canProceedToDevelopment] |
+            canHandoverToTester=[@canHandoverToTester] | canHandoverToFinalApprover=[@canHandoverToFinalApprover] |
+            canReturnToQA=[@canReturnToQA] | canFinalApprove=[@canFinalApprove] | canSubmitLiveLink=[@canSubmitLiveLink] | steps=[@dbgSteps]
         </small>
     </div>
 }
@@ -2020,12 +1886,12 @@ void FileGroup(string title, string icon, List<Attachment> items)
             <i class="ri-close-circle-line"></i>Reject
         </button>
     }
-    @if (canDeptHeadDecideAgain)
+    @if (canDevDocDecide)
     {
-        <button type="button" id="modal-depthead-approve-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
+        <button type="button" id="modal-devdoc-approve-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
             <i class="ri-check-line"></i>Accept
         </button>
-        <button type="button" id="modal-depthead-return-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
+        <button type="button" id="modal-devdoc-return-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
             <i class="ri-arrow-go-back-line"></i>Return
         </button>
     }
@@ -2034,12 +1900,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         <a href="@Url.Action("Assessment", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-warning">
             <i class="ri-file-search-line"></i>Go to Assessment
         </a>
-    }
-    @if (canProceedToDevelopment)
-    {
-        <button type="button" id="modal-proceed-dev-btn" class="cr-action-btn is-primary" data-id="@Model.CRID">
-            <i class="ri-code-s-slash-line"></i>Proceed to Development
-        </button>
     }
     @if (canGoSecurity)
     {
@@ -2054,6 +1914,24 @@ void FileGroup(string title, string icon, List<Attachment> items)
             <i class="ri-pencil-line"></i>Edit Security Assessment
         </a>
     }
+    @if (canApproveToDevelopment)
+    {
+        <button type="button" id="modal-approve-dev-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
+            <i class="ri-check-double-line"></i>Approve to Development
+        </button>
+    }
+    @if (canProceedToDevelopment)
+    {
+        <button type="button" id="modal-proceed-dev-btn" class="cr-action-btn is-primary" data-id="@Model.CRID">
+            <i class="ri-code-s-slash-line"></i>Proceed to Development
+        </button>
+    }
+    @if (canGoQA)
+    {
+        <a href="@Url.Action("Testing", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-primary">
+            <i class="ri-test-tube-line"></i>Proceed to QA Test
+        </a>
+    }
     @if (canHandoverToTester)
     {
         <button type="button" id="modal-handover-tester-btn" class="cr-action-btn is-primary" data-id="@Model.CRID">
@@ -2065,6 +1943,9 @@ void FileGroup(string title, string icon, List<Attachment> items)
         <button type="button" id="modal-handover-final-btn" class="cr-action-btn is-final" data-id="@Model.CRID">
             <i class="ri-send-plane-line"></i>Send to Final Approval
         </button>
+    }
+    @if (canReturnToQA)
+    {
         <button type="button" id="modal-return-qa-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
             <i class="ri-arrow-go-back-line"></i>Return to QA
         </button>
@@ -2073,27 +1954,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
     {
         <button type="button" id="modal-final-approve-btn" class="cr-action-btn is-final" data-id="@Model.CRID">
             <i class="ri-check-double-line"></i>Final Approval
-        </button>
-    }
-    @if (canGoQA)
-    {
-        <a href="@Url.Action("Testing", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-primary">
-            <i class="ri-test-tube-line"></i>Proceed to QA Test
-        </a>
-    }
-    @if (canApproveToDevelopment)
-    {
-        <button type="button" id="modal-approve-dev-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
-            <i class="ri-check-double-line"></i>Approve to Development
-        </button>
-    }
-    @if (canDevDocDecide)
-    {
-        <button type="button" id="modal-devdoc-approve-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
-            <i class="ri-check-line"></i>Accept
-        </button>
-        <button type="button" id="modal-devdoc-return-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
-            <i class="ri-arrow-go-back-line"></i>Return
         </button>
     }
     @if (canSubmitLiveLink)
@@ -2114,25 +1974,19 @@ void FileGroup(string title, string icon, List<Attachment> items)
 <script>
     $(document).ready(function () {
 
-        // ---------------------------------------------------------------
-        // Setup
-        // ---------------------------------------------------------------
-
-        // User list built from the server. id = UserName (e.g. 6407)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                    foreach (var user in ViewBag.Users)
-                    {
-                            string uId = user.UserName;
-                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                            if (string.IsNullOrEmpty(uId)) { continue; }
-                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                    }
+                        foreach (var user in ViewBag.Users)
+                        {
+                                    string uId = user.UserName;
+                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                    if (string.IsNullOrEmpty(uId)) { continue; }
+                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                        }
             }
         ];
 
-        // Stop Bootstrap's modal focus trap from stealing focus from SweetAlert / Select2
         if (!window.__swalFocusFixApplied) {
             window.__swalFocusFixApplied = true;
             document.addEventListener('focusin', function (e) {
@@ -2142,11 +1996,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }, true);
         }
 
-        // ---------------------------------------------------------------
-        // Shared helpers
-        // ---------------------------------------------------------------
-
-        // Shows the success message with an OK button. After OK: close the modal(s) and refresh the list
         function successAndClose(message) {
             Swal.fire({ icon: 'success', title: 'Success', text: message, confirmButtonText: 'OK' })
                 .then(() => {
@@ -2160,7 +2009,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 });
         }
 
-        // Reusable: SweetAlert with a searchable user dropdown. Resolves with the selected UserName.
         function pickUser(title, labelText, confirmText, iconClass, iconVariant, confirmVariant) {
             return Swal.fire({
                 title: false,
@@ -2206,7 +2054,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         }
 
-        // Reusable: wires up a Select2 dropdown inside a SweetAlert popup, with inline validation.
         function initSwalUserSelect(selectId, errorId) {
             $(selectId).select2({
                 dropdownParent: $('.swal2-popup'),
@@ -2220,8 +2067,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         }
 
-        // Reusable: wires up a URL <input> inside a SweetAlert popup with live validation,
-        // toggling the confirm button's enabled state as the user types/pastes.
         function initSwalUrlInput(options) {
             var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d+)?(\/[^\s]*)?$/i;
 
@@ -2264,16 +2109,12 @@ void FileGroup(string title, string icon, List<Attachment> items)
             }
 
             $input.on('input paste keyup', function () {
-                // paste event fires before the value updates in some browsers, so defer
                 setTimeout(validate, 0);
             });
 
             return { urlRegex: URL_REGEX };
         }
 
-        // ---------------------------------------------------------------
-        // APPROVE (Division Head, 1st cycle): pick the Implementer and QA user
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-approve-btn')
                    .on('click', '#modal-approve-btn', function () {
 
@@ -2369,9 +2210,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        // ---------------------------------------------------------------
-        // REJECT: ask for a reason, then reject
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-reject-btn')
                    .on('click', '#modal-reject-btn', function () {
 
@@ -2415,53 +2253,89 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        // ---------------------------------------------------------------
-        // DIVISION HEAD APPROVAL (2nd+ cycle): APPROVE — pick the IS Officer
-        // ---------------------------------------------------------------
-        $(document).off('click', '#modal-depthead-approve-btn')
-                    .on('click', '#modal-depthead-approve-btn', function () {
+        $(document).off('click', '#modal-devdoc-approve-btn')
+                   .on('click', '#modal-devdoc-approve-btn', function () {
 
             var crId = $(this).data('id');
 
-            pickUser('Accept Change Request', 'Select IS Officer:', 'Accept',
-                'ri-shield-user-line', 'uat-swal-icon-security', 'uat-swal-confirm-security')
-                .then((result) => {
-                    if (!result.isConfirmed) return;
+            Swal.fire({
+                title: false,
+                html: `
+                    <div class="uat-swal">
+                        <div class="uat-swal-icon uat-swal-icon-security">
+                            <i class="ri-shield-user-line"></i>
+                        </div>
+                        <h3 class="uat-swal-title">Accept Assessment</h3>
+                        <p class="uat-swal-sub">Choose the IS Officer who should receive this Change Request next.</p>
 
-                    var token = $('input[name="__RequestVerificationToken"]').val();
+                        <div class="uat-swal-group">
+                            <label class="uat-swal-label" for="swal-security-select">
+                                <i class="ri-shield-check-line"></i> IS Officer
+                            </label>
+                            <select id="swal-security-select" class="uat-swal-select"></select>
+                            <div id="swal-security-error" class="uat-swal-error" style="display:none;">
+                                <i class="ri-error-warning-line"></i><span>Please select an IS Officer.</span>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                showConfirmButton: true,
+                confirmButtonText: '<i class="ri-check-line"></i> Accept',
+                cancelButtonText: 'Cancel',
+                buttonsStyling: false,
+                focusConfirm: false,
+                customClass: {
+                    popup: 'uat-swal-popup',
+                    confirmButton: 'uat-swal-confirm uat-swal-confirm-security',
+                    cancelButton: 'uat-swal-cancel',
+                    actions: 'uat-swal-actions'
+                },
+                didOpen: () => {
+                    initSwalUserSelect('#swal-security-select', '#swal-security-error');
+                },
+                preConfirm: () => {
+                    var selected = $('#swal-security-select').val();
+                    if (!selected) {
+                        $('#swal-security-error').show();
+                        return false;
+                    }
+                    return selected;
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
 
-                    $.ajax({
-                        url: '@(Url.Action("AcceptDevAssessment", "CRManagement"))',
-                        type: 'POST',
-                        data: { id: crId, securityOfficerId: result.value },
-                        headers: token ? { "RequestVerificationToken": token } : {},
-                        success: function (response) {
-                            if (response && response.success === false) {
-                                Swal.fire('Error', response.message || 'Failed to approve.', 'error');
-                            } else {
-                                successAndClose((response && response.message) || 'Change Request accepted.');
-                            }
-                        },
-                        error: function (xhr) {
-                            var msg = (xhr.responseJSON && xhr.responseJSON.message)
-                                || 'An error occurred processing the server request.';
-                            Swal.fire('Error', msg, 'error');
+                var token = $('input[name="__RequestVerificationToken"]').val();
+
+                $.ajax({
+                    url: '@(Url.Action("AcceptDevAssessment", "CRManagement"))',
+                    type: 'POST',
+                    data: { id: crId, securityOfficerId: result.value },
+                    headers: token ? { "RequestVerificationToken": token } : {},
+                    success: function (response) {
+                        if (response && response.success === false) {
+                            Swal.fire('Error', response.message || 'Failed to approve.', 'error');
+                        } else {
+                            successAndClose((response && response.message) || 'Assessment accepted and assigned to the IS Officer.');
                         }
-                    });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                            || 'An error occurred processing the server request.';
+                        Swal.fire('Error', msg, 'error');
+                    }
                 });
+            });
         });
 
-        // ---------------------------------------------------------------
-        // DIVISION HEAD APPROVAL (2nd+ cycle): RETURN
-        // ---------------------------------------------------------------
-        $(document).off('click', '#modal-depthead-return-btn')
-                   .on('click', '#modal-depthead-return-btn', function () {
+        $(document).off('click', '#modal-devdoc-return-btn')
+                   .on('click', '#modal-devdoc-return-btn', function () {
 
             var crId = $(this).data('id');
 
             Swal.fire({
                 title: 'Return Change Request?',
-                text: 'This Change Request will be returned.',
+                text: 'This Change Request will be returned to the developer.',
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonText: 'Yes, return',
@@ -2473,7 +2347,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 var token = $('input[name="__RequestVerificationToken"]').val();
 
                 $.ajax({
-                    url: '@(Url.Action("ReturnDivisionHeadApproval", "CRManagement"))',
+                    url: '@(Url.Action("ReturnDevAssessment", "CRManagement"))',
                     type: 'POST',
                     data: { id: crId },
                     headers: token ? { "RequestVerificationToken": token } : {},
@@ -2493,15 +2367,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        // ---------------------------------------------------------------
-        // HANDOVER TO TESTER
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-handover-tester-btn')
                    .on('click', '#modal-handover-tester-btn', function () {
 
             var crId = $(this).data('id');
 
-            // Handover to Tester
             pickUser('Handover to Tester', 'Select Tester:', 'Confirm Handover',
                 'ri-user-shared-line', 'uat-swal-icon', 'uat-swal-confirm')
                 .then((result) => {
@@ -2527,9 +2397,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 });
         });
 
-        // ---------------------------------------------------------------
-        // HANDOVER TO FINAL APPROVER (status = TestingApproved)
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-handover-final-btn')
                    .on('click', '#modal-handover-final-btn', function () {
 
@@ -2605,9 +2472,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        // ---------------------------------------------------------------
-        // FINAL APPROVAL (status = TestingApproved): confirm first
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-final-approve-btn')
                    .on('click', '#modal-final-approve-btn', function () {
 
@@ -2662,9 +2526,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        // ---------------------------------------------------------------
-        // APPROVE TO DEVELOPMENT (status = SecurityApproved): confirm first
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-approve-dev-btn')
                    .on('click', '#modal-approve-dev-btn', function () {
 
@@ -2719,9 +2580,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        // ---------------------------------------------------------------
-        // PROCEED TO DEVELOPMENT (status = DevelopmentApproved or QAReturn): ask for the UAT link
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-proceed-dev-btn')
                    .on('click', '#modal-proceed-dev-btn', function () {
 
@@ -2812,9 +2670,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        // ---------------------------------------------------------------
-        // RELEASE CLOSURE (status = FinalApproved): ask for the live link
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-live-link-btn')
                    .on('click', '#modal-live-link-btn', function () {
 
@@ -2905,130 +2760,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        // ---------------------------------------------------------------
-        // DEVELOPER DOCUMENTATION: ACCEPT — pick the IS Officer
-        // (shown only while CR status is exactly "Assessment" — see canDevDocDecide)
-        // ---------------------------------------------------------------
-        $(document).off('click', '#modal-devdoc-approve-btn')
-                   .on('click', '#modal-devdoc-approve-btn', function () {
-
-            var crId = $(this).data('id');
-
-            Swal.fire({
-                title: false,
-                html: `
-                    <div class="uat-swal">
-                        <div class="uat-swal-icon uat-swal-icon-security">
-                            <i class="ri-shield-user-line"></i>
-                        </div>
-                        <h3 class="uat-swal-title">Accept Assessment</h3>
-                        <p class="uat-swal-sub">Choose the IS Officer who should receive this Change Request next.</p>
-
-                        <div class="uat-swal-group">
-                            <label class="uat-swal-label" for="swal-security-select">
-                                <i class="ri-shield-check-line"></i> IS Officer
-                            </label>
-                            <select id="swal-security-select" class="uat-swal-select"></select>
-                            <div id="swal-security-error" class="uat-swal-error" style="display:none;">
-                                <i class="ri-error-warning-line"></i><span>Please select an IS Officer.</span>
-                            </div>
-                        </div>
-                    </div>
-                `,
-                showCancelButton: true,
-                showConfirmButton: true,
-                confirmButtonText: '<i class="ri-check-line"></i> Accept',
-                cancelButtonText: 'Cancel',
-                buttonsStyling: false,
-                focusConfirm: false,
-                customClass: {
-                    popup: 'uat-swal-popup',
-                    confirmButton: 'uat-swal-confirm uat-swal-confirm-security',
-                    cancelButton: 'uat-swal-cancel',
-                    actions: 'uat-swal-actions'
-                },
-                didOpen: () => {
-                    initSwalUserSelect('#swal-security-select', '#swal-security-error');
-                },
-                preConfirm: () => {
-                    var selected = $('#swal-security-select').val();
-                    if (!selected) {
-                        $('#swal-security-error').show();
-                        return false;
-                    }
-                    return selected;
-                }
-            }).then((result) => {
-                if (!result.isConfirmed) return;
-
-                var token = $('input[name="__RequestVerificationToken"]').val();
-
-                $.ajax({
-                    url: '@(Url.Action("AcceptDevAssessment", "CRManagement"))',
-                    type: 'POST',
-                    data: { id: crId, securityOfficerId: result.value },
-                    headers: token ? { "RequestVerificationToken": token } : {},
-                    success: function (response) {
-                        if (response && response.success === false) {
-                            Swal.fire('Error', response.message || 'Failed to approve.', 'error');
-                        } else {
-                            successAndClose((response && response.message) || 'Assessment accepted and assigned to the IS Officer.');
-                        }
-                    },
-                    error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
-                            || 'An error occurred processing the server request.';
-                        Swal.fire('Error', msg, 'error');
-                    }
-                });
-            });
-        });
-
-        // ---------------------------------------------------------------
-        // DEVELOPER DOCUMENTATION: RETURN (reason required)
-        // ---------------------------------------------------------------
-        $(document).off('click', '#modal-devdoc-return-btn')
-                   .on('click', '#modal-devdoc-return-btn', function () {
-
-            var crId = $(this).data('id');
-
-            Swal.fire({
-                title: 'Return Change Request?',
-                text: 'This Change Request will be returned to the developer.',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Yes, return',
-                confirmButtonColor: '#dc3545',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (!result.isConfirmed) return;
-
-                var token = $('input[name="__RequestVerificationToken"]').val();
-
-                $.ajax({
-                    url: '@(Url.Action("ReturnDevAssessment", "CRManagement"))',
-                    type: 'POST',
-                    data: { id: crId },
-                    headers: token ? { "RequestVerificationToken": token } : {},
-                    success: function (response) {
-                        if (response && response.success === false) {
-                            Swal.fire('Error', response.message || 'Failed to return.', 'error');
-                        } else {
-                            successAndClose((response && response.message) || 'Change Request returned.');
-                        }
-                    },
-                    error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
-                            || 'Failed to return the Change Request. Please try again.';
-                        Swal.fire('Error', msg, 'error');
-                    }
-                });
-            });
-        });
-
-        // ---------------------------------------------------------------
-        // RETURN TO QA (status = TestingApproved): reason required
-        // ---------------------------------------------------------------
         $(document).off('click', '#modal-return-qa-btn')
                    .on('click', '#modal-return-qa-btn', function () {
 

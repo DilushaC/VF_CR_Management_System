@@ -2524,59 +2524,138 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     throw new ArgumentException("Please fill out the Risk Treatment Controls.");
                 if (string.IsNullOrWhiteSpace(dependenciesImpact))
                     throw new ArgumentException("Please fill out the Dependencies Impact.");
-
                 if (changeImpactId == null)
                     throw new ArgumentException("Please select a Change Impact.");
+
+                if (string.IsNullOrWhiteSpace(empId))
+                    throw new ArgumentException("Employee number is required.");
             }
 
-            const string getStatusIdSql = @"
-                SELECT TOP 1 StatusID
-                FROM [CRManagementDB].[dbo].[CRStatus]
-                WHERE StatusName = @StatusName AND Active = 1";
+            empId = (empId ?? string.Empty).Trim();
 
-            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = targetStatusName });
-
-            if (statusIdObj == null || statusIdObj == DBNull.Value)
+            if (!isSubmit)
             {
-                throw new InvalidOperationException($"Status '{targetStatusName}' was not found or is inactive in CRStatus table.");
+                // Draft save: just persist the fields and status, no workflow step movement.
+                const string getStatusIdSql = @"
+            SELECT TOP 1 StatusID
+            FROM [CRManagementDB].[dbo].[CRStatus]
+            WHERE StatusName = @StatusName AND Active = 1";
+
+                var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = targetStatusName });
+                if (statusIdObj == null || statusIdObj == DBNull.Value)
+                    throw new InvalidOperationException($"Status '{targetStatusName}' was not found or is inactive in CRStatus table.");
+
+                int draftStatusId = Convert.ToInt32(statusIdObj);
+
+                const string updateCrSql = @"
+            UPDATE ChangeRequest
+            SET RiskAssessment = @RiskAssessment,
+                SecurityRequirements = @SecurityRequirements,
+                SecurityRisksIdentified = @SecurityRisksIdentified,
+                RiskTreatmentControls = @RiskTreatmentControls,
+                DependenciesImpact = @DependenciesImpact,
+                ImpactID = @ImpactID,
+                StatusID = @StatusID
+            WHERE CRID = @CRID AND Active = 1";
+
+                var draftParams = new DynamicParameters();
+                draftParams.Add("@RiskAssessment", riskAssessment);
+                draftParams.Add("@SecurityRequirements", securityRequirements);
+                draftParams.Add("@SecurityRisksIdentified", securityRisksIdentified);
+                draftParams.Add("@RiskTreatmentControls", riskTreatmentControls);
+                draftParams.Add("@DependenciesImpact", dependenciesImpact);
+                draftParams.Add("@ImpactID", changeImpactId, DbType.Int32);
+                draftParams.Add("@StatusID", draftStatusId);
+                draftParams.Add("@CRID", crId);
+
+                int draftRows = _connectionService.ExecuteWithPara(updateCrSql, draftParams);
+                return draftRows > 0;
             }
 
-            int targetStatusId = Convert.ToInt32(statusIdObj);
+            // Submit path: save fields + close Security step + hand back to the original Division Head approver.
+            const string sql = @"
+                DECLARE @SecurityStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Security' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            const string updateCrSql = @"
-                UPDATE ChangeRequest
-                SET 
-                    RiskAssessment = @RiskAssessment,
+                DECLARE @DivHeadStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Division Head Approval' AND Active = 1
+                    ORDER BY StepOrder ASC);
+
+                DECLARE @SecurityApprovedStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = 'SecurityApproved' AND Active = 1);
+
+                IF @SecurityStepID IS NULL OR @DivHeadStepID IS NULL OR @SecurityApprovedStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
+
+                DECLARE @LatestSecurityApprovalID INT = (
+                    SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @SecurityStepID AND Active = 1
+                    ORDER BY ApprovalID DESC);
+
+                IF @LatestSecurityApprovalID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
+
+                DECLARE @DivHeadAssignedTo NVARCHAR(200) = (
+                    SELECT TOP 1 AssignedTo FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DivHeadStepID AND Active = 1
+                    ORDER BY AssignedDate ASC);
+
+                IF @DivHeadAssignedTo IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
+
+                BEGIN TRANSACTION;
+
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET RiskAssessment = @RiskAssessment,
                     SecurityRequirements = @SecurityRequirements,
                     SecurityRisksIdentified = @SecurityRisksIdentified,
                     RiskTreatmentControls = @RiskTreatmentControls,
                     DependenciesImpact = @DependenciesImpact,
                     ImpactID = @ImpactID,
-                    StatusID = @StatusID
-                WHERE CRID = @CRID
-                  AND Active = 1";
+                    StatusID = @SecurityApprovedStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-            var crParameters = new DynamicParameters();
-            crParameters.Add("@RiskAssessment", riskAssessment);
-            crParameters.Add("@SecurityRequirements", securityRequirements);
-            crParameters.Add("@SecurityRisksIdentified", securityRisksIdentified);
-            crParameters.Add("@RiskTreatmentControls", riskTreatmentControls);
-            crParameters.Add("@DependenciesImpact", dependenciesImpact);
-            crParameters.Add("@ImpactID", changeImpactId, DbType.Int32);
-            crParameters.Add("@StatusID", targetStatusId);
-            crParameters.Add("@CRID", crId);
+                UPDATE [CRManagementDB].[dbo].[Approval]
+                SET IsApproved   = 1,
+                    ApprovalDate = @Now
+                WHERE ApprovalID = @LatestSecurityApprovalID;
 
-            int rowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
+                INSERT INTO [CRManagementDB].[dbo].[Approval]
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @DivHeadStepID, @EmpID, @DivHeadAssignedTo, @Now, 1);
 
-            if (rowsAffected <= 0)
-                return false;
+                COMMIT TRANSACTION;
 
-            if (isSubmit)
-            {
-                await UpdateSecurityApprovalStepAsync(crId, empId);
-            }
+                SELECT CAST(1 AS BIT) AS Success;";
 
-            return true;
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@EmpID", empId);
+            parameters.Add("@RiskAssessment", riskAssessment);
+            parameters.Add("@SecurityRequirements", securityRequirements);
+            parameters.Add("@SecurityRisksIdentified", securityRisksIdentified);
+            parameters.Add("@RiskTreatmentControls", riskTreatmentControls);
+            parameters.Add("@DependenciesImpact", dependenciesImpact);
+            parameters.Add("@ImpactID", changeImpactId, DbType.Int32);
+            parameters.Add("@Now", DateTime.Now);
+
+            var success = _connectionService.ExecuteScalar(sql, parameters);
+
+            return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
 
         public Task<IEnumerable<ChangeRequest>> GetChangeImpactsAsync()
@@ -2594,212 +2673,84 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return Task.FromResult(result);
         }
 
-        private async Task UpdateSecurityApprovalStepAsync(int crId, string empId)
-        {
-            // Resolves a StepID by step NAME (never a hard-coded ID)
-            int GetStepId(string stepName)
-            {
-                const string getStepIdSql = @"
-                    SELECT TOP 1 StepID
-                    FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = @StepName
-                      AND Active = 1
-                    ORDER BY StepOrder ASC";
-
-                var obj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = stepName });
-
-                if (obj == null || obj == DBNull.Value)
-                {
-                    throw new InvalidOperationException($"Workflow step '{stepName}' was not found or is inactive.");
-                }
-
-                return Convert.ToInt32(obj);
-            }
-
-            int securityStepId = GetStepId("Security");
-            int deptHeadStepId = GetStepId("Division Head Approval");
-
-            // 1. Mark the current Security approval row as approved
-            const string updateApprovalSql = @"
-                UPDATE Approval
-                SET IsApproved = 1,
-                    ApprovalDate = @ApprovalDate
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1";
-
-            var updateApprovalParameters = new DynamicParameters();
-            updateApprovalParameters.Add("@CRID", crId);
-            updateApprovalParameters.Add("@StepID", securityStepId);
-            updateApprovalParameters.Add("@ApprovalDate", DateTime.Now);
-
-            await Task.Run(() => _connectionService.ExecuteWithPara(updateApprovalSql, updateApprovalParameters));
-
-            // 2. Find who the Division Head Approval step was originally assigned to
-            //    (i.e. the approver who handed this CR to Security in the first place)
-            const string getDeptHeadAssignedToSql = @"
-                SELECT TOP 1 AssignedTo
-                FROM [CRManagementDB].[dbo].[Approval]
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1
-                ORDER BY AssignedDate DESC";
-
-            var deptHeadAssignedToObj = _connectionService.ExecuteScalar(
-                getDeptHeadAssignedToSql, new { CRID = crId, StepID = deptHeadStepId });
-
-            if (deptHeadAssignedToObj == null || deptHeadAssignedToObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Could not determine the Division Head Approval assignee for this Change Request.");
-            }
-
-            string departmentHeadAssignedTo = deptHeadAssignedToObj.ToString()!;
-
-            const string insertDeptHeadStepSql = @"
-                INSERT INTO Approval
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
-
-            var insertParameters = new DynamicParameters();
-            insertParameters.Add("@CRID", crId);
-            insertParameters.Add("@StepID", deptHeadStepId);
-            insertParameters.Add("@AssignedBy", empId);
-            insertParameters.Add("@AssignedTo", departmentHeadAssignedTo);
-            insertParameters.Add("@AssignedDate", DateTime.Now);
-            insertParameters.Add("@Active", true);
-
-            await Task.Run(() => _connectionService.ExecuteWithPara(insertDeptHeadStepSql, insertParameters));
-        }
-
         public async Task<bool> RejectAssessmentSecurityAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
 
-            // Reject requires a reason so the Developer knows what to fix
             var rejectReason = collection["RejectReason"].ToString().Trim();
             if (string.IsNullOrWhiteSpace(rejectReason))
                 throw new ArgumentException("Please provide a reason for rejecting this assessment.");
 
-            const string targetStatusName = "SecurityRejected";
+            if (string.IsNullOrWhiteSpace(empId))
+                throw new ArgumentException("Employee number is required.");
 
-            const string getStatusIdSql = @"
-                SELECT TOP 1 StatusID
-                FROM [CRManagementDB].[dbo].[CRStatus]
-                WHERE StatusName = @StatusName AND Active = 1";
+            empId = empId.Trim();
 
-            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = targetStatusName });
+            const string sql = @"
+                DECLARE @SecurityStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Security' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            if (statusIdObj == null || statusIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException($"Status '{targetStatusName}' was not found or is inactive in CRStatus table.");
-            }
+                DECLARE @DevDocStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Developer Documentation' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            int targetStatusId = Convert.ToInt32(statusIdObj);
+                DECLARE @SecurityRejectedStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = 'SecurityRejected' AND Active = 1);
 
-            const string updateCrSql = @"
-                UPDATE ChangeRequest
-                SET StatusID = @StatusID
-                WHERE CRID = @CRID
-                  AND Active = 1";
+                IF @SecurityStepID IS NULL OR @DevDocStepID IS NULL OR @SecurityRejectedStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            var crParameters = new DynamicParameters();
-            crParameters.Add("@StatusID", targetStatusId);
-            crParameters.Add("@CRID", crId);
+                DECLARE @DevDocAssignedTo NVARCHAR(200) = (
+                    SELECT TOP 1 AssignedTo FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DevDocStepID AND Active = 1
+                    ORDER BY AssignedDate ASC);
 
-            int rowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
+                IF @DevDocAssignedTo IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            if (rowsAffected <= 0)
-                return false;
+                BEGIN TRANSACTION;
 
-            await UpdateSecurityRejectionStepAsync(crId, empId, rejectReason);
+                UPDATE [CRManagementDB].[dbo].[Approval]
+                SET IsApproved   = 0,
+                    ApprovalDate = @Now,
+                    Comments     = @RejectReason
+                WHERE CRID = @CRID AND StepID = @SecurityStepID AND Active = 1;
 
-            return true;
-        }
-
-        private async Task UpdateSecurityRejectionStepAsync(int crId, string empId, string rejectReason)
-        {
-            // Resolves a StepID by step NAME (never a hard-coded ID)
-            int GetStepId(string stepName)
-            {
-                const string getStepIdSql = @"
-                    SELECT TOP 1 StepID
-                    FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = @StepName
-                      AND Active = 1
-                    ORDER BY StepOrder ASC";
-
-                var obj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = stepName });
-
-                if (obj == null || obj == DBNull.Value)
-                {
-                    throw new InvalidOperationException($"Workflow step '{stepName}' was not found or is inactive.");
-                }
-
-                return Convert.ToInt32(obj);
-            }
-
-            int securityStepId = GetStepId("Security");
-            int devDocStepId = GetStepId("Developer Documentation");
-
-            // 1. Mark the current Security approval row as NOT approved (rejected)
-            //    and record the reason in its Comments column.
-            const string updateApprovalSql = @"
-                UPDATE Approval
-                SET IsApproved = 0,
-                    ApprovalDate = @ApprovalDate,
-                    Comments = @Comments
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1";
-
-            var updateApprovalParameters = new DynamicParameters();
-            updateApprovalParameters.Add("@CRID", crId);
-            updateApprovalParameters.Add("@StepID", securityStepId);
-            updateApprovalParameters.Add("@ApprovalDate", DateTime.Now);
-            updateApprovalParameters.Add("@Comments", rejectReason);
-
-            await Task.Run(() => _connectionService.ExecuteWithPara(updateApprovalSql, updateApprovalParameters));
-
-            // 2. Find who the Developer Documentation step was assigned to,
-            //    so the new row returns to the same person.
-            const string getDevDocAssignedToSql = @"
-                SELECT TOP 1 AssignedTo
-                FROM [CRManagementDB].[dbo].[Approval]
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1
-                ORDER BY AssignedDate ASC"; 
-
-            var devDocAssignedToObj = _connectionService.ExecuteScalar(
-                getDevDocAssignedToSql, new { CRID = crId, StepID = devDocStepId });
-
-            if (devDocAssignedToObj == null || devDocAssignedToObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Could not determine the Developer Documentation assignee for this Change Request.");
-            }
-
-            string devDocAssignedTo = devDocAssignedToObj.ToString()!;
-
-            // 3. Insert ONE new Approval row for the "Developer Documentation" step,
-            //    sending it back to that same assignee.
-            const string insertDevDocStepSql = @"
-                INSERT INTO Approval
+                INSERT INTO [CRManagementDB].[dbo].[Approval]
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
                 VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                    (@CRID, @DevDocStepID, @EmpID, @DevDocAssignedTo, @Now, 1);
 
-            var insertParameters = new DynamicParameters();
-            insertParameters.Add("@CRID", crId);
-            insertParameters.Add("@StepID", devDocStepId);
-            insertParameters.Add("@AssignedBy", empId);
-            insertParameters.Add("@AssignedTo", devDocAssignedTo);
-            insertParameters.Add("@AssignedDate", DateTime.Now);
-            insertParameters.Add("@Active", true);
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET StatusID = @SecurityRejectedStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-            await Task.Run(() => _connectionService.ExecuteWithPara(insertDevDocStepSql, insertParameters));
+                COMMIT TRANSACTION;
+
+                SELECT CAST(1 AS BIT) AS Success;";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@EmpID", empId);
+            parameters.Add("@RejectReason", rejectReason);
+            parameters.Add("@Now", DateTime.Now);
+
+            var success = _connectionService.ExecuteScalar(sql, parameters);
+
+            return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
+
 
         public async Task<bool> CreateTestingAsync(int crId, IFormCollection collection, string userName, string empId)
         {
@@ -2818,10 +2769,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (string.IsNullOrWhiteSpace(testResult))
                 throw new ArgumentException("Please enter the Test Plan and Test Results.");
 
-            // Validate attachments before touching the database
             var files = collection.Files.GetFiles("TestResultFiles");
             var allowedExt = new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt",
-                                     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip" };
+                             ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip" };
             const long maxBytes = 10 * 1024 * 1024;
 
             if (files.Count > 10)
@@ -2840,165 +2790,104 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     throw new ArgumentException($"File is larger than 10 MB: {file.FileName}");
             }
 
-            var targetStatusName = isPass ? "TestingApproved" : "QAReturn";
+            const string targetStatusName = "TestingApproved";
+            const string nextStepName = "Division Head Approval";
 
-            // 1. Resolve target CRStatus
-            const string getStatusIdSql = @"
-                SELECT TOP 1 StatusID
-                FROM [CRManagementDB].[dbo].[CRStatus]
-                WHERE StatusName = @StatusName AND Active = 1";
+            const string sql = @"
+                DECLARE @TestingStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Testing' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = targetStatusName });
+                DECLARE @NextStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = @NextStepName AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            if (statusIdObj == null || statusIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException($"Status '{targetStatusName}' was not found or is inactive in CRStatus table.");
-            }
+                DECLARE @TargetStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = @TargetStatusName AND Active = 1);
 
-            int targetStatusId = Convert.ToInt32(statusIdObj);
+                IF @TestingStepID IS NULL OR @NextStepID IS NULL OR @TargetStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            // 2. Find the pending Testing row (handed over by the developer, not yet tested)
-            const string getPendingTestSql = @"
-                SELECT TOP 1 TestID
-                FROM [CRManagementDB].[dbo].[Testing]
-                WHERE CRID = @CRID
-                  AND Active = 1
-                  AND IsPassed IS NULL
-                ORDER BY TestCycleNumber DESC";
+                DECLARE @TestID INT = (
+                    SELECT TOP 1 TestID FROM [CRManagementDB].[dbo].[Testing]
+                    WHERE CRID = @CRID AND Active = 1 AND IsPassed IS NULL
+                    ORDER BY TestCycleNumber DESC);
 
-            var pendingTestObj = _connectionService.ExecuteScalar(getPendingTestSql, new { CRID = crId });
+                IF @TestID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            if (pendingTestObj == null || pendingTestObj == DBNull.Value)
-            {
-                throw new InvalidOperationException(
-                    "No pending test was found for this Change Request. The developer has not handed it over to QA, or it has already been tested.");
-            }
+                DECLARE @TestingApprovalID INT = (
+                    SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @TestingStepID AND Active = 1
+                    ORDER BY ApprovalID DESC);
 
-            int testId = Convert.ToInt32(pendingTestObj);
+                IF @TestingApprovalID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            // 3. Record the QA result on that row
-            const string updateTestingSql = @"
+                DECLARE @NextAssignedTo NVARCHAR(100) = (
+                    SELECT AssignedBy FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE ApprovalID = @TestingApprovalID);
+
+                IF @NextAssignedTo IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
+
+                BEGIN TRANSACTION;
+
                 UPDATE [CRManagementDB].[dbo].[Testing]
-                SET TestResult  = @TestResult,
-                    TestingDate = @TestingDate,
-                    IsPassed    = @IsPassed,
-                    ReturnedFrom = @ReturnedFrom
-                WHERE TestID = @TestID
-                  AND Active = 1";
+                SET TestResult = @TestResult,
+                    TestingDate = @Now,
+                    IsPassed = @IsPassed,
+                    ReturnedFrom = @EmpId
+                WHERE TestID = @TestID AND Active = 1;
 
-            var updateParams = new DynamicParameters();
-            updateParams.Add("@TestResult", testResult);
-            updateParams.Add("@TestingDate", DateTime.Now);
-            updateParams.Add("@IsPassed", isPass);
-            updateParams.Add("@ReturnedFrom", empId);
-            updateParams.Add("@TestID", testId);
+                UPDATE [CRManagementDB].[dbo].[Approval]
+                SET IsApproved = @IsPassed,
+                    ApprovalDate = @Now
+                WHERE ApprovalID = @TestingApprovalID;
 
-            _connectionService.ExecuteWithPara(updateTestingSql, updateParams);
-
-            // 4. Update the ChangeRequest's status
-            const string updateCrSql = @"
-                UPDATE ChangeRequest
-                SET StatusID = @StatusID
-                WHERE CRID = @CRID
-                  AND Active = 1";
-
-            var crParameters = new DynamicParameters();
-            crParameters.Add("@StatusID", targetStatusId);
-            crParameters.Add("@CRID", crId);
-
-            int rowsAffected = _connectionService.ExecuteWithPara(updateCrSql, crParameters);
-
-            if (rowsAffected <= 0)
-                return false;
-
-            // 5. Create the next approval record
-            const string getStepIdSql = @"
-                SELECT TOP 1 StepID
-                FROM [CRManagementDB].[dbo].[WorkflowStep]
-                WHERE StepName = @StepName
-                  AND Active = 1
-                ORDER BY StepOrder ASC";
-
-            const string insertApprovalSql = @"
                 INSERT INTO [CRManagementDB].[dbo].[Approval]
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
                 VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                    (@CRID, @NextStepID, @EmpId, @NextAssignedTo, @Now, 1);
 
-            if (isPass)
-            {
-                // Test passed: create a new "Division Head Approval" row, assigned to the same
-                // user the original "Division Head Approval" step was assigned to (the division head).
-                var divisionHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET StatusID = @TargetStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-                if (divisionHeadStepIdObj == null || divisionHeadStepIdObj == DBNull.Value)
-                    throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
+                COMMIT TRANSACTION;
 
-                int divisionHeadStepId = Convert.ToInt32(divisionHeadStepIdObj);
+                SELECT CAST(1 AS BIT) AS Success;";
 
-                // AssignedTo of this CR's ORIGINAL (first) "Division Head Approval" row.
-                // This is read BEFORE the new row is inserted below.
-                const string getDivisionHeadAssignedToSql = @"
-                    SELECT TOP 1 AssignedTo
-                    FROM [CRManagementDB].[dbo].[Approval]
-                    WHERE CRID = @CRID
-                      AND StepID = @StepID
-                      AND Active = 1
-                    ORDER BY ApprovalID ASC";
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@EmpId", empId);
+            parameters.Add("@TestResult", testResult);
+            parameters.Add("@IsPassed", isPass);
+            parameters.Add("@NextStepName", nextStepName);
+            parameters.Add("@TargetStatusName", targetStatusName);
+            parameters.Add("@Now", DateTime.Now);
 
-                var divisionHeadAssignedToObj = _connectionService.ExecuteScalar(
-                    getDivisionHeadAssignedToSql, new { CRID = crId, StepID = divisionHeadStepId });
+            var successObj = _connectionService.ExecuteScalar(sql, parameters);
+            bool success = successObj != null && successObj != DBNull.Value && Convert.ToBoolean(successObj);
 
-                if (divisionHeadAssignedToObj == null || divisionHeadAssignedToObj == DBNull.Value)
-                    throw new InvalidOperationException("Could not determine the 'Division Head Approval' assignee for this Change Request.");
+            if (!success)
+                return false;
 
-                var approvalParams = new DynamicParameters();
-                approvalParams.Add("@CRID", crId);
-                approvalParams.Add("@StepID", divisionHeadStepId);
-                approvalParams.Add("@AssignedBy", empId);
-                approvalParams.Add("@AssignedTo", divisionHeadAssignedToObj.ToString());
-                approvalParams.Add("@AssignedDate", DateTime.Now);
-                approvalParams.Add("@Active", true);
-
-                _connectionService.ExecuteWithPara(insertApprovalSql, approvalParams);
-            }
-            else
-            {
-                // Return to the developer: new approval on the developer's step, assigned to that developer
-                var devStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Developer Documentation" });
-
-                if (devStepIdObj == null || devStepIdObj == DBNull.Value)
-                    throw new InvalidOperationException("Workflow step 'Developer Documentation' was not found or is inactive.");
-
-                int devStepId = Convert.ToInt32(devStepIdObj);
-
-                const string getDeveloperSql = @"
-                    SELECT TOP 1 AssignedTo
-                    FROM [CRManagementDB].[dbo].[Approval]
-                    WHERE CRID = @CRID
-                      AND StepID = @StepID
-                      AND Active = 1
-                    ORDER BY ApprovalID ASC";
-
-                var developerObj = _connectionService.ExecuteScalar(getDeveloperSql, new { CRID = crId, StepID = devStepId });
-
-                if (developerObj == null || developerObj == DBNull.Value)
-                    throw new InvalidOperationException("Could not determine the developer assigned to this Change Request.");
-
-                var approvalParams = new DynamicParameters();
-                approvalParams.Add("@CRID", crId);
-                approvalParams.Add("@StepID", devStepId);
-                approvalParams.Add("@AssignedBy", empId);
-                approvalParams.Add("@AssignedTo", developerObj.ToString());
-                approvalParams.Add("@AssignedDate", DateTime.Now);
-                approvalParams.Add("@Active", true);
-
-                _connectionService.ExecuteWithPara(insertApprovalSql, approvalParams);
-            }
-
-            // 6. Save test result attachments (saved for both Pass and Fail).
-            //    Uses the same helpers as the other forms: files go to
-            //    {AttachmentSettings:RootFolder}\{CRID}\ and the DB row gets the "QA Report" AttachmentTypeID.
             await SaveAttachmentGroupAsync(
                 crId,
                 collection,
@@ -3015,190 +2904,65 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (approverId <= 0)
                 throw new ArgumentException("Please select a valid user to assign.");
 
-            // 1. Resolve target CRStatus: TestingApproved (exact match, not LIKE, to
-            //    avoid accidentally matching 'Testing', 'TestingDraft', etc.)
-            const string getStatusIdSql = @"
-                SELECT TOP 1 StatusID
-                FROM [CRManagementDB].[dbo].[CRStatus]
-                WHERE StatusName = @StatusName AND Active = 1";
+            const string sql = @"
+                DECLARE @DeptHeadStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Division Head Approval' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = "TestingApproved" });
+                DECLARE @FinalApprovalStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Final Approval' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            if (statusIdObj == null || statusIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Status 'TestingApproved' was not found or is inactive in CRStatus table.");
-            }
+                DECLARE @TargetStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = 'FinalApprovalPending' AND Active = 1);
 
-            int approvedStatusId = Convert.ToInt32(statusIdObj);
+                IF @DeptHeadStepID IS NULL OR @FinalApprovalStepID IS NULL OR @TargetStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            // 2. Update ChangeRequest StatusID
-            const string updateStatusSql = @"
-                UPDATE ChangeRequest
-                SET StatusID = @StatusID
-                WHERE CRID = @CRID";
+                DECLARE @DeptHeadApprovalID INT = (
+                    SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DeptHeadStepID AND Active = 1 AND IsApproved IS NULL
+                    ORDER BY ApprovalID DESC);
 
-            var statusParameters = new DynamicParameters();
-            statusParameters.Add("@StatusID", approvedStatusId);
-            statusParameters.Add("@CRID", crId);
+                BEGIN TRANSACTION;
 
-            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
+                IF @DeptHeadApprovalID IS NOT NULL
+                BEGIN
+                    UPDATE [CRManagementDB].[dbo].[Approval]
+                    SET IsApproved = 1,
+                        Decision = 'Division Head Approved',
+                        ApprovalDate = @Now
+                    WHERE ApprovalID = @DeptHeadApprovalID;
+                END
 
-            if (statusRowsAffected <= 0)
-                return false;
-
-            const string getStepIdSql = @"
-                SELECT TOP 1 StepID
-                FROM [CRManagementDB].[dbo].[WorkflowStep]
-                WHERE StepName = @StepName
-                  AND Active = 1
-                ORDER BY StepOrder ASC";
-
-            // 3. Mark the existing 'TestingApproval' step's Approval record as approved.
-            var testingApprovalStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Testing" });
-
-            if (testingApprovalStepIdObj == null || testingApprovalStepIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step 'Testing' was not found or is inactive.");
-            }
-
-            int testingApprovalStepId = Convert.ToInt32(testingApprovalStepIdObj);
-
-            const string updateApprovalSql = @"
-                UPDATE Approval
-                SET IsApproved = 1,
-                    ApprovalDate = @ApprovalDate
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1";
-
-            var updateApprovalParameters = new DynamicParameters();
-            updateApprovalParameters.Add("@CRID", crId);
-            updateApprovalParameters.Add("@StepID", testingApprovalStepId);
-            updateApprovalParameters.Add("@ApprovalDate", DateTime.Now);
-
-            await Task.Run(() => _connectionService.ExecuteWithPara(updateApprovalSql, updateApprovalParameters));
-
-            // 3a. Close the latest pending Developer Documentation row for this CR too.
-            // Developer Documentation can have multiple Approval rows over the life of a CR; only the
-            // LATEST still-pending row should be closed here, never a blanket "StepID = X" update.
-            var devDocStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Developer Documentation" });
-
-            if (devDocStepIdObj == null || devDocStepIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step 'Developer Documentation' was not found or is inactive.");
-            }
-
-            int devDocStepId = Convert.ToInt32(devDocStepIdObj);
-
-            const string findLatestDevDocRowSql = @"
-                SELECT TOP (1) ApprovalID
-                FROM Approval
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1
-                  AND IsApproved IS NULL
-                ORDER BY ApprovalID DESC";
-
-            var findDevDocParameters = new DynamicParameters();
-            findDevDocParameters.Add("@CRID", crId);
-            findDevDocParameters.Add("@StepID", devDocStepId);
-
-            var devDocRowTable = _connectionService.ReturnWithPara(findLatestDevDocRowSql, findDevDocParameters);
-
-            if (devDocRowTable != null && devDocRowTable.Rows.Count > 0)
-            {
-                var devDocApprovalId = devDocRowTable.Rows[0].Field<int>("ApprovalID");
-
-                const string closeDevDocRowSql = @"
-                    UPDATE Approval
-                    SET IsApproved   = 1,
-                        ApprovalDate = @ApprovalDate
-                    WHERE ApprovalID = @ApprovalID";
-
-                var closeDevDocParameters = new DynamicParameters();
-                closeDevDocParameters.Add("@ApprovalDate", DateTime.Now);
-                closeDevDocParameters.Add("@ApprovalID", devDocApprovalId);
-
-                await Task.Run(() => _connectionService.ExecuteWithPara(closeDevDocRowSql, closeDevDocParameters));
-            }
-
-            // 3b. Close the latest pending Division Head Approval row for this CR too (e.g. row 990:
-            // a row reopened by InsertDevelopmentApprovalStepAsync to hand the CR back to the approver
-            // after the developer finished, which otherwise stays open - IsApproved NULL - forever once
-            // the CR moves on past this point via Final Approver assignment). Same pattern as 3a: find
-            // only the single latest still-pending row for this step and close exactly that ApprovalID,
-            // never a blanket "StepID = X" update that could re-close an unrelated earlier cycle.
-            var deptHeadStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Division Head Approval" });
-
-            if (deptHeadStepIdObj == null || deptHeadStepIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step 'Division Head Approval' was not found or is inactive.");
-            }
-
-            int deptHeadStepId = Convert.ToInt32(deptHeadStepIdObj);
-
-            const string findLatestDeptHeadRowSql = @"
-                SELECT TOP (1) ApprovalID
-                FROM Approval
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1
-                  AND IsApproved IS NULL
-                ORDER BY ApprovalID DESC";
-
-            var findDeptHeadParameters = new DynamicParameters();
-            findDeptHeadParameters.Add("@CRID", crId);
-            findDeptHeadParameters.Add("@StepID", deptHeadStepId);
-
-            var deptHeadRowTable = _connectionService.ReturnWithPara(findLatestDeptHeadRowSql, findDeptHeadParameters);
-
-            if (deptHeadRowTable != null && deptHeadRowTable.Rows.Count > 0)
-            {
-                var deptHeadApprovalId = deptHeadRowTable.Rows[0].Field<int>("ApprovalID");
-
-                const string closeDeptHeadRowSql = @"
-                    UPDATE Approval
-                    SET IsApproved   = 1,
-                        Decision     = @Decision,
-                        ApprovalDate = @ApprovalDate
-                    WHERE ApprovalID = @ApprovalID";
-
-                var closeDeptHeadParameters = new DynamicParameters();
-                closeDeptHeadParameters.Add("@Decision", "Division Head Approved");
-                closeDeptHeadParameters.Add("@ApprovalDate", DateTime.Now);
-                closeDeptHeadParameters.Add("@ApprovalID", deptHeadApprovalId);
-
-                await Task.Run(() => _connectionService.ExecuteWithPara(closeDeptHeadRowSql, closeDeptHeadParameters));
-            }
-
-            // 4. Fetch the 'Final Approval' StepID for the new assignment row.
-            var finalApprovalStepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Final Approval" });
-
-            if (finalApprovalStepIdObj == null || finalApprovalStepIdObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Workflow step 'Final Approval' was not found or is inactive.");
-            }
-
-            int finalApprovalStepId = Convert.ToInt32(finalApprovalStepIdObj);
-
-            // 5. Insert new assignment record into Approval table for the Final Approval step
-            const string insertNextStepSql = @"
-                INSERT INTO Approval
+                INSERT INTO [CRManagementDB].[dbo].[Approval]
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
                 VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                    (@CRID, @FinalApprovalStepID, @ApprovedByEmpId, @ApproverID, @Now, 1);
 
-            var insertParameters = new DynamicParameters();
-            insertParameters.Add("@CRID", crId);
-            insertParameters.Add("@StepID", finalApprovalStepId);
-            insertParameters.Add("@AssignedBy", approvedByEmpId);
-            insertParameters.Add("@AssignedTo", approverId);
-            insertParameters.Add("@AssignedDate", DateTime.Now);
-            insertParameters.Add("@Active", true);
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET StatusID = @TargetStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-            int nextStepRowsAffected = await Task.Run(() => _connectionService.ExecuteWithPara(insertNextStepSql, insertParameters));
+                COMMIT TRANSACTION;
 
-            return nextStepRowsAffected > 0;
+                SELECT CAST(1 AS BIT) AS Success;";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@ApproverID", approverId);
+            parameters.Add("@ApprovedByEmpId", approvedByEmpId);
+            parameters.Add("@Now", DateTime.Now);
+
+            var successObj = _connectionService.ExecuteScalar(sql, parameters);
+
+            return successObj != null && successObj != DBNull.Value && Convert.ToBoolean(successObj);
         }
         public async Task<bool> AcceptDevAssessment(int crId, string empNo, string securityOfficerId)
         {
@@ -3360,117 +3124,88 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         {
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
+
             if (string.IsNullOrWhiteSpace(empNo))
-                throw new ArgumentException("The logged-in user could not be determined.");
+                throw new ArgumentException("Employee number is required.");
 
-            // ---- 1. StatusID of "AssessmentReturned" ----
-            const string getStatusIdSql = @"
-                SELECT TOP (1) StatusID
-                FROM [CRManagementDB].[dbo].[CRStatus]
-                WHERE StatusName = @StatusName
-                  AND Active = 1";
+            empNo = empNo.Trim();
 
-            var statusLookup = new DynamicParameters();
-            statusLookup.Add("@StatusName", "AssessmentReturned");
+            const string sql = @"
+                DECLARE @DivHeadStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Division Head Approval' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            var statusTable = _connectionService.ReturnWithPara(getStatusIdSql, statusLookup);
-            if (statusTable == null || statusTable.Rows.Count == 0)
-                throw new InvalidOperationException("Status 'AssessmentReturned' was not found or is inactive in the CRStatus table.");
+                DECLARE @DevDocStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Developer Documentation' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            int returnedStatusId = Convert.ToInt32(statusTable.Rows[0]["StatusID"]);
+                DECLARE @AssessmentReturnedStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = 'AssessmentReturned' AND Active = 1);
 
-            // ---- 2. StepID of "Developer Documentation" ----
-            const string getStepIdSql = @"
-                SELECT TOP (1) StepID
-                FROM [CRManagementDB].[dbo].[WorkflowStep]
-                WHERE StepName = @StepName
-                  AND Active = 1
-                ORDER BY StepOrder ASC";
+                IF @DivHeadStepID IS NULL OR @DevDocStepID IS NULL OR @AssessmentReturnedStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            var stepLookup = new DynamicParameters();
-            stepLookup.Add("@StepName", "Developer Documentation");
+                DECLARE @ApprovalID INT = (
+                    SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DivHeadStepID
+                      AND Active = 1 AND IsApproved IS NULL
+                      AND (Decision IS NULL OR Decision = '' OR Decision = 'Pending')
+                      AND (AssignedTo = @EmpNo
+                           OR AssignedTo LIKE @EmpNo + ' - %'
+                           OR AssignedTo LIKE '%\' + @EmpNo)
+                    ORDER BY ApprovalID DESC);
 
-            var stepTable = _connectionService.ReturnWithPara(getStepIdSql, stepLookup);
-            if (stepTable == null || stepTable.Rows.Count == 0)
-                throw new InvalidOperationException("Workflow step 'Developer Documentation' was not found or is inactive.");
+                IF @ApprovalID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            int stepId = Convert.ToInt32(stepTable.Rows[0]["StepID"]);
+                DECLARE @DevUser NVARCHAR(200) = (
+                    SELECT TOP 1 AssignedBy FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE ApprovalID = @ApprovalID);
 
-            // ---- 3. The logged-in user's pending row for this step.
-            //         Its AssignedBy is the developer who submitted, i.e. the previous assignee. ----
-            const string findPendingSql = @"
-                SELECT TOP (1) ApprovalID, AssignedBy
-                FROM Approval
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND AssignedTo = @AssignedTo
-                  AND Active = 1
-                  AND IsApproved IS NULL
-                ORDER BY ApprovalID DESC";
+                IF @DevUser IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            var findParams = new DynamicParameters();
-            findParams.Add("@CRID", crId);
-            findParams.Add("@StepID", stepId);
-            findParams.Add("@AssignedTo", empNo);
+                BEGIN TRANSACTION;
 
-            var pendingTable = _connectionService.ReturnWithPara(findPendingSql, findParams);
-            if (pendingTable == null || pendingTable.Rows.Count == 0)
-                throw new InvalidOperationException(
-                    $"No pending Developer Documentation approval found for CR {crId} and user {empNo}.");
-
-            int pendingApprovalId = Convert.ToInt32(pendingTable.Rows[0]["ApprovalID"]);
-            string previousUser = Convert.ToString(pendingTable.Rows[0]["AssignedBy"]);
-
-            if (string.IsNullOrWhiteSpace(previousUser))
-                throw new InvalidOperationException(
-                    $"The previous assignee for CR {crId} could not be determined.");
-
-            // ---- 4. Update the Change Request status ----
-            const string updateStatusSql = @"
-                UPDATE ChangeRequest
-                SET StatusID = @StatusID
-                WHERE CRID = @CRID";
-
-            var statusParams = new DynamicParameters();
-            statusParams.Add("@StatusID", returnedStatusId);
-            statusParams.Add("@CRID", crId);
-
-            int statusRows = await Task.Run(() => _connectionService.ExecuteWithPara(updateStatusSql, statusParams));
-            if (statusRows <= 0)
-                return false;
-
-            // ---- 5. Close the logged-in user's pending row as Returned ----
-            const string closeRowSql = @"
-                UPDATE Approval
+                UPDATE [CRManagementDB].[dbo].[Approval]
                 SET IsApproved   = 0,
-                    Decision     = @Decision,
-                    ApprovalDate = @ApprovalDate
-                WHERE ApprovalID = @ApprovalID";
+                    Decision     = 'Returned',
+                    ApprovalDate = @Now
+                WHERE ApprovalID = @ApprovalID;
 
-            var closeParams = new DynamicParameters();
-            closeParams.Add("@Decision", "Returned to Developer");
-            closeParams.Add("@ApprovalDate", DateTime.Now);
-            closeParams.Add("@ApprovalID", pendingApprovalId);
-
-            await Task.Run(() => _connectionService.ExecuteWithPara(closeRowSql, closeParams));
-
-            // ---- 6. New row, same step: assigned back to the previous user, assigned by the logged-in user ----
-            const string insertSql = @"
-                INSERT INTO Approval
+                INSERT INTO [CRManagementDB].[dbo].[Approval]
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
                 VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                    (@CRID, @DevDocStepID, @EmpNo, @DevUser, @Now, 1);
 
-            var insertParams = new DynamicParameters();
-            insertParams.Add("@CRID", crId);
-            insertParams.Add("@StepID", stepId);
-            insertParams.Add("@AssignedBy", empNo);
-            insertParams.Add("@AssignedTo", previousUser);
-            insertParams.Add("@AssignedDate", DateTime.Now);
-            insertParams.Add("@Active", true);
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET StatusID = @AssessmentReturnedStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-            int insertRows = await Task.Run(() => _connectionService.ExecuteWithPara(insertSql, insertParams));
-            return insertRows > 0;
+                COMMIT TRANSACTION;
+
+                SELECT CAST(1 AS BIT) AS Success;";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@EmpNo", empNo);
+            parameters.Add("@Now", DateTime.Now);
+
+            var success = _connectionService.ExecuteScalar(sql, parameters);
+
+            return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
 
         public async Task<bool> ApproveToDevelopmentAsync(int crId, string empNo)
@@ -3478,95 +3213,85 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
 
-            // Resolves a StepID by step NAME (never a hard-coded ID)
-            int GetStepId(string stepName)
-            {
-                const string getStepIdSql = @"
-                    SELECT TOP 1 StepID
-                    FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = @StepName
-                      AND Active = 1
-                    ORDER BY StepOrder ASC";
+            const string sql = @"
+                DECLARE @DeptHeadStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Division Head Approval' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-                var obj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = stepName });
+                DECLARE @DevDocStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Developer Documentation' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-                if (obj == null || obj == DBNull.Value)
-                {
-                    throw new InvalidOperationException($"Workflow step '{stepName}' was not found or is inactive.");
-                }
+                DECLARE @DevImplStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Developer Implementation' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-                return Convert.ToInt32(obj);
-            }
+                DECLARE @DevelopmentApprovedStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = 'DevelopmentApproved' AND Active = 1);
 
-            int deptHeadStepId = GetStepId("Division Head Approval");
-            int devDocStepId = GetStepId("Developer Documentation");
-            int devImplStepId = GetStepId("Developer Implementation");
+                IF @DeptHeadStepID IS NULL OR @DevDocStepID IS NULL OR @DevImplStepID IS NULL OR @DevelopmentApprovedStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            // 1. Mark the LATEST Division Head Approval row as approved (the pending row created
-            //    once Security approved, handing the CR back to the approver).
-            const string updateDeptHeadSql = @"
-                UPDATE Approval
+                DECLARE @ApprovalID INT = (
+                    SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DeptHeadStepID AND Active = 1
+                    ORDER BY ApprovalID DESC);
+
+                IF @ApprovalID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
+
+                DECLARE @DeveloperUser NVARCHAR(100) = (
+                    SELECT TOP 1 AssignedTo FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DevDocStepID AND Active = 1
+                    ORDER BY ApprovalID ASC);
+
+                IF @DeveloperUser IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
+
+                BEGIN TRANSACTION;
+
+                UPDATE [CRManagementDB].[dbo].[Approval]
                 SET IsApproved = 1,
-                    ApprovalDate = @ApprovalDate,
+                    ApprovalDate = @Now,
                     Decision = 'Approved to Development'
-                WHERE ApprovalID = (
-                    SELECT TOP 1 ApprovalID
-                    FROM [CRManagementDB].[dbo].[Approval]
-                    WHERE CRID = @CRID
-                      AND StepID = @StepID
-                      AND Active = 1
-                    ORDER BY ApprovalID DESC
-                )";
+                WHERE ApprovalID = @ApprovalID;
 
-            var updateDeptHeadParameters = new DynamicParameters();
-            updateDeptHeadParameters.Add("@CRID", crId);
-            updateDeptHeadParameters.Add("@StepID", deptHeadStepId);
-            updateDeptHeadParameters.Add("@ApprovalDate", DateTime.Now);
-
-            int deptHeadRowsAffected = _connectionService.ExecuteWithPara(updateDeptHeadSql, updateDeptHeadParameters);
-
-            if (deptHeadRowsAffected <= 0)
-                return false;
-
-            // 2. Find the developer: AssignedTo of the FIRST "Developer Documentation" row for this CR
-            const string getDeveloperSql = @"
-                SELECT TOP 1 AssignedTo
-                FROM [CRManagementDB].[dbo].[Approval]
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1
-                ORDER BY ApprovalID ASC";
-
-            var developerObj = _connectionService.ExecuteScalar(
-                getDeveloperSql, new { CRID = crId, StepID = devDocStepId });
-
-            if (developerObj == null || developerObj == DBNull.Value)
-            {
-                throw new InvalidOperationException("Could not determine the Developer Documentation assignee for this Change Request.");
-            }
-
-            string developerUser = developerObj.ToString()!;
-
-            // 3. Insert the new Approval row for the "Developer Implementation" step, assigned to
-            //    the same developer who owned Developer Documentation.
-            const string insertDevImplSql = @"
-                INSERT INTO Approval
+                INSERT INTO [CRManagementDB].[dbo].[Approval]
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
                 VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                    (@CRID, @DevImplStepID, @EmpNo, @DeveloperUser, @Now, 1);
 
-            var insertParameters = new DynamicParameters();
-            insertParameters.Add("@CRID", crId);
-            insertParameters.Add("@StepID", devImplStepId);
-            insertParameters.Add("@AssignedBy", empNo);
-            insertParameters.Add("@AssignedTo", developerUser);
-            insertParameters.Add("@AssignedDate", DateTime.Now);
-            insertParameters.Add("@Active", true);
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET StatusID = @DevelopmentApprovedStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-            int insertedRows = _connectionService.ExecuteWithPara(insertDevImplSql, insertParameters);
+                COMMIT TRANSACTION;
 
-            return insertedRows > 0;
+                SELECT CAST(1 AS BIT) AS Success;";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@EmpNo", empNo);
+            parameters.Add("@Now", DateTime.Now);
+
+            var success = _connectionService.ExecuteScalar(sql, parameters);
+
+            return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
+
         public async Task<bool> ProceedToDevelopmentAsync(int crId, string uatLink, string empNo)
         {
             if (crId <= 0)
@@ -3580,136 +3305,66 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             uatLink = uatLink.Trim();
 
-            // 1. Resolve the "Developer Documentation" StepID by NAME
-            const string getStepIdSql = @"
-                SELECT TOP 1 StepID
-                FROM [CRManagementDB].[dbo].[WorkflowStep]
-                WHERE StepName = @StepName
-                  AND Active = 1
-                ORDER BY StepOrder ASC";
+            const string sql = @"
+                DECLARE @DevImplStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Developer Implementation' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql, new { StepName = "Developer Documentation" });
+                DECLARE @DevReturnStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = 'DevReturn' AND Active = 1);
 
-            if (stepIdObj == null || stepIdObj == DBNull.Value)
-                throw new InvalidOperationException("Workflow step 'Developer Documentation' was not found or is inactive.");
+                IF @DevImplStepID IS NULL OR @DevReturnStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            int developerDocStepId = Convert.ToInt32(stepIdObj);
+                DECLARE @ApprovalID INT = (
+                    SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DevImplStepID AND AssignedTo = @EmpNo
+                      AND IsApproved IS NULL AND Active = 1
+                    ORDER BY ApprovalID DESC);
 
-            // 2. Resolve the "DevReturn" StatusID from CRStatus BEFORE changing anything
-            const string getStatusIdSql = @"
-                SELECT TOP 1 StatusID
-                FROM [CRManagementDB].[dbo].[CRStatus]
-                WHERE StatusName = @StatusName
-                  AND Active = 1";
+                IF @ApprovalID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = "DevReturn" });
+                BEGIN TRANSACTION;
 
-            if (statusIdObj == null || statusIdObj == DBNull.Value)
-                throw new InvalidOperationException("Status 'DevReturn' was not found or is inactive in CRStatus table.");
-
-            int devReturnStatusId = Convert.ToInt32(statusIdObj);
-
-            // 3. Find the CURRENT pending row for this CR + step assigned to the logged-in user
-            const string getCurrentApprovalSql = @"
-                SELECT TOP 1 ApprovalID, AssignedBy
-                FROM [CRManagementDB].[dbo].[Approval]
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND AssignedTo = @EmpNo
-                  AND IsApproved IS NULL
-                  AND Active = 1
-                ORDER BY ApprovalID DESC";
-
-            var currentParams = new DynamicParameters();
-            currentParams.Add("@CRID", crId);
-            currentParams.Add("@StepID", developerDocStepId);
-            currentParams.Add("@EmpNo", empNo);
-
-            var currentTable = _connectionService.ReturnWithPara2(getCurrentApprovalSql, currentParams);
-
-            if (currentTable == null || currentTable.Rows.Count == 0)
-                return false; // nothing pending for this user on this step
-
-            int currentApprovalId = Convert.ToInt32(currentTable.Rows[0]["ApprovalID"]);
-            var previousAssignedByObj = currentTable.Rows[0]["AssignedBy"];
-
-            if (previousAssignedByObj == null || previousAssignedByObj == DBNull.Value)
-                throw new InvalidOperationException("Could not determine who assigned this Change Request.");
-
-            string previousAssignedBy = previousAssignedByObj.ToString()!;
-
-            // 4. Approve the current record and set the approval date
-            const string updateApprovalSql = @"
-                UPDATE Approval
+                UPDATE [CRManagementDB].[dbo].[Approval]
                 SET IsApproved = 1,
-                    ApprovalDate = @ApprovalDate,
-                    Comments = @Comments
-                WHERE ApprovalID = @ApprovalID";
+                    ApprovalDate = @Now,
+                    Comments = 'UAT Link Uploaded'
+                WHERE ApprovalID = @ApprovalID;
 
-            var updateParameters = new DynamicParameters();
-            updateParameters.Add("@ApprovalDate", DateTime.Now);
-            updateParameters.Add("@Comments", "UAT Link Uploaded");
-            updateParameters.Add("@ApprovalID", currentApprovalId);
-
-            int updatedRows = _connectionService.ExecuteWithPara(updateApprovalSql, updateParameters);
-
-            if (updatedRows <= 0)
-                return false;
-
-            //// 5. Insert the new Approval record: AssignedBy = me, AssignedTo = the previous AssignedBy
-            //const string insertApprovalSql = @"
-            //    INSERT INTO Approval
-            //        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-            //    VALUES
-            //        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
-
-            //var insertApprovalParameters = new DynamicParameters();
-            //insertApprovalParameters.Add("@CRID", crId);
-            //insertApprovalParameters.Add("@StepID", developerDocStepId);
-            //insertApprovalParameters.Add("@AssignedBy", empNo);
-            //insertApprovalParameters.Add("@AssignedTo", previousAssignedBy);
-            //insertApprovalParameters.Add("@AssignedDate", DateTime.Now);
-            //insertApprovalParameters.Add("@Active", true);
-
-            //int approvalInserted = _connectionService.ExecuteWithPara(insertApprovalSql, insertApprovalParameters);
-
-            //if (approvalInserted <= 0)
-            //    return false;
-
-            // 6. Insert the Testing record: cycle number + UAT link, Active = 1, everything else NULL
-            //    Cycle = next number for this CR (the first time this is 1)
-            const string insertTestingSql = @"
                 INSERT INTO [CRManagementDB].[dbo].[Testing]
                     (CRID, TestCycleNumber, TestResult, UATLink, TestingDate, Active, IsPassed, ReturnedFrom)
                 VALUES
                     (@CRID,
-                     (SELECT ISNULL(MAX(TestCycleNumber), 0) + 1
-                      FROM [CRManagementDB].[dbo].[Testing]
-                      WHERE CRID = @CRID),
-                     NULL, @UATLink, NULL, 1, NULL, NULL)";
+                     (SELECT ISNULL(MAX(TestCycleNumber), 0) + 1 FROM [CRManagementDB].[dbo].[Testing] WHERE CRID = @CRID),
+                     NULL, @UATLink, NULL, 1, NULL, NULL);
 
-            var testingParameters = new DynamicParameters();
-            testingParameters.Add("@CRID", crId);
-            testingParameters.Add("@UATLink", uatLink);
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET StatusID = @DevReturnStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-            int testingInserted = _connectionService.ExecuteWithPara(insertTestingSql, testingParameters);
+                COMMIT TRANSACTION;
 
-            if (testingInserted <= 0)
-                return false;
+                SELECT CAST(1 AS BIT) AS Success;";
 
-            // 7. Update the Change Request status to DevReturn
-            const string updateStatusSql = @"
-                UPDATE ChangeRequest
-                SET StatusID = @StatusID
-                WHERE CRID = @CRID";
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@EmpNo", empNo);
+            parameters.Add("@UATLink", uatLink);
+            parameters.Add("@Now", DateTime.Now);
 
-            var statusParameters = new DynamicParameters();
-            statusParameters.Add("@StatusID", devReturnStatusId);
-            statusParameters.Add("@CRID", crId);
+            var success = _connectionService.ExecuteScalar(sql, parameters);
 
-            int statusRowsAffected = _connectionService.ExecuteWithPara(updateStatusSql, statusParameters);
-
-            return statusRowsAffected > 0;
+            return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
 
 
@@ -3886,185 +3541,101 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
 
-            // Keeps only the employee number: "DOMAIN\4514" or "4514 - Name" -> "4514"
-            static string CleanId(string? v)
-            {
-                v = (v ?? string.Empty).Trim();
-                var slash = v.LastIndexOf('\\');
-                if (slash >= 0) v = v.Substring(slash + 1);
-                var dash = v.IndexOf(" - ", StringComparison.Ordinal);
-                if (dash >= 0) v = v.Substring(0, dash);
-                return v.Trim();
-            }
-
-            empNo = CleanId(empNo);
-
             if (string.IsNullOrWhiteSpace(empNo))
-                throw new ArgumentException("The logged-in user could not be determined.");
+                throw new ArgumentException("Employee number is required.");
 
-            // NOTE: 'finalApprover' is no longer used here. The Final Approver is the logged-in user (empNo).
-            // You can remove this parameter from the interface and the controller call when convenient.
+            empNo = empNo.Trim();
 
-            // ---- 1. StatusID of "FinalApproved" ----
-            const string getStatusIdSql = @"
-                SELECT TOP (1) StatusID
-                FROM [CRManagementDB].[dbo].[CRStatus]
-                WHERE StatusName = @StatusName
-                  AND Active = 1";
+            const string sql = @"
+                DECLARE @FinalApprovalStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Final Approval' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            var statusLookup = new DynamicParameters();
-            statusLookup.Add("@StatusName", "FinalApproved");
+                DECLARE @DevDocStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Developer Documentation' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            var statusTable = _connectionService.ReturnWithPara(getStatusIdSql, statusLookup);
-            if (statusTable == null || statusTable.Rows.Count == 0)
-                throw new InvalidOperationException(
-                    "Status 'FinalApproved' was not found or is inactive in the CRStatus table.");
+                DECLARE @ReleaseClosureStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Release Closure' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            int finalApprovedStatusId = Convert.ToInt32(statusTable.Rows[0]["StatusID"]);
+                DECLARE @FinalApprovedStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = 'FinalApproved' AND Active = 1);
 
-            // ---- 2. StepIDs by NAME (exact name first, then a LIKE fallback) ----
-            int GetStepId(string stepName)
-            {
-                const string sql = @"
-                    SELECT TOP (1) StepID
-                    FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE Active = 1
-                      AND (StepName = @StepName OR StepName LIKE @StepLike)
-                    ORDER BY CASE WHEN StepName = @StepName THEN 0 ELSE 1 END, StepOrder ASC";
+                IF @FinalApprovalStepID IS NULL OR @DevDocStepID IS NULL
+                   OR @ReleaseClosureStepID IS NULL OR @FinalApprovedStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-                var p = new DynamicParameters();
-                p.Add("@StepName", stepName);
-                p.Add("@StepLike", "%" + stepName + "%");
+                DECLARE @ApprovalID INT = (
+                    SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @FinalApprovalStepID
+                      AND Active = 1 AND IsApproved IS NULL
+                      AND (Decision IS NULL OR Decision = '' OR Decision = 'Pending')
+                      AND (AssignedTo = @EmpNo
+                           OR AssignedTo LIKE @EmpNo + ' - %'
+                           OR AssignedTo LIKE '%\' + @EmpNo)
+                    ORDER BY ApprovalID DESC);
 
-                var table = _connectionService.ReturnWithPara(sql, p);
-                if (table == null || table.Rows.Count == 0)
-                    throw new InvalidOperationException($"Workflow step '{stepName}' was not found or is inactive.");
+                IF @ApprovalID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-                return Convert.ToInt32(table.Rows[0]["StepID"]);
-            }
+                DECLARE @ReleaseClosureUser NVARCHAR(200) = (
+                    SELECT TOP 1 AssignedTo FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DevDocStepID AND Active = 1
+                    ORDER BY ApprovalID ASC);
 
-            int finalApprovalStepId = GetStepId("Final Approval");
-            int developerDocStepId = GetStepId("Developer Documentation");
-            int releaseClosureStepId = GetStepId("Release Closure");
+                IF @ReleaseClosureUser IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            // ---- 3. The logged-in user's pending Final Approval row ----
-            const string findPendingSql = @"
-                SELECT TOP (1) ApprovalID
-                FROM Approval
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1
-                  AND IsApproved IS NULL
-                  AND (Decision IS NULL OR Decision = '' OR Decision = 'Pending')
-                  AND (   AssignedTo = @AssignedTo
-                       OR AssignedTo LIKE @AssignedTo + ' - %'
-                       OR AssignedTo LIKE '%\' + @AssignedTo)
-                ORDER BY ApprovalID DESC";
+                BEGIN TRANSACTION;
 
-            var findParams = new DynamicParameters();
-            findParams.Add("@CRID", crId);
-            findParams.Add("@StepID", finalApprovalStepId);
-            findParams.Add("@AssignedTo", empNo);
-
-            var pendingTable = _connectionService.ReturnWithPara(findPendingSql, findParams);
-            if (pendingTable == null || pendingTable.Rows.Count == 0)
-                throw new InvalidOperationException(
-                    $"No pending Final Approval found for CR {crId} and user {empNo}.");
-
-            int pendingApprovalId = Convert.ToInt32(pendingTable.Rows[0]["ApprovalID"]);
-
-            // ---- 4. Release Closure owner = AssignedTo of the FIRST Developer Documentation record ----
-            const string firstDevDocSql = @"
-                SELECT TOP (1) AssignedTo
-                FROM Approval
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1
-                ORDER BY ApprovalID ASC";
-
-            var devDocParams = new DynamicParameters();
-            devDocParams.Add("@CRID", crId);
-            devDocParams.Add("@StepID", developerDocStepId);
-
-            var devDocTable = _connectionService.ReturnWithPara(firstDevDocSql, devDocParams);
-            if (devDocTable == null || devDocTable.Rows.Count == 0)
-                throw new InvalidOperationException(
-                    $"No Developer Documentation record was found for CR {crId}.");
-
-            string releaseClosureUser = CleanId(Convert.ToString(devDocTable.Rows[0]["AssignedTo"]));
-            if (string.IsNullOrWhiteSpace(releaseClosureUser))
-                throw new InvalidOperationException(
-                    $"The user for the Release Closure step of CR {crId} could not be determined.");
-
-            // ---- 5. Update the Change Request status to FinalApproved ----
-            const string updateStatusSql = @"
-                UPDATE ChangeRequest
-                SET StatusID = @StatusID
-                WHERE CRID = @CRID";
-
-            var statusParams = new DynamicParameters();
-            statusParams.Add("@StatusID", finalApprovedStatusId);
-            statusParams.Add("@CRID", crId);
-
-            int statusRows = await Task.Run(() => _connectionService.ExecuteWithPara(updateStatusSql, statusParams));
-            if (statusRows <= 0)
-                return false;
-
-            // ---- 6. Close the Final Approval row: IsApproved = 1 + approval date/time ----
-            const string closeRowSql = @"
-                UPDATE Approval
+                UPDATE [CRManagementDB].[dbo].[Approval]
                 SET IsApproved   = 1,
-                    Decision     = @Decision,
-                    ApprovalDate = @ApprovalDate
-                WHERE ApprovalID = @ApprovalID";
+                    Decision     = 'Final Approved',
+                    ApprovalDate = @Now
+                WHERE ApprovalID = @ApprovalID;
 
-            var closeParams = new DynamicParameters();
-            closeParams.Add("@Decision", "Final Approved");
-            closeParams.Add("@ApprovalDate", DateTime.Now);
-            closeParams.Add("@ApprovalID", pendingApprovalId);
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET StatusID = @FinalApprovedStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-            await Task.Run(() => _connectionService.ExecuteWithPara(closeRowSql, closeParams));
-
-            // ---- 7. Insert the Release Closure row (skip if one is already pending for that user) ----
-            const string existsSql = @"
-                SELECT TOP (1) ApprovalID
-                FROM Approval
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND AssignedTo = @AssignedTo
-                  AND Active = 1
-                  AND IsApproved IS NULL";
-
-            var existsParams = new DynamicParameters();
-            existsParams.Add("@CRID", crId);
-            existsParams.Add("@StepID", releaseClosureStepId);
-            existsParams.Add("@AssignedTo", releaseClosureUser);
-
-            var existsTable = _connectionService.ReturnWithPara(existsSql, existsParams);
-            bool releaseRowExists = existsTable != null && existsTable.Rows.Count > 0;
-
-            if (!releaseRowExists)
-            {
-                const string insertSql = @"
-                    INSERT INTO Approval
+                IF NOT EXISTS (
+                    SELECT 1 FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @ReleaseClosureStepID
+                      AND AssignedTo = @ReleaseClosureUser
+                      AND Active = 1 AND IsApproved IS NULL)
+                BEGIN
+                    INSERT INTO [CRManagementDB].[dbo].[Approval]
                         (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
                     VALUES
-                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active)";
+                        (@CRID, @ReleaseClosureStepID, @EmpNo, @ReleaseClosureUser, @Now, 1);
+                END
 
-                var insertParams = new DynamicParameters();
-                insertParams.Add("@CRID", crId);
-                insertParams.Add("@StepID", releaseClosureStepId);
-                insertParams.Add("@AssignedBy", empNo);
-                insertParams.Add("@AssignedTo", releaseClosureUser);
-                insertParams.Add("@AssignedDate", DateTime.Now);
-                insertParams.Add("@Active", true);
+                COMMIT TRANSACTION;
 
-                int insertRows = await Task.Run(() => _connectionService.ExecuteWithPara(insertSql, insertParams));
-                if (insertRows <= 0)
-                    throw new InvalidOperationException("The Release Closure approval row could not be created.");
-            }
+                SELECT CAST(1 AS BIT) AS Success;";
 
-            return true;
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@EmpNo", empNo);
+            parameters.Add("@Now", DateTime.Now);
+
+            var success = _connectionService.ExecuteScalar(sql, parameters);
+
+            return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
         public async Task<bool> SubmitLiveLink(int crId, string liveLink, string empNo)
         {
@@ -4079,141 +3650,89 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                 throw new ArgumentException("Live link must be a valid http/https URL.");
 
-            // Keeps only the employee number: "DOMAIN\4514" or "4514 - Name" -> "4514"
-            static string CleanId(string? v)
-            {
-                v = (v ?? string.Empty).Trim();
-                var slash = v.LastIndexOf('\\');
-                if (slash >= 0) v = v.Substring(slash + 1);
-                var dash = v.IndexOf(" - ", StringComparison.Ordinal);
-                if (dash >= 0) v = v.Substring(0, dash);
-                return v.Trim();
-            }
-
-            empNo = CleanId(empNo);
             if (string.IsNullOrWhiteSpace(empNo))
-                throw new ArgumentException("The logged-in user could not be determined.");
+                throw new ArgumentException("Employee number is required.");
 
-            // ---- 1. StepID of "Release Closure" ----
-            const string stepSql = @"
-                SELECT TOP (1) StepID
-                FROM [CRManagementDB].[dbo].[WorkflowStep]
-                WHERE Active = 1
-                  AND (StepName = @StepName OR StepName LIKE @StepLike)
-                ORDER BY CASE WHEN StepName = @StepName THEN 0 ELSE 1 END, StepOrder ASC";
+            empNo = empNo.Trim();
 
-            var stepParams = new DynamicParameters();
-            stepParams.Add("@StepName", "Release Closure");
-            stepParams.Add("@StepLike", "%Release Closure%");
+            const string sql = @"
+                DECLARE @ReleaseClosureStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Release Closure' AND Active = 1
+                    ORDER BY StepOrder ASC);
 
-            var stepTable = _connectionService.ReturnWithPara(stepSql, stepParams);
-            if (stepTable == null || stepTable.Rows.Count == 0)
-                throw new InvalidOperationException("Workflow step 'Release Closure' was not found or is inactive.");
+                DECLARE @DeployedStatusID INT = (
+                    SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = 'Deployed' AND Active = 1);
 
-            int releaseClosureStepId = Convert.ToInt32(stepTable.Rows[0]["StepID"]);
+                IF @ReleaseClosureStepID IS NULL OR @DeployedStatusID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            // ---- 2. The logged-in user's pending Release Closure row ----
-            const string findPendingSql = @"
-                SELECT TOP (1) ApprovalID
-                FROM Approval
-                WHERE CRID = @CRID
-                  AND StepID = @StepID
-                  AND Active = 1
-                  AND IsApproved IS NULL
-                  AND (Decision IS NULL OR Decision = '' OR Decision = 'Pending')
-                  AND (   AssignedTo = @AssignedTo
-                       OR AssignedTo LIKE @AssignedTo + ' - %'
-                       OR AssignedTo LIKE '%\' + @AssignedTo)
-                ORDER BY ApprovalID DESC";
+                DECLARE @ApprovalID INT = (
+                    SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @ReleaseClosureStepID
+                      AND Active = 1 AND IsApproved IS NULL
+                      AND (Decision IS NULL OR Decision = '' OR Decision = 'Pending')
+                      AND (AssignedTo = @EmpNo
+                           OR AssignedTo LIKE @EmpNo + ' - %'
+                           OR AssignedTo LIKE '%\' + @EmpNo)
+                    ORDER BY ApprovalID DESC);
 
-            var findParams = new DynamicParameters();
-            findParams.Add("@CRID", crId);
-            findParams.Add("@StepID", releaseClosureStepId);
-            findParams.Add("@AssignedTo", empNo);
+                IF @ApprovalID IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
 
-            var pendingTable = _connectionService.ReturnWithPara(findPendingSql, findParams);
-            if (pendingTable == null || pendingTable.Rows.Count == 0)
-                throw new InvalidOperationException(
-                    $"No pending Release Closure approval found for CR {crId} and user {empNo}.");
+                BEGIN TRANSACTION;
 
-            int pendingApprovalId = Convert.ToInt32(pendingTable.Rows[0]["ApprovalID"]);
+                DECLARE @DeploymentID INT = (
+                    SELECT TOP 1 DeploymentID FROM [CRManagementDB].[dbo].[Deployment]
+                    WHERE CRID = @CRID AND Active = 1
+                    ORDER BY DeploymentID DESC);
 
-            // ---- 3. Save the live link in the Deployment table.
-            //         Done BEFORE closing the approval: if this fails, the approval stays pending and can be retried. ----
-            const string findDeploymentSql = @"
-                SELECT TOP (1) DeploymentID
-                FROM [CRManagementDB].[dbo].[Deployment]
-                WHERE CRID = @CRID
-                  AND Active = 1
-                ORDER BY DeploymentID DESC";
-
-            var depFind = new DynamicParameters();
-            depFind.Add("@CRID", crId);
-
-            var depTable = _connectionService.ReturnWithPara(findDeploymentSql, depFind);
-
-            if (depTable != null && depTable.Rows.Count > 0)
-            {
-                // Deployment record exists -> update it with the live link
-                int deploymentId = Convert.ToInt32(depTable.Rows[0]["DeploymentID"]);
-
-                const string updateDepSql = @"
+                IF @DeploymentID IS NOT NULL
+                BEGIN
                     UPDATE [CRManagementDB].[dbo].[Deployment]
                     SET LiveLink       = @LiveLink,
-                        DeploymentDate = @DeploymentDate
-                    WHERE DeploymentID = @DeploymentID";
-
-                var depUpdate = new DynamicParameters();
-                depUpdate.Add("@LiveLink", liveLink);
-                depUpdate.Add("@DeploymentDate", DateTime.Now);
-                depUpdate.Add("@DeploymentID", deploymentId);
-
-                int depRows = await Task.Run(() => _connectionService.ExecuteWithPara(updateDepSql, depUpdate));
-                if (depRows <= 0)
-                    throw new InvalidOperationException("The live link could not be saved to the Deployment record.");
-            }
-            else
-            {
-                // No deployment record yet -> insert one with the live link
-                const string insertDepSql = @"
+                        DeploymentDate = @Now
+                    WHERE DeploymentID = @DeploymentID;
+                END
+                ELSE
+                BEGIN
                     INSERT INTO [CRManagementDB].[dbo].[Deployment]
                         (CRID, LiveLink, DeploymentDate, DeploymentStatus, Active)
                     VALUES
-                        (@CRID, @LiveLink, @DeploymentDate, @DeploymentStatus, @Active)";
+                        (@CRID, @LiveLink, @Now, 'Deployed', 1);
+                END
 
-                var depInsert = new DynamicParameters();
-                depInsert.Add("@CRID", crId);
-                depInsert.Add("@LiveLink", liveLink);
-                depInsert.Add("@DeploymentDate", DateTime.Now);
-                depInsert.Add("@DeploymentStatus", "Deployed");
-                depInsert.Add("@Active", true);
-
-                int depRows = await Task.Run(() => _connectionService.ExecuteWithPara(insertDepSql, depInsert));
-                if (depRows <= 0)
-                    throw new InvalidOperationException("The Deployment record could not be created.");
-            }
-
-            // ---- 4. Close the Release Closure row: IsApproved = 1 + approval date/time ----
-            const string closeRowSql = @"
-                UPDATE Approval
+                UPDATE [CRManagementDB].[dbo].[Approval]
                 SET IsApproved   = 1,
-                    Decision     = @Decision,
-                    ApprovalDate = @ApprovalDate
-                WHERE ApprovalID = @ApprovalID
-                  AND IsApproved IS NULL";
+                    Decision     = 'Approved',
+                    ApprovalDate = @Now
+                WHERE ApprovalID = @ApprovalID;
 
-            var closeParams = new DynamicParameters();
-            closeParams.Add("@Decision", "Approved");
-            closeParams.Add("@ApprovalDate", DateTime.Now);
-            closeParams.Add("@ApprovalID", pendingApprovalId);
+                UPDATE [CRManagementDB].[dbo].[ChangeRequest]
+                SET StatusID = @DeployedStatusID
+                WHERE CRID = @CRID AND Active = 1;
 
-            int closeRows = await Task.Run(() => _connectionService.ExecuteWithPara(closeRowSql, closeParams));
-            if (closeRows <= 0)
-                throw new InvalidOperationException("The Release Closure approval could not be updated.");
+                COMMIT TRANSACTION;
 
-            return true;
+                SELECT CAST(1 AS BIT) AS Success;";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@CRID", crId);
+            parameters.Add("@EmpNo", empNo);
+            parameters.Add("@LiveLink", liveLink);
+            parameters.Add("@Now", DateTime.Now);
+
+            var success = _connectionService.ExecuteScalar(sql, parameters);
+
+            return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
-
 
         public async Task<DashboardMetrics> GetDashboardMetricsAsync()
         {
