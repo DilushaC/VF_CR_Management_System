@@ -1189,7 +1189,7 @@
                         id="btn-fail"
                         class="btn"
                         data-status="3"
-                        disabled>
+                        >
                     <i class="ri-arrow-go-back-line me-1"></i>Test Failed
                 </button>
                 <button type="button"
@@ -1389,9 +1389,10 @@
                 submitBtn.classList.toggle('disabled', !planOk);
                 submitBtn.title = planOk ? '' : 'Fill in the test plan & results before submitting';
 
-                failBtn.disabled = !planOk;
-                failBtn.classList.toggle('disabled', !planOk);
-                failBtn.title = planOk ? '' : 'Fill in the test plan & results before submitting';
+                // Test Failed is always enabled — no test plan requirement.
+                failBtn.disabled = false;
+                failBtn.classList.remove('disabled');
+                failBtn.title = '';
             }
 
             document.getElementById('testingForm').addEventListener('input', refreshProgress);
@@ -1500,7 +1501,7 @@
                     },
                     successTitle: 'Test Passed!',
                     successText: 'Testing results submitted successfully.',
-                    requireTestPlan: true
+                    requireTestPlan: false
                 },
                 fail: {
                     confirm: {

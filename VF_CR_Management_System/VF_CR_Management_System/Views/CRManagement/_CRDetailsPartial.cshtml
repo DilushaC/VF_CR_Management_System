@@ -312,10 +312,22 @@
     (string Label, string Css) StepState(WorkflowStepAssignment s)
     {
         if (isRejected) { return ("Rejected", "bad"); }
+
         if (s.IsApproved == true) { return ("Approved", "ok"); }
-        if (IsPending(s)) { return ("Pending", "wait"); }
-        var d = (s.Decision ?? string.Empty).Trim();
-        return (d, d.IndexOf("reject", StringComparison.OrdinalIgnoreCase) >= 0 ? "bad" : "warn");
+
+        if (s.IsApproved == false)
+        {
+            var decision = (s.Decision ?? string.Empty).Trim();
+            if (decision.Length == 0 || decision.Equals("Pending", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Pending", "wait");
+            }
+            var isNegative = decision.IndexOf("reject", StringComparison.OrdinalIgnoreCase) >= 0
+                || decision.Equals("Returned", StringComparison.OrdinalIgnoreCase);
+            return (decision, isNegative ? "bad" : "warn");
+        }
+
+        return ("Pending", "wait");
     }
 
     DateTime? StepTimestamp(WorkflowStepAssignment s) =>

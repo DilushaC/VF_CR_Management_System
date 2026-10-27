@@ -5,12 +5,17 @@ using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using System.Transactions;
 using VF_CR_Management_System.Business.ConnectionHandler;
 using VF_CR_Management_System.Data.Models;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace VF_CR_Management_System.Business.ChangeRequestHandler
 {
@@ -2751,7 +2756,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
 
-
         public async Task<bool> CreateTestingAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
@@ -2766,12 +2770,12 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var testResult = collection["Test"].ToString().Trim();
 
-            if (string.IsNullOrWhiteSpace(testResult))
+            if (isPass && string.IsNullOrWhiteSpace(testResult))
                 throw new ArgumentException("Please enter the Test Plan and Test Results.");
 
             var files = collection.Files.GetFiles("TestResultFiles");
             var allowedExt = new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt",
-                             ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip" };
+             ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip" };
             const long maxBytes = 10 * 1024 * 1024;
 
             if (files.Count > 10)
@@ -2790,8 +2794,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     throw new ArgumentException($"File is larger than 10 MB: {file.FileName}");
             }
 
-            const string targetStatusName = "TestingApproved";
-            const string nextStepName = "Division Head Approval";
+            const string passNextStepName = "Division Head Approval";
+            const string failNextStepName = "Developer Implementation";
+
+            const string passTargetStatusName = "TestingApproved";
+            const string failTargetStatusName = "QAReturn";
 
             const string sql = @"
                 DECLARE @TestingStepID INT = (
@@ -2825,9 +2832,11 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     RETURN;
                 END
 
+                -- The one OPEN Testing approval row (IsApproved IS NULL), not just the newest by ID.
                 DECLARE @TestingApprovalID INT = (
                     SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
                     WHERE CRID = @CRID AND StepID = @TestingStepID AND Active = 1
+                      AND IsApproved IS NULL
                     ORDER BY ApprovalID DESC);
 
                 IF @TestingApprovalID IS NULL
@@ -2836,9 +2845,38 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     RETURN;
                 END
 
-                DECLARE @NextAssignedTo NVARCHAR(100) = (
-                    SELECT AssignedBy FROM [CRManagementDB].[dbo].[Approval]
-                    WHERE ApprovalID = @TestingApprovalID);
+                -- Who gets the next step:
+                -- Pass  -> the ORIGINAL Division Head Approval assignee for this CR (the very first
+                --          Division Head Approval row, earliest ApprovalID) — the person who started
+                --          the whole approval flow, for final sign-off. NOT the Testing row's AssignedBy,
+                --          which may just be whoever last handed the CR to the tester (e.g. the developer).
+                -- Fail  -> the person who was AssignedTo on the last Developer Implementation step (the developer)
+                DECLARE @NextAssignedTo NVARCHAR(100);
+
+                IF @IsPassed = 1
+                BEGIN
+                    DECLARE @DivHeadStepID INT = (
+                        SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                        WHERE StepName = 'Division Head Approval' AND Active = 1
+                        ORDER BY StepOrder ASC);
+
+                    SELECT TOP 1 @NextAssignedTo = AssignedTo
+                    FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DivHeadStepID AND Active = 1
+                    ORDER BY ApprovalID ASC;
+                END
+                ELSE
+                BEGIN
+                    DECLARE @DevImplStepID INT = (
+                        SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                        WHERE StepName = 'Developer Implementation' AND Active = 1
+                        ORDER BY StepOrder ASC);
+
+                    SELECT TOP 1 @NextAssignedTo = AssignedTo
+                    FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @DevImplStepID AND Active = 1
+                    ORDER BY ApprovalID DESC;
+                END
 
                 IF @NextAssignedTo IS NULL
                 BEGIN
@@ -2855,15 +2893,28 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ReturnedFrom = @EmpId
                 WHERE TestID = @TestID AND Active = 1;
 
+                -- Resolve the row we're actually acting on.
                 UPDATE [CRManagementDB].[dbo].[Approval]
                 SET IsApproved = @IsPassed,
-                    ApprovalDate = @Now
+                    ApprovalDate = @Now,
+                    Decision = @Decision
                 WHERE ApprovalID = @TestingApprovalID;
 
+                -- Safety net: close out ANY other still-open Testing row for this CR
+                -- (e.g. an older duplicate that was never resolved) so nothing is left
+                -- dangling with IsApproved/ApprovalDate = NULL once this step moves on.
+                UPDATE [CRManagementDB].[dbo].[Approval]
+                SET IsApproved = @IsPassed,
+                    ApprovalDate = @Now,
+                    Decision = 'Assigned'
+                WHERE CRID = @CRID AND StepID = @TestingStepID AND Active = 1
+                  AND IsApproved IS NULL
+                  AND ApprovalID <> @TestingApprovalID;
+
                 INSERT INTO [CRManagementDB].[dbo].[Approval]
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active, Comments)
                 VALUES
-                    (@CRID, @NextStepID, @EmpId, @NextAssignedTo, @Now, 1);
+                    (@CRID, @NextStepID, @EmpId, @NextAssignedTo, @Now, 1, 'v3-divhead-fix');
 
                 UPDATE [CRManagementDB].[dbo].[ChangeRequest]
                 SET StatusID = @TargetStatusID
@@ -2878,8 +2929,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             parameters.Add("@EmpId", empId);
             parameters.Add("@TestResult", testResult);
             parameters.Add("@IsPassed", isPass);
-            parameters.Add("@NextStepName", nextStepName);
-            parameters.Add("@TargetStatusName", targetStatusName);
+            parameters.Add("@Decision", isPass ? "Test Passed" : "Test Failed");
+            parameters.Add("@NextStepName", isPass ? passNextStepName : failNextStepName);
+            parameters.Add("@TargetStatusName", isPass ? passTargetStatusName : failTargetStatusName);
             parameters.Add("@Now", DateTime.Now);
 
             var successObj = _connectionService.ExecuteScalar(sql, parameters);
@@ -2897,6 +2949,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return true;
         }
+
         public async Task<bool> AssignFinalApproverAsync(int crId, int approverId, string approvedByEmpId)
         {
             if (crId <= 0)
@@ -3311,16 +3364,23 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     WHERE StepName = 'Developer Implementation' AND Active = 1
                     ORDER BY StepOrder ASC);
 
+                DECLARE @TestingStepID INT = (
+                    SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepName = 'Testing' AND Active = 1
+                    ORDER BY StepOrder ASC);
+
                 DECLARE @DevReturnStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = 'DevReturn' AND Active = 1);
 
-                IF @DevImplStepID IS NULL OR @DevReturnStatusID IS NULL
+                IF @DevImplStepID IS NULL OR @TestingStepID IS NULL OR @DevReturnStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
                     RETURN;
                 END
 
+                -- The currently OPEN Developer Implementation approval row for this developer
+                -- (the one waiting on them right now — not any earlier, already-approved row).
                 DECLARE @ApprovalID INT = (
                     SELECT TOP 1 ApprovalID FROM [CRManagementDB].[dbo].[Approval]
                     WHERE CRID = @CRID AND StepID = @DevImplStepID AND AssignedTo = @EmpNo
@@ -3333,14 +3393,37 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     RETURN;
                 END
 
+                -- Who should get the new Testing step: same tester as the most recent
+                -- Testing approval row for this CR (whether that row is still open or was
+                -- already resolved/returned), so it goes back to the same QA person.
+                DECLARE @TesterAssignedTo NVARCHAR(100) = (
+                    SELECT TOP 1 AssignedTo
+                    FROM [CRManagementDB].[dbo].[Approval]
+                    WHERE CRID = @CRID AND StepID = @TestingStepID AND Active = 1
+                    ORDER BY ApprovalID DESC);
+
+                IF @TesterAssignedTo IS NULL
+                BEGIN
+                    SELECT CAST(0 AS BIT) AS Success;
+                    RETURN;
+                END
+
                 BEGIN TRANSACTION;
 
+                -- Close out this Developer Implementation step as approved.
                 UPDATE [CRManagementDB].[dbo].[Approval]
                 SET IsApproved = 1,
                     ApprovalDate = @Now,
                     Comments = 'UAT Link Uploaded'
                 WHERE ApprovalID = @ApprovalID;
 
+                -- Open a new Testing approval row, assigned back to the same tester.
+                INSERT INTO [CRManagementDB].[dbo].[Approval]
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @TestingStepID, @EmpNo, @TesterAssignedTo, @Now, 1);
+
+                -- Open a new Testing cycle record for the tester to fill in.
                 INSERT INTO [CRManagementDB].[dbo].[Testing]
                     (CRID, TestCycleNumber, TestResult, UATLink, TestingDate, Active, IsPassed, ReturnedFrom)
                 VALUES
@@ -3366,7 +3449,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
-
 
         public async Task<bool> ReturnToQAAsync(int crId, string reason, string empNo)
         {
