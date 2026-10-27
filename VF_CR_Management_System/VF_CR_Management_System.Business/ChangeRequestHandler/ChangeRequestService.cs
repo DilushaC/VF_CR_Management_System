@@ -163,6 +163,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return newCrId;
         }
 
+
         public async Task<ChangeRequest> GetChangeRequestByIdAsync(int crId)
         {
             if (crId <= 0)
@@ -227,6 +228,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                             A.AssignedDate,
                             A.TargetDate,
                             A.Decision,
+                            A.ApprovalDate,
                             A.IsApproved
                         FROM Approval A
                         INNER JOIN [WorkflowStep] WS ON WS.StepID = A.StepID
@@ -242,7 +244,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var stepParams = new DynamicParameters();
             stepParams.Add("@CRID", crId);
-            //stepParams.Add("@WorkflowID", changeRequest.WorkflowID > 0 ? changeRequest.WorkflowID : 3);
 
             var stepsTable = _connectionService.ReturnWithPara(stepsQuery, stepParams);
 
@@ -257,6 +258,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     AssignedDate = r.Field<DateTime?>("AssignedDate"),
                     TargetDate = r.Field<DateTime?>("TargetDate"),
                     Decision = r.Field<string>("Decision"),
+                    ApprovalDate = r.Field<DateTime?>("ApprovalDate"),   // <-- the fix: now mapped
                     IsApproved = r.Field<bool?>("IsApproved")
                 })
                 .ToList();
@@ -313,15 +315,15 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     .FirstOrDefault(s => string.Equals(Key(s.StepName), Key(stepName), StringComparison.OrdinalIgnoreCase))
                     ?.AssignedToName;
 
-            changeRequest.ApproverUserName = GetAssigneeByStepName("Division Head Approval"); // CR approved by
+            changeRequest.ApproverUserName = GetAssigneeByStepName("Division Head Approval");
             changeRequest.AssessmentUserName = new[] { "Developer Documentation" }
              .Select(GetAssigneeByStepName)
-             .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));           // Developer
-            changeRequest.SecurityUserName = GetAssigneeByStepName("Security");               // InfoSec officer
-            changeRequest.TestingUserName = GetAssigneeByStepName("Testing");                // QA tester
-            changeRequest.FinalApproverUserName = GetAssigneeByStepName("Final Approval");         // Final CR approver
-            changeRequest.TesterUserName = GetAssigneeByStepName("TesterAssignment");       // QA assigned by
-            changeRequest.TestingApproverUserName = GetAssigneeByStepName("TestingApproval");        // QA approved by
+             .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));
+            changeRequest.SecurityUserName = GetAssigneeByStepName("Security");
+            changeRequest.TestingUserName = GetAssigneeByStepName("Testing");
+            changeRequest.FinalApproverUserName = GetAssigneeByStepName("Final Approval");
+            changeRequest.TesterUserName = GetAssigneeByStepName("TesterAssignment");
+            changeRequest.TestingApproverUserName = GetAssigneeByStepName("TestingApproval");
 
             // ---------- Testing records ----------
             const string testingQuery = @"
@@ -351,7 +353,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequest;
         }
-
 
         public Task<IEnumerable<Attachment>> GetAttachmentsByCrIdAsync(int crId)
         {
@@ -2729,8 +2730,10 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 UPDATE [CRManagementDB].[dbo].[Approval]
                 SET IsApproved   = 0,
                     ApprovalDate = @Now,
+                    Decision     = 'Rejected',
                     Comments     = @RejectReason
-                WHERE CRID = @CRID AND StepID = @SecurityStepID AND Active = 1;
+                WHERE CRID = @CRID AND StepID = @SecurityStepID AND Active = 1
+                  AND IsApproved IS NULL;
 
                 INSERT INTO [CRManagementDB].[dbo].[Approval]
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
@@ -2755,7 +2758,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
-
         public async Task<bool> CreateTestingAsync(int crId, IFormCollection collection, string userName, string empId)
         {
             if (crId <= 0)
@@ -3416,12 +3418,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ApprovalDate = @Now,
                     Comments = 'UAT Link Uploaded'
                 WHERE ApprovalID = @ApprovalID;
-
-                -- Open a new Testing approval row, assigned back to the same tester.
-                INSERT INTO [CRManagementDB].[dbo].[Approval]
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                VALUES
-                    (@CRID, @TestingStepID, @EmpNo, @TesterAssignedTo, @Now, 1);
 
                 -- Open a new Testing cycle record for the tester to fill in.
                 INSERT INTO [CRManagementDB].[dbo].[Testing]

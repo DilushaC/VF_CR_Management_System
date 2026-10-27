@@ -8,6 +8,7 @@ namespace VF_CR_Management_System.Data.Models
 {
     public class WorkflowStepAssignment
     {
+        public string AssignedBy { get; set; }
         public int StepID { get; set; }
         public int StepOrder { get; set; }
         public string StepName { get; set; }

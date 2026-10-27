@@ -86,7 +86,38 @@
             .Where(s => string.Equals(StepKey(s.StepName), StepKey(stepName), StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-    WorkflowStepAssignment? LatestStep(string stepName) => StepRows(stepName).LastOrDefault();
+    // --- Draft-snapshot handling -------------------------------------------------
+    // A "draft snapshot" is a row where progress was saved (it has Comments
+    // and/or an ApprovalDate) but no real Decision text was ever recorded
+    // (IsApproved = 0, Decision = NULL/empty). This happens e.g. when the
+    // Security officer saves a draft via the SecurityDraft flow. A second row
+    // later captures the real outcome (IsApproved = 1, or a real Decision).
+    // Such a draft row should never be treated as "the latest state" of that
+    // step once a real outcome exists for the same step + assignee.
+    DateTime? RowTimestamp(WorkflowStepAssignment s) => s.ApprovalDate ?? (DateTime?)s.AssignedDate;
+
+    bool IsDraftSnapshot(WorkflowStepAssignment s) =>
+        s.IsApproved == false
+        && string.IsNullOrWhiteSpace(s.Decision)
+        && s.ApprovalDate.HasValue;
+
+    bool IsSupersededDraft(WorkflowStepAssignment s) =>
+        IsDraftSnapshot(s)
+        && allSteps.Any(other =>
+            !ReferenceEquals(other, s)
+            && other.StepID == s.StepID
+            && string.Equals(Normalize(other.AssignedTo), Normalize(s.AssignedTo), StringComparison.OrdinalIgnoreCase)
+            && !IsDraftSnapshot(other)
+            && (RowTimestamp(other) ?? DateTime.MinValue) >= (RowTimestamp(s) ?? DateTime.MinValue));
+
+    // Picks the chronologically latest row for a step, ignoring superseded
+    // drafts, and ordering by actual timestamp rather than relying on
+    // whatever order EF happens to return StepAssignments in.
+    WorkflowStepAssignment? LatestStep(string stepName) =>
+        StepRows(stepName)
+            .Where(s => !IsSupersededDraft(s))
+            .OrderBy(s => RowTimestamp(s) ?? DateTime.MinValue)
+            .LastOrDefault();
 
     WorkflowStepAssignment? PendingStep(string stepName) => StepRows(stepName).LastOrDefault(IsPending);
 
@@ -250,8 +281,11 @@
     var attachmentCount = srsFiles.Count + baFiles.Count + qaFiles.Count + vendorFiles.Count;
     var stepRows = allSteps;
 
+    // IsSupersededDraft / IsDraftSnapshot / RowTimestamp are defined in the
+    // first @{ } block above (shared with LatestStep()) — not redefined here.
     var displayStepRows = stepRows
         .Where(s => !string.IsNullOrEmpty(StepKey(s.StepName)))
+        .Where(s => !IsSupersededDraft(s))
         .ToList();
 
     var hasAssessmentData = new[]
@@ -322,6 +356,7 @@
             {
                 return ("Pending", "wait");
             }
+
             var isNegative = decision.IndexOf("reject", StringComparison.OrdinalIgnoreCase) >= 0
                 || decision.Equals("Returned", StringComparison.OrdinalIgnoreCase);
             return (decision, isNegative ? "bad" : "warn");
@@ -329,6 +364,7 @@
 
         return ("Pending", "wait");
     }
+
 
     DateTime? StepTimestamp(WorkflowStepAssignment s) =>
         s.ApprovalDate ?? (DateTime?)s.AssignedDate;
@@ -1989,13 +2025,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                        foreach (var user in ViewBag.Users)
-                        {
-                                    string uId = user.UserName;
-                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                    if (string.IsNullOrEmpty(uId)) { continue; }
-                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                        }
+                            foreach (var user in ViewBag.Users)
+                            {
+                                            string uId = user.UserName;
+                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                            if (string.IsNullOrEmpty(uId)) { continue; }
+                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                            }
             }
         ];
 
