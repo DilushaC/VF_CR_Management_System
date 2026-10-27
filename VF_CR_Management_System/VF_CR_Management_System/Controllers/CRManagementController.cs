@@ -1240,9 +1240,13 @@ namespace VF_CR_Management_System.Controllers
             try
             {
                 var changeRequest = await _changeRequestService.GetChangeRequestByIdAsync(id);
+
                 if (changeRequest == null)
                 {
-                    _logger.LogWarning("Action: DownloadCRForm (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+                    _logger.LogWarning(
+                        "Action: DownloadCRForm (not found) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}",
+                        id, empNo, DateTime.Now);
+
                     return NotFound();
                 }
 
@@ -1250,18 +1254,32 @@ namespace VF_CR_Management_System.Controllers
                 changeRequest.Attachments = attachments?.ToList() ?? new List<Attachment>();
 
                 ViewBag.Users = await _userService.GetAllUsersAsync();
-                ViewBag.ApproverUserName = await _changeRequestService.GetAssignedApproverUserNameAsync(id);
+                ViewBag.ApproverUserName =
+                    await _changeRequestService.GetAssignedApproverUserNameAsync(id);
 
                 double effortEstimateDays = 0;
+
                 if (changeRequest.DueDate.HasValue)
                 {
-                    effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
+                    effortEstimateDays = Math.Max(
+                        0,
+                        (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
                 }
+
                 ViewBag.EffortEstimateDays = effortEstimateDays;
 
-                _logger.LogInformation("Action: DownloadCRForm | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+                // Create the ViewModel expected by CRFormPrint.cshtml
+                var viewModel = new ReportViewModel
+                {
+                    ChangeRequest = changeRequest,
+                    Testing = new Testing()
+                };
 
-                return new Rotativa.AspNetCore.ViewAsPdf("CRFormPrint", changeRequest)
+                _logger.LogInformation(
+                    "Action: DownloadCRForm | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}",
+                    id, empNo, DateTime.Now);
+
+                return new Rotativa.AspNetCore.ViewAsPdf("CRFormPrint", viewModel)
                 {
                     FileName = $"CR_{changeRequest.CRNumber}.pdf",
                     PageSize = Rotativa.AspNetCore.Options.Size.A4,
@@ -1271,7 +1289,11 @@ namespace VF_CR_Management_System.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Action: DownloadCRForm (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}", id, empNo, DateTime.Now);
+                _logger.LogError(
+                    ex,
+                    "Action: DownloadCRForm (error) | CR: {CRId} | User: {EmpNo} | Time: {Timestamp}",
+                    id, empNo, DateTime.Now);
+
                 return View("Error");
             }
         }

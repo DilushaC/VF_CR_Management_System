@@ -1,5 +1,6 @@
 ﻿@using VF_CR_Management_System.Data.Models
-@model VF_CR_Management_System.Data.Models.ChangeRequest
+@model VF_CR_Management_System.Data.Models.ReportViewModel
+
 @{
     Layout = null;
 
@@ -30,14 +31,14 @@
         return userLookup.TryGetValue(raw, out var d) ? d : raw;
     }
 
-    var devDocRows = (Model.StepAssignments ?? new List<WorkflowStepAssignment>())
+    var devDocRows = (Model.ChangeRequest.StepAssignments ?? new List<WorkflowStepAssignment>())
         .Where(s => string.Equals((s.StepName ?? "").Replace(" ", ""), "DeveloperDocumentation", StringComparison.OrdinalIgnoreCase))
         .ToList();
     var developerUser = devDocRows.FirstOrDefault()?.AssignedTo;
-    if (string.IsNullOrWhiteSpace(developerUser)) { developerUser = Model.AssessmentUserName; }
+    if (string.IsNullOrWhiteSpace(developerUser)) { developerUser = Model.ChangeRequest.AssessmentUserName; }
 
     WorkflowStepAssignment? StepByName(string stepName) =>
-        Model.StepAssignments?.LastOrDefault(s =>
+        Model.ChangeRequest.StepAssignments?.LastOrDefault(s =>
             string.Equals((s.StepName ?? "").Replace(" ", ""), stepName.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
 
     var deptHeadStep = StepByName("Division Head Approval");
@@ -47,7 +48,7 @@
     var prodTransferStep = StepByName("Production Transfer Approval");
     var finalSignOffStep = StepByName("Business User Head Final SignOff");
 
-    var ct = (Model.ChangeType ?? string.Empty).Trim();
+    var ct = (Model.ChangeRequest.ChangeType ?? string.Empty).Trim();
     bool isBugFix = ct.Equals("Bug Fix", StringComparison.OrdinalIgnoreCase);
     bool isReportDev = ct.Equals("Report Development", StringComparison.OrdinalIgnoreCase);
     bool isEnhancement = ct.IndexOf("Enhancement", StringComparison.OrdinalIgnoreCase) >= 0
@@ -55,13 +56,13 @@
     bool isInfra = ct.IndexOf("Infrastructure", StringComparison.OrdinalIgnoreCase) >= 0;
     bool isOtherType = !isBugFix && !isReportDev && !isEnhancement && !isInfra && ct.Length > 0;
 
-    var pr = (Model.Priority ?? string.Empty).Trim();
+    var pr = (Model.ChangeRequest.Priority ?? string.Empty).Trim();
     bool isLow = pr.Equals("Low", StringComparison.OrdinalIgnoreCase);
     bool isMedium = pr.Equals("Medium", StringComparison.OrdinalIgnoreCase);
     bool isHigh = pr.Equals("High", StringComparison.OrdinalIgnoreCase);
     bool isEmergency = pr.Equals("Emergency", StringComparison.OrdinalIgnoreCase);
 
-    var ci = (Model.ChangeImpact ?? string.Empty).Trim();
+    var ci = (Model.ChangeRequest.ChangeImpact ?? string.Empty).Trim();
     bool impactMinor = ci.Equals("Minor", StringComparison.OrdinalIgnoreCase);
     bool impactStandard = ci.Equals("Standard", StringComparison.OrdinalIgnoreCase);
     bool impactMajor = ci.Equals("Major", StringComparison.OrdinalIgnoreCase);
@@ -70,7 +71,7 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>CR @Model.CRNumber</title>
+    <title>CR @Model.ChangeRequest.CRNumber</title>
     <style>
         * {
             box-sizing: border-box;
@@ -83,12 +84,63 @@
             margin: 0;
         }
 
+        /* ---------- CRMS letterhead / identification block ---------- */
+        .crms-letterhead {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #1a3b6e;
+            padding: 10px 2px 8px;
+            margin-bottom: 6px;
+        }
+
+            .crms-letterhead .logo-and-name {
+                display: flex;
+                align-items: center;
+            }
+
+            .crms-letterhead .org-logo {
+                height: 80px;
+                width: auto;
+                max-width: 160px;
+                object-fit: contain;
+                margin-right: 12px;
+            }
+
+            .crms-letterhead .org-name {
+                font-size: 14px;
+                font-weight: 700;
+                color: #1a3b6e;
+                letter-spacing: 0.3px;
+            }
+
+            .crms-letterhead .org-sub {
+                font-size: 9px;
+                color: #555;
+                margin-top: 1px;
+            }
+
+            .crms-letterhead .doc-id {
+                text-align: right;
+                font-size: 9px;
+                color: #333;
+                line-height: 1.5;
+            }
+
+                .crms-letterhead .doc-id .cr-no {
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: #1a3b6e;
+                }
+
         .doc-header {
             display: flex;
             justify-content: space-between;
             font-size: 9px;
             color: #333;
             padding: 4px 2px 8px;
+            border-bottom: 1px solid #ccc;
+            margin-bottom: 8px;
         }
 
         table.cr-table {
@@ -173,6 +225,24 @@
 </head>
 <body>
 
+    @* ===== CRMS identification block: shows this was generated/downloaded from CRMS ===== *@
+    <div class="crms-letterhead">
+        <div class="logo-and-name">
+            @* Set the logo path below, e.g. "~/Images/logo.png" or a full URL *@
+            <img class="org-logo" src="~/assets/vallibel_finance_logo.jpg" alt="Company Logo" />
+            <br />
+            <br />
+            <div>
+                <div class="org-name">Change Request Management System (CRMS)</div>
+                <div class="org-sub">Change &amp; Release Management &mdash; Generated Document</div>
+            </div>
+        </div>
+        <div class="doc-id">
+            <div class="cr-no">CR No: @Model.ChangeRequest.CRNumber</div>
+            <div>Generated: @DateTime.Now.ToString("yyyy/MM/dd HH:mm")</div>
+        </div>
+    </div>
+
     <div class="doc-header">
         <span>VFPLC_FM_001</span>
         <span>Internal Use Only</span>
@@ -184,7 +254,7 @@
         <tr>
             <td class="section-title" style="width:140px;">SECTION 1</td>
             <td class="section-title">Change Request and Requirement</td>
-            <td class="section-title" style="width:220px;">CR Number: <span class="fill">@Model.CRNumber</span></td>
+            <td class="section-title" style="width:220px;">CR Number: <span class="fill">@Model.ChangeRequest.CRNumber</span></td>
         </tr>
         <tr>
             <td colspan="3" class="subnote">To be completed by the Change Requester</td>
@@ -193,18 +263,18 @@
         <tr>
             <td class="label-cell">Requester's Details</td>
             <td>
-                <div class="stacked-field">Name: <span class="fill">@DisplayUser(Model.RequestedBy)</span></div>
-                <div class="stacked-field">Designation: <span class="fill">@Model.ImplementerUserName</span></div>
-                <div class="stacked-field">Division: <span class="fill">@Model.Division</span></div>
+                <div class="stacked-field">Name: <span class="fill">@DisplayUser(Model.ChangeRequest.RequestedBy)</span></div>
+                <div class="stacked-field">Designation: <span class="fill">@Model.ChangeRequest.ImplementerUserName</span></div>
+                <div class="stacked-field">Division: <span class="fill">@Model.ChangeRequest.Division</span></div>
             </td>
-            <td>Date: <span class="fill">@(Model.RequestedDate.ToString("yyyy/MM/dd"))</span></td>
+            <td>Date: <span class="fill">@(Model.ChangeRequest.RequestedDate.ToString("yyyy/MM/dd"))</span></td>
         </tr>
 
         <tr>
             <td class="label-cell">Change Summary and<br />Business Justification<br />for the Change</td>
             <td colspan="2">
                 Change Details shall be attached to this form:<br />
-                <span class="fill">@Model.Summary</span>
+                <span class="fill">@Model.ChangeRequest.Summary</span>
             </td>
         </tr>
 
@@ -217,7 +287,7 @@
                         <td class="@(isReportDev ? "checked" : "")">Report Development</td>
                         <td class="@(isEnhancement ? "checked" : "")">Enhancements / Components</td>
                         <td class="@(isInfra ? "checked" : "")">Infrastructure Changes</td>
-                        <td class="@(isOtherType ? "checked" : "")">Other@(isOtherType && !string.IsNullOrWhiteSpace(Model.OtherChangeType) ? $" ({Model.OtherChangeType})" : "")</td>
+                        <td class="@(isOtherType ? "checked" : "")">Other@(isOtherType && !string.IsNullOrWhiteSpace(Model.ChangeRequest.OtherChangeType) ? $" ({Model.ChangeRequest.OtherChangeType})" : "")</td>
                     </tr>
                 </table>
             </td>
@@ -256,8 +326,8 @@
             <td class="label-cell">Implementer Details</td>
             <td colspan="2">
                 <div class="stacked-field">Name: <span class="fill">@DisplayUser(developerUser)</span></div>
-                <div class="stacked-field">Designation: <span class="fill">@Model.ImplementerUserName</span></div>
-@*                 <div class="stacked-field">Division: <span class="fill">@Model.ImplementerDivision</span></div> *@
+                <div class="stacked-field">Designation: <span class="fill">@Model.ChangeRequest.ImplementerUserName</span></div>
+                @*                 <div class="stacked-field">Division: <span class="fill">@Model.ImplementerDivision</span></div> *@
                 <div class="stacked-field">Division: <span class="fill">Test</span></div>
             </td>
         </tr>
@@ -266,39 +336,39 @@
             <td class="label-cell">Activities/Tasks</td>
             <td colspan="2">
                 (Summary view of the tasks to be performed to complete the change)<br />
-                <span class="fill">@Model.ActivitiesTasks</span>
+                <span class="fill">@Model.ChangeRequest.ActivitiesTasks</span>
             </td>
         </tr>
 
         <tr>
             <td class="label-cell">Fixed Asset Information<br />(if applicable)</td>
-            <td colspan="2"><span class="fill">@Model.FixedAssets</span></td>
+            <td colspan="2"><span class="fill">@Model.ChangeRequest.FixedAssets</span></td>
         </tr>
 
         <tr>
             <td class="label-cell">Effort Estimate (Days)</td>
             <td>Days: <span class="fill">@(((double?)ViewBag.EffortEstimateDays)?.ToString("0") ?? "")</span></td>
             <td>
-                Vendor support required: Y/N &nbsp; <span class="fill">@(string.IsNullOrWhiteSpace(Model.Vendor) ? "N" : "Y")</span><br /><br />
-                Vendor Name: <span class="fill">@Model.Vendor</span>
+                Vendor support required: Y/N &nbsp; <span class="fill">@(string.IsNullOrWhiteSpace(Model.ChangeRequest.Vendor) ? "N" : "Y")</span><br /><br />
+                Vendor Name: <span class="fill">@Model.ChangeRequest.Vendor</span>
             </td>
         </tr>
 
         <tr>
             <td class="label-cell">IT&nbsp;&nbsp;Section Head Approval</td>
             <td>
-                Name: <span class="fill">@DisplayUser(Model.ApproverUserName)</span><br /><br />
+                Name: <span class="fill">@DisplayUser(Model.ChangeRequest.ApproverUserName)</span><br /><br />
                 Date: <span class="fill">@(itSectionHeadStep?.ApprovalDate?.ToString("yyyy/MM/dd"))</span>
             </td>
             <td>
                 Approved : Y/N &nbsp; <span class="fill">@(itSectionHeadStep?.IsApproved == true ? "Y" : itSectionHeadStep?.IsApproved == false ? "N" : "")</span><br /><br />
-@*                 Comments: <span class="fill">@itSectionHeadStep?.Comments</span> *@
+                @*                 Comments: <span class="fill">@itSectionHeadStep?.Comments</span> *@
                 Comments: <span class="fill">test</span>
             </td>
         </tr>
 
         <tr>
-            <td class="label-cell">Proposal No: @(Model.ProposalNumber)<br /><br />Date:</td>
+            <td class="label-cell">Proposal No: @(Model.ChangeRequest.ProposalNumber)<br /><br />Date:</td>
             <td>Amount:</td>
             <td>Approved/Rejected: <span class="fill"></span></td>
         </tr>
@@ -312,7 +382,7 @@
             <td colspan="2">
                 <span class="red-note">&lt;Refer to Section 5.2 of the latest Change and Release Management Procedure to determine if an Information Security Risk Assessment is required&gt;</span><br />
                 Potential information security risks arising from the suggested change and risk treatment options:<br />
-                <span class="fill">@Model.RiskAssessment</span>
+                <span class="fill">@Model.ChangeRequest.RiskAssessment</span>
             </td>
         </tr>
 
@@ -333,7 +403,7 @@
             <td class="label-cell">IS Officer Approval</td>
             <td colspan="2">
                 Change Approved/Rejected: <span class="fill">@(securityStep?.IsApproved == true ? "Approved" : securityStep?.IsApproved == false ? "Rejected" : "")</span><br /><br />
-                Name: <span class="fill">@DisplayUser(Model.SecurityUserName)</span>
+                Name: <span class="fill">@DisplayUser(Model.ChangeRequest.SecurityUserName)</span>
             </td>
         </tr>
 
@@ -347,7 +417,7 @@
         </tr>
 
         @* ===================== SECTION 3 ===================== *@
-@*         <tr>
+        <tr>
             <td class="section-title" style="width:140px;">SECTION 3</td>
             <td class="section-title" colspan="2">Testing</td>
         </tr>
@@ -359,20 +429,20 @@
             <td class="label-cell">Test Plan and Test Results</td>
             <td colspan="2">
                 The test plan and results shall be attached to this form:<br />
-                <span class="fill">@Model.TestPlanResults</span>
+                <span class="fill">@Model.Testing.TestResult</span>
             </td>
         </tr>
 
         <tr>
             <td class="label-cell">User Acceptance Testing<br />(UAT)</td>
             <td colspan="2">
-                UAT Confirmation: Accepted/ Not Accepted &nbsp; <span class="fill">@Model.UatConfirmation</span>
-                &nbsp;&nbsp;&nbsp; Date: <span class="fill">@(Model.UatDate?.ToString("yyyy/MM/dd"))</span><br /><br />
-                Comments: <span class="fill">@Model.UatComments</span>
+                UAT Confirmation: Accepted/ Not Accepted &nbsp; <span class="fill">@Model.Testing..UatConfirmation</span>
+                &nbsp;&nbsp;&nbsp; Date: <span class="fill">@(Model.Testing.TestingDate?.ToString("yyyy/MM/dd"))</span><br /><br />
+                Comments: <span class="fill">N/A</span>
                 <hr class="dashed-rule" />
-                Name: <span class="fill">@DisplayUser(Model.UatUserName)</span><br /><br />
-                Designation: <span class="fill">@Model.UatDesignation</span><br /><br />
-                Department: <span class="fill">@Model.UatDepartment</span>
+                Name: <span class="fill">@DisplayUser(Model.ChangeRequest.TesterUserName)</span><br /><br />
+                Designation: <span class="fill"></span><br /><br />
+                Department: <span class="fill"></span>
             </td>
         </tr>
 
@@ -381,10 +451,10 @@
             <td colspan="2">
                 Test Results Approved/Rejected: <span class="fill">@(businessUserHeadStep?.IsApproved == true ? "Approved" : businessUserHeadStep?.IsApproved == false ? "Rejected" : "")</span>
             </td>
-        </tr> *@
+        </tr>
 
         @* ===================== SECTION 4 ===================== *@
-@*         <tr>
+        @*         <tr>
             <td class="section-title" style="width:140px;">SECTION 4</td>
             <td class="section-title" colspan="2">Release and Deployment</td>
         </tr>
@@ -420,7 +490,7 @@
         </tr> *@
 
         @* ===================== SECTION 5 ===================== *@
-@*         <tr>
+        @*         <tr>
             <td class="section-title" style="width:140px;">SECTION 5</td>
             <td class="section-title" colspan="2">Post-Implementation Review and Closure</td>
         </tr>
@@ -470,8 +540,8 @@
     </table>
 
     <div class="footer-note">
-        <span>Vallibel Finance PLC - Change Request Form</span>
-        <span>Internal Use Only</span>
+        <span>Downloaded from CRMS &mdash; @Model.ChangeRequest.CRNumber</span>
+        <span>Page generated on @DateTime.Now.ToString("yyyy/MM/dd")</span>
     </div>
 
 </body>

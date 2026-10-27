@@ -135,6 +135,13 @@
     var deptHeadRows = StepRows("Division Head Approval");
     var devDocRows = StepRows("Developer Documentation");
 
+    var creatorStep = deptHeadRows
+    .Where(s => s.AssignedDate.HasValue)
+    .OrderBy(s => s.AssignedDate)
+    .FirstOrDefault() ?? deptHeadRows.FirstOrDefault();
+
+    var creatorUser = creatorStep?.AssignedBy;
+
     var securityStep = LatestStep("Security");
     var testingStep = LatestStep("Testing");
     var finalApprovalStep = LatestStep("Final Approval");
@@ -1870,6 +1877,20 @@ void FileGroup(string title, string icon, List<Attachment> items)
             else
             {
                 <ol class="cr-timeline">
+                    @if (!string.IsNullOrWhiteSpace(creatorUser))
+                    {
+                        <li class="cr-tl-item">
+                            <span class="cr-tl-dot ok"><i class="ri-user-add-line"></i></span>
+                            <div class="cr-tl-body">
+                                <div class="cr-tl-head">
+                                    Created
+                                    <span class="cr-chip ok">Requested</span>
+                                </div>
+                                <div class="cr-tl-time"><i class="ri-time-line"></i>@Model.RequestedDate.ToString("dd MMM yyyy, hh:mm tt")</div>
+                                <div class="cr-tl-who">@DisplayUser(creatorUser)</div>
+                            </div>
+                        </li>
+                    }
                     @foreach (var step in displayStepRows)
                     {
                         var state = StepState(step);

@@ -218,27 +218,28 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 return null;
 
             const string stepsQuery = @"
-                        SELECT  
-                            A.ApprovalID,
-                            WS.StepID,
-                            WS.StepOrder,
-                            WS.StepName,
-                            WS.ApprovalRequired,
-                            A.AssignedTo,
-                            A.AssignedDate,
-                            A.TargetDate,
-                            A.Decision,
-                            A.ApprovalDate,
-                            A.IsApproved
-                        FROM Approval A
-                        INNER JOIN [WorkflowStep] WS ON WS.StepID = A.StepID
-                        INNER JOIN ChangeRequest CR ON CR.CRID = A.CRID
-                        WHERE A.CRID = @CRID
-                          AND A.Active = 1
-                       ORDER BY
-                        CASE WHEN A.ApprovalDate IS NULL THEN 1 ELSE 0 END,
+                    SELECT  
+                        A.ApprovalID,
+                        WS.StepID,
+                        WS.StepOrder,
+                        WS.StepName,
+                        WS.ApprovalRequired,
+                        A.AssignedBy,
+                        A.AssignedTo,
+                        A.AssignedDate,
+                        A.TargetDate,
+                        A.Decision,
                         A.ApprovalDate,
-                        A.ApprovalID";
+                        A.IsApproved
+                    FROM Approval A
+                    INNER JOIN [WorkflowStep] WS ON WS.StepID = A.StepID
+                    INNER JOIN ChangeRequest CR ON CR.CRID = A.CRID
+                    WHERE A.CRID = @CRID
+                      AND A.Active = 1
+                   ORDER BY
+                    CASE WHEN A.ApprovalDate IS NULL THEN 1 ELSE 0 END,
+                    A.ApprovalDate,
+                    A.ApprovalID";
 
             var wflow = changeRequest.WorkflowID > 0 ? changeRequest.WorkflowID : 3;
 
@@ -254,6 +255,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     StepOrder = r.Field<int>("StepOrder"),
                     StepName = r.Field<string>("StepName"),
                     ApprovalRequired = r.Field<bool>("ApprovalRequired"),
+                    AssignedBy = r.Field<string>("AssignedBy"),
                     AssignedTo = r.Field<string>("AssignedTo"),
                     AssignedDate = r.Field<DateTime?>("AssignedDate"),
                     TargetDate = r.Field<DateTime?>("TargetDate"),
@@ -3418,6 +3420,12 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     ApprovalDate = @Now,
                     Comments = 'UAT Link Uploaded'
                 WHERE ApprovalID = @ApprovalID;
+
+                -- Open a new Testing approval row, assigned back to the same tester.
+                INSERT INTO [CRManagementDB].[dbo].[Approval]
+                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                VALUES
+                    (@CRID, @TestingStepID, @EmpNo, @TesterAssignedTo, @Now, 1);
 
                 -- Open a new Testing cycle record for the tester to fill in.
                 INSERT INTO [CRManagementDB].[dbo].[Testing]
