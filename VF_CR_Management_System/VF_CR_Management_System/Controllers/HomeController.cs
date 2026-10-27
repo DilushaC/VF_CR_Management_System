@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
 using VF_CR_Management_System.Business.ChangeRequestHandler;
 using VF_CR_Management_System.Models;
+using VF_CR_Management_System.Presentation.Filters;
 
 namespace CR_Management_System.Controllers
 {
+    [SessionCheck]
     public class HomeController : Controller
     {
         private readonly ILogger<HomeController> _logger;

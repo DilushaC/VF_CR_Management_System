@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
+using Rotativa.AspNetCore;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,11 +14,12 @@ using VF_CR_Management_System.Business.ModuleHandler;
 using VF_CR_Management_System.Business.UserHandler;
 using VF_CR_Management_System.Business.VendorHandler;
 using VF_CR_Management_System.Data.Models;
+using VF_CR_Management_System.Presentation.Filters;
 using Attachment = VF_CR_Management_System.Data.Models.Attachment;
-using Rotativa.AspNetCore;
 
 namespace VF_CR_Management_System.Controllers
 {
+    [SessionCheck]
     public class CRManagementController : Controller
     {
         private readonly IChangeRequestService _changeRequestService;

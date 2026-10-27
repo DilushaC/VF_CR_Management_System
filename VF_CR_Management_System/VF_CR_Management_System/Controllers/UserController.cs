@@ -30,50 +30,6 @@ namespace VF_CR_Management_System.Presentation.Controllers
             return View();
         }
 
-        //[HttpPost]
-        //public async Task<IActionResult> Login(string username, string password)
-        //{
-        //    int allowedProductId = _configuration.GetValue<int>("AllowedProducts:ProductId");
-        //    try
-        //    {
-        //        var user = await _userService.ValidateUserAsync(username, password, allowedProductId);
-
-        //        if (user == null)
-        //        {
-        //            return Json(new { success = false, message = "Invalid login" });
-        //        }
-
-        //        if (user.ProductIds == null || !user.ProductIds.Contains(allowedProductId))
-        //            return Json(new { success = false, message = "Unauthorized product access" });
-
-        //        HttpContext.Session.SetString("UserName", user.DisplayName);
-        //        HttpContext.Session.SetString("EmpNo", user.UserName);
-        //        HttpContext.Session.SetString("Designation", user.DisplayDesignation);
-        //        HttpContext.Session.SetString("Department", user.DisplayDepartment);
-        //        HttpContext.Session.SetString("Email", user.Email);
-        //        HttpContext.Session.SetString("UserId", user.Id.ToString());
-
-        //        // Store PageUrls
-        //        var pageUrlsJson = JsonSerializer.Serialize(user.PageUrls ?? new List<string>());
-        //        HttpContext.Session.SetString("PageUrls", pageUrlsJson);
-
-        //        // Store MenuItems
-        //        var menuJson = JsonSerializer.Serialize(user.MenuItems ?? new List<MenuItem>());
-        //        HttpContext.Session.SetString("MenuItems", menuJson);
-
-        //        return Json(new
-        //        {
-        //            success = true,
-        //            redirectUrl = Url.Action("Index", "Home"),
-        //            loggedUser = user.DisplayName
-        //        });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return Json(new { success = false, message = "An unexpected error occurred. Please try again." });
-        //    }
-        //}
-
         [HttpPost]
         public async Task<IActionResult> Login(string username, string password)
         {
@@ -115,6 +71,21 @@ namespace VF_CR_Management_System.Presentation.Controllers
                 //log.Error($"Error Login : {ex.Message}.");
                 throw;
             }
+        }
+
+
+        [HttpGet]
+        [HttpPost]
+        public IActionResult Logout()
+        {
+            HttpContext.Session.Clear();
+
+            if (Request.Cookies.ContainsKey(".AspNetCore.Session"))
+            {
+                Response.Cookies.Delete(".AspNetCore.Session");
+            }
+
+            return RedirectToAction("Login", "User");
         }
     }
 }

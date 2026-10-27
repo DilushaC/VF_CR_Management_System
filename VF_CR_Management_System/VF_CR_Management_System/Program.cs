@@ -9,11 +9,19 @@ using VF_CR_Management_System.Business.ModuleHandler;
 using VF_CR_Management_System.Business.UserHandler;
 using VF_CR_Management_System.Business.VendorHandler;
 using VF_CR_Management_System.Data.Context;
+using VF_CR_Management_System.Presentation.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllersWithViews();
+// SessionCheckAttribute is registered as a GLOBAL filter here instead of
+// being applied per-controller with [SessionCheck] — this guarantees every
+// controller is session-gated automatically, including any new controller
+// added later that forgets to decorate itself with the attribute.
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.Add<SessionCheckAttribute>();
+});
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
@@ -47,7 +55,7 @@ builder.Services.AddScoped<IVendorService, VendorService>();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(100);
+    options.IdleTimeout = TimeSpan.FromMinutes(1);
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
