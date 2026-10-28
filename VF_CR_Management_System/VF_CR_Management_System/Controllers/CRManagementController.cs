@@ -1056,15 +1056,6 @@ namespace VF_CR_Management_System.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> AssignedByMeTable()
-        {
-            var empNo = HttpContext.Session.GetString("EmpNo");
-            ViewBag.CurrentEmpNo = empNo;
-            var crs = await _changeRequestService.GetAllChangeRequestsAssignedByMeAsync(empNo);
-            return View(crs);
-        }
-
-        [HttpGet]
         public async Task<IActionResult> AssignedToMeTable()
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
