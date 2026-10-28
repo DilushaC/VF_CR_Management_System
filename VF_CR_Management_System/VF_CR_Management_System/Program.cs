@@ -45,9 +45,11 @@ builder.Services.AddScoped<IVendorService, VendorService>();
 
 // Add session services
 builder.Services.AddDistributedMemoryCache();
+var sessionTimeoutMinutes = builder.Configuration.GetValue<int>("SessionSettings:IdleTimeoutMinutes");
+
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(100);
+    options.IdleTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes);
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
