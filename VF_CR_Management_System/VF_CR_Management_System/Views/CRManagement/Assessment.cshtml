@@ -117,7 +117,18 @@
         --casm-muted: var(--bs-secondary-color, #6b7385);
         --casm-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
     }
+    /* ===== Effort estimate: force native up/down spinners visible ===== */
+    .casm-number-spin {
+        -moz-appearance: textfield;
+        appearance: auto;
+    }
 
+    .casm-number-spin::-webkit-outer-spin-button,
+    .casm-number-spin::-webkit-inner-spin-button {
+            -webkit-appearance: auto !important;
+            opacity: 1 !important;
+            margin-left: 4px;
+    }
     /* ===== Hero ===== */
     .casm-hero {
         position: relative;
@@ -759,7 +770,7 @@
                 <h3>Change Assessment — @Model.CRNumber</h3>
                 <p>Review the request, log your implementation plan, and attach the supporting documents.</p>
             </div>
-            <a class="casm-back" href="@Url.Action("AssignedByMeTable")"><i class="ri-arrow-left-line"></i>Back</a>
+            <a class="casm-back" href="@Url.Action("AssignedToMeTable")"><i class="ri-arrow-left-line"></i>Back</a>
         </div>
     </div>
 
@@ -820,9 +831,9 @@
                             <div class="col-md-5">
                                 <label class="casm-label" for="effortEstimateDays">Effort estimate (days)</label>
                                 <input type="number" name="EffortEstimateDays" id="effortEstimateDays"
-                                       class="form-control" min="0"
+                                       class="form-control casm-number-spin" min="0" max="200"
                                        value="@effortEstimateDays">
-                                <div class="casm-field-error" id="err-effort"><i class="ri-error-warning-line"></i><span>Please enter an effort estimate greater than 0.</span></div>
+                                <div class="casm-field-error" id="err-effort"><i class="ri-error-warning-line"></i><span>Please enter an effort estimate between 1 and 200 days.</span></div>
                             </div>
                         </div>
 
@@ -985,7 +996,7 @@
         <div class="casm-actions">
             <button type="button"
                     class="btn btn-outline-danger"
-                    onclick="window.location.href='@Url.Action("AssignedByMeTable")'">
+                    onclick="window.location.href='@Url.Action("AssignedToMeTable")'">
                 Cancel
             </button>
 
@@ -1098,8 +1109,29 @@
                 if ($fieldEl) { $fieldEl.classList.toggle('is-invalid', !isValid); }
             }
 
+                        if (effortInput) {
+                effortInput.addEventListener('keydown', function (e) {
+                    var allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Home', 'End'];
+                    if (allowedKeys.indexOf(e.key) !== -1 || e.ctrlKey || e.metaKey) {
+                        return;
+                    }
+
+                    var hasSelection = this.selectionStart !== this.selectionEnd;
+                    if (!hasSelection && this.value.replace('-', '').length >= 3 && /^[0-9]$/.test(e.key)) {
+                        e.preventDefault();
+                    }
+                });
+
+                effortInput.addEventListener('input', function () {
+                    if (this.value.length > 3) {
+                        this.value = this.value.slice(0, 3);
+                    }
+                });
+            }
+
             function refreshProgress() {
-                var effortOk = !!(effortInput && parseFloat(effortInput.value) > 0);
+                var effortValue = effortInput ? parseFloat(effortInput.value) : NaN;
+                var effortOk = !isNaN(effortValue) && effortValue > 0 && effortValue <= 200;
                 var activitiesOk = !!(activitiesInput && activitiesInput.value.trim().length > 0);
                 var fixedAssetOk = !!(fixedAssetInput && fixedAssetInput.value.trim().length > 0);
                 var srsOk = hasExistingFiles('existingSrsList') || hasNewFiles(srsFileInput);

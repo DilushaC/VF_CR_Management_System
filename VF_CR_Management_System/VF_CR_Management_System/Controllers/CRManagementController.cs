@@ -388,7 +388,7 @@ namespace VF_CR_Management_System.Controllers
                     {
                         success = true,
                         message = "Assessment updated successfully",
-                        redirectUrl = Url.Action("AssignedByMeTable", "CRManagement")
+                        redirectUrl = Url.Action("AssignedToMeTable", "CRManagement")
                     });
                 }
                 else
@@ -617,7 +617,7 @@ namespace VF_CR_Management_System.Controllers
 
             if (id == null)
             {
-                return RedirectToAction("AssignedByMeTable");
+                return RedirectToAction("AssignedToMeTable");
             }
 
             try
