@@ -13,11 +13,6 @@ using VF_CR_Management_System.Presentation.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// SessionCheckAttribute is registered as a GLOBAL filter here instead of
-// being applied per-controller with [SessionCheck] — this guarantees every
-// controller is session-gated automatically, including any new controller
-// added later that forgets to decorate itself with the attribute.
 builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.Add<SessionCheckAttribute>();
@@ -25,9 +20,6 @@ builder.Services.AddControllersWithViews(options =>
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
-    // Silence the framework's own request/routing/action noise (Route matched,
-    // Executing endpoint, Request starting/finished, etc.) so the file only
-    // shows your app's own "Action: ..." lines plus real framework warnings/errors.
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
@@ -55,7 +47,7 @@ builder.Services.AddScoped<IVendorService, VendorService>();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(1);
+    options.IdleTimeout = TimeSpan.FromMinutes(100);
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;

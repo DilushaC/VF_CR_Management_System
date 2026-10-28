@@ -295,6 +295,77 @@
         .Where(s => !IsSupersededDraft(s))
         .ToList();
 
+    // ===== Workflow diagram: stage mapping, retries, and from/to flow =====
+
+    int StageIndexOf(string? stepName)
+    {
+        var k = StepKey(stepName);
+        if (string.Equals(k, StepKey("Division Head Approval"), StringComparison.OrdinalIgnoreCase)) return 1;
+        if (string.Equals(k, StepKey("Developer Documentation"), StringComparison.OrdinalIgnoreCase)) return 2;
+        if (string.Equals(k, StepKey("Security"), StringComparison.OrdinalIgnoreCase)) return 3;
+        if (string.Equals(k, StepKey("Developer Implementation"), StringComparison.OrdinalIgnoreCase)) return 4;
+        if (string.Equals(k, StepKey("Testing"), StringComparison.OrdinalIgnoreCase)) return 5;
+        if (string.Equals(k, StepKey("Final Approval"), StringComparison.OrdinalIgnoreCase)) return 6;
+        if (string.Equals(k, StepKey("Release Closure"), StringComparison.OrdinalIgnoreCase)) return 7;
+        return -1;
+    }
+
+    var furthestStageReached = displayStepRows
+        .Select(s => StageIndexOf(s.StepName))
+        .Where(i => i >= 0)
+        .DefaultIfEmpty(0)
+        .Max();
+
+    var stageVisitCounts = displayStepRows
+        .Select(s => StageIndexOf(s.StepName))
+        .Where(i => i >= 0)
+        .GroupBy(i => i)
+        .ToDictionary(g => g.Key, g => g.Count());
+
+    int RetryCountFor(int stageIndex) =>
+        stageVisitCounts.TryGetValue(stageIndex, out var c) && c > 1 ? c - 1 : 0;
+
+    var testingStepRowsInOrder = displayStepRows
+        .Where(s => string.Equals(StepKey(s.StepName), StepKey("Testing"), StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    string? FromCaption(int index)
+    {
+        if (index < 0 || index >= displayStepRows.Count) { return null; }
+        var current = displayStepRows[index];
+
+        // Special case: the FIRST Testing row is handed over by Division Head
+        // Approval (tester assignment happens as part of that approval action),
+        // not by whatever row happens to precede it in the list.
+        if (testingStepRowsInOrder.Count > 0 && ReferenceEquals(current, testingStepRowsInOrder[0]))
+        {
+            return "Assigned by: Division Head Approval";
+        }
+
+        if (index == 0) { return "From: Created"; }
+
+        var prev = displayStepRows[index - 1];
+        var prevState = StepState(prev);
+        return $"From: {Pretty(prev.StepName)} ({prevState.Label})";
+    }
+
+    string? ToCaption(int index)
+    {
+        if (index < 0 || index >= displayStepRows.Count - 1) { return null; }
+        var next = displayStepRows[index + 1];
+        var bounce = IsBounceBackToNext(index);
+        var label = bounce ? "Returned to" : "Led to";
+        return $"{label}: {Pretty(next.StepName)}";
+    }
+
+    bool IsBounceBackToNext(int index)
+    {
+        if (index < 0 || index >= displayStepRows.Count - 1) { return false; }
+        var curStage = StageIndexOf(displayStepRows[index].StepName);
+        var nextStage = StageIndexOf(displayStepRows[index + 1].StepName);
+        return curStage >= 0 && nextStage >= 0 && nextStage < curStage;
+    }
+
     var hasAssessmentData = new[]
     {
         Model.ChangeImpact, Model.Vendor, Model.ProposalNumber, Model.BusinessImpact, Model.Reason,
@@ -771,6 +842,23 @@ void FileGroup(string title, string icon, List<Attachment> items)
         border: 2px solid rgba(255,255,255,.22);
     }
 
+    .cr-retry-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 3px;
+        border-radius: 999px;
+        background: var(--cr-warn);
+        color: #3a2600;
+        font-size: .65rem;
+        font-weight: 800;
+        line-height: 16px;
+        text-align: center;
+        box-shadow: 0 0 0 2px var(--cr-ink);
+    }
+
     .cr-step.is-done .cr-dot {
         background: var(--cr-ok);
         border-color: var(--cr-ok);
@@ -1234,6 +1322,34 @@ void FileGroup(string title, string icon, List<Attachment> items)
         margin-top: .1rem;
     }
 
+    .cr-tl-flow {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .3rem;
+        font-size: .78rem;
+        color: var(--cr-muted);
+    }
+
+        .cr-tl-flow i {
+            font-size: .9rem;
+            color: var(--cr-accent);
+        }
+
+        .cr-tl-flow.is-bounce {
+            color: #b57600;
+            font-weight: 600;
+        }
+
+            .cr-tl-flow.is-bounce i {
+                color: var(--cr-warn);
+            }
+
+    .cr-tl-item.cr-tl-bounce::before {
+        background: repeating-linear-gradient( to bottom, var(--cr-warn) 0, var(--cr-warn) 4px, transparent 4px, transparent 8px );
+        width: 2px;
+    }
+
     .cr-empty {
         text-align: center;
         padding: 2.5rem 1rem;
@@ -1622,16 +1738,27 @@ void FileGroup(string title, string icon, List<Attachment> items)
     </div>
 
     <ol class="cr-stepper" aria-label="Workflow progress">
+        @{
+            var effectiveStage = Math.Max(activeStage, furthestStageReached);
+        }
         @for (var si = 0; si < stageNames.Length; si++)
         {
-            var isDone = si < activeStage;
-            var isCurrent = si == activeStage;
+            var isDone = si < effectiveStage;
+            var isCurrent = si == effectiveStage;
             var stateCss = isDone ? "is-done" : isCurrent ? "is-current" : "";
             if (isCurrent && isRejected) { stateCss += " is-rejected"; }
             else if (isCurrent && isReturned) { stateCss += " is-returned"; }
 
+            var retries = RetryCountFor(si);
+
             <li class="cr-step @stateCss" style="--i:@(si)" aria-current="@(isCurrent ? "step" : null)">
-                <div class="cr-dot"><i class="@(isDone ? "ri-check-line" : stageIcons[si])"></i></div>
+                <div class="cr-dot">
+                    <i class="@(isDone ? "ri-check-line" : stageIcons[si])"></i>
+                    @if (isCurrent && retries > 0)
+                    {
+                        <span class="cr-retry-badge" title="Returned to this stage @retries time(s)">@retries</span>
+                    }
+                </div>
                 <div>@stageNames[si]</div>
             </li>
         }
@@ -1891,8 +2018,9 @@ void FileGroup(string title, string icon, List<Attachment> items)
                             </div>
                         </li>
                     }
-                    @foreach (var step in displayStepRows)
+                    @for (var i = 0; i < displayStepRows.Count; i++)
                     {
+                        var step = displayStepRows[i];
                         var state = StepState(step);
                         var waitingOnMe = IsPending(step) && IsCurrentUser(step.AssignedTo);
                         var dotIcon = state.Css == "ok" ? "ri-check-line"
@@ -1900,8 +2028,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         : state.Css == "warn" ? "ri-arrow-go-back-line"
                         : "ri-time-line";
                         var stepTime = FormatStepTime(step);
+                        var fromCaption = FromCaption(i);
+                        var toCaption = ToCaption(i);
+                        var bounceToNext = IsBounceBackToNext(i);
 
-                        <li class="cr-tl-item">
+                        <li class="cr-tl-item @(bounceToNext ? "cr-tl-bounce" : "")">
                             <span class="cr-tl-dot @state.Css"><i class="@dotIcon"></i></span>
                             <div class="cr-tl-body">
                                 <div class="cr-tl-head">
@@ -1919,6 +2050,16 @@ void FileGroup(string title, string icon, List<Attachment> items)
                                 @if (!string.IsNullOrWhiteSpace(step.AssignedTo))
                                 {
                                     <div class="cr-tl-who">@DisplayUser(step.AssignedTo)</div>
+                                }
+                                @if (fromCaption != null)
+                                {
+                                    <div class="cr-tl-flow cr-tl-flow-from"><i class="ri-corner-left-up-line"></i>@fromCaption</div>
+                                }
+                                @if (toCaption != null)
+                                {
+                                    <div class="cr-tl-flow cr-tl-flow-to @(bounceToNext ? "is-bounce" : "")">
+                                        <i class="@(bounceToNext ? "ri-arrow-go-back-line" : "ri-corner-right-down-line")"></i>@toCaption
+                                    </div>
                                 }
                             </div>
                         </li>
