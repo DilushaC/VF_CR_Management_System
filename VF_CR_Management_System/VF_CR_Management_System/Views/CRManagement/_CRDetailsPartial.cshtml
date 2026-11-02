@@ -299,10 +299,10 @@
             || isDevReturn) ? 7 :
         (isDevelopmentApproved || isQaReturn) ? 6 :
         isSecurityApproved ? 5 :
-        (isSecurityDraft || isSecurityRejected) ? 4 :
+        isSecurityDraft ? 4 :
         isAssessmentAccepted ? 4 :
         isAssessment ? 3 :
-        (isApproved || isAssessmentDraft || isAssessmentReturned) ? 2 :
+        (isApproved || isAssessmentDraft || isAssessmentReturned || isSecurityRejected) ? 2 :
         isSubmitted ? 1 :
         0;
 
