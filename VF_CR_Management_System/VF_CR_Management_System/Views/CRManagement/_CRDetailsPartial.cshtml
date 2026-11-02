@@ -172,9 +172,11 @@
     }.Any(u => !string.IsNullOrWhiteSpace(u));
 
     // Status flags
+    var isDraft = StatusIs("Draft");
     var isSubmitted = StatusIs("Submitted");
     var isApproved = StatusIs("Approved");
     var isAssessment = StatusIs("Assessment");
+    var isAssessmentDraft = StatusIs("AssessmentDraft");
     var isAssessmentAccepted = StatusIs("AssessmentAccepted");
     var isAssessmentReturned = StatusIs("AssessmentReturned");
     var isSecurityDraft = StatusIs("SecurityDraft");
@@ -182,16 +184,23 @@
     var isSecurityApproved = StatusIs("SecurityApproved");
     var isDevelopmentApproved = StatusIs("DevelopmentApproved");
     var isDevReturn = StatusIs("DevReturn");
+    var isTestingStatus = StatusIs("Testing");
+    var isTestingDraft = StatusIs("TestingDraft");
+    var isTestingRejected = StatusIs("TestingRejected");
     var isQaReturn = StatusIs("QAReturn");
     var isTestingApproved = StatusIs("TestingApproved");
-    var isFinalApprovalPending = StatusIs("FinalApprovalPending");
+    var isFinalApprovalPending = StatusIs("FinalApprovalPending"); // matches DB's "FInalApprovalPending" too (OrdinalIgnoreCase)
     var isFinalApproved = StatusIs("FinalApproved");
+    var isFinalRejected = StatusIs("FinalRejected");
     var isDeployed = StatusIs("Deployed");
     var isReleasedStatus = StatusIs("Released");
     var isRejected = StatusIs("Rejected");
 
     var isReleased = Model.CompletedDate.HasValue || isReleasedStatus || isDeployed;
-    var isReturned = isAssessmentReturned || isSecurityRejected || isQaReturn;
+    var isReturned = isAssessmentReturned || isSecurityRejected || isQaReturn
+                   || isDevReturn || isTestingRejected || isFinalRejected;
+
+    //end of status flags
 
     var canApprove = isSubmitted && CanActOn(PendingStep("Division Head Approval"));
 
@@ -273,13 +282,17 @@
 
     int activeStage =
         isReleased ? stageNames.Length :
-        isFinalApproved ? 7 :
+        isRejected || isFinalRejected ? 7 :
+        isFinalApproved || isFinalApprovalPending ? 7 :
         isTestingApproved ? 6 :
-        (isDevReturn || canGoQA || Model.Status != null && StepKey(Model.Status) == StepKey("Testing")) ? 5 :
-        (isDevelopmentApproved || isQaReturn || isSecurityApproved) ? 4 :
-        (isSecurityDraft || isAssessmentAccepted) ? 3 :
-        (isApproved || isAssessmentReturned || isAssessment) ? 2 :
-        1;
+        (isTestingStatus || isTestingDraft || isTestingRejected
+            || isDevReturn || isQaReturn) ? 5 :
+        (isDevelopmentApproved || isSecurityApproved) ? 4 :
+        (isSecurityDraft || isSecurityRejected || isAssessmentAccepted) ? 3 :
+        (isApproved || isAssessment || isAssessmentDraft
+            || isAssessmentReturned) ? 2 :
+        isSubmitted ? 1 :
+        0;
 
     var hasAction = canApprove || canDevDocDecide || canGoAssessment || canGoSecurity || canEditSecurityDraft
         || canApproveToDevelopment || canProceedToDevelopment || canGoQA || canHandoverToTester
@@ -1739,7 +1752,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
     <ol class="cr-stepper" aria-label="Workflow progress">
         @{
-            var effectiveStage = Math.Max(activeStage, furthestStageReached);
+            var effectiveStage = activeStage;
         }
         @for (var si = 0; si < stageNames.Length; si++)
         {
@@ -2187,13 +2200,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                            foreach (var user in ViewBag.Users)
-                            {
-                                            string uId = user.UserName;
-                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                            if (string.IsNullOrEmpty(uId)) { continue; }
-                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                            }
+                    foreach (var user in ViewBag.Users)
+                    {
+                            string uId = user.UserName;
+                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                            if (string.IsNullOrEmpty(uId)) { continue; }
+                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                    }
             }
         ];
 

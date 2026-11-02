@@ -26,6 +26,7 @@
             "securitysubmitted" => ("Security Review", "info"),
             "securitydraft" => ("Security Draft", "info"),
             "securityapproved" => ("Security Approved", "ok"),
+            "securityrejected" => ("Security Rejected", "bad"),
             "developmentapproved" => ("Development Approved", "ok"),
             "testing" => ("In QA Testing", "info"),
             "testingsubmitted" => ("QA Submitted", "info"),
@@ -33,11 +34,12 @@
             "testingapproved" => ("QA Approved", "ok"),
             "testingrejected" => ("QA Rejected", "bad"),
             "qareturn" => ("Returned from QA", "warn"),
+            "finalapprovalpending" => ("Final Approval Pending", "warn"),
             "finalapproved" => ("Final Approved", "ok"),
             "finalrejected" => ("Final Rejected", "bad"),
+            "deployed" => ("Deployed", "dark"),
             "released" => ("Released", "dark"),
             "rejected" => ("Rejected", "bad"),
-            // Unknown status: show it with spaces added between words, in grey
             _ => (System.Text.RegularExpressions.Regex.Replace(status ?? string.Empty, "(?<=[a-z])(?=[A-Z])", " "),
                   "neutral")
         };
@@ -47,22 +49,24 @@
     int StageOf(string? status)
     {
         var k = Key(status);
-        if (k == "released") { return 8; }
-        if (k == "finalapproved") { return 7; }
-        if (new[] { "testingapproved", "finalrejected" }.Contains(k)) { return 6; }
-        if (new[] { "devreturn", "testing", "testingdraft", "testingsubmitted", "testingrejected" }.Contains(k)) { return 5; }
-        if (new[] { "securityapproved", "developmentapproved", "qareturn" }.Contains(k)) { return 4; }
-        if (new[] { "security", "securitydraft", "securitysubmitted" }.Contains(k)) { return 3; }
-        if (new[] { "approved", "assessment", "assessmentsubmitted", "assessmentdraft", "assessmentaccepted", "assessmentreturned" }.Contains(k)) { return 2; }
-        return 1;
+        if (k == "released" || k == "deployed") { return 8; }
+        if (k == "finalapproved" || k == "rejected" || k == "finalrejected") { return 7; }
+        if (k == "finalapprovalpending") { return 7; }
+        if (k == "testingapproved") { return 6; }
+        if (new[] { "devreturn", "testing", "testingdraft", "testingsubmitted", "testingrejected", "qareturn" }.Contains(k)) { return 5; }
+        if (new[] { "securityapproved", "developmentapproved" }.Contains(k)) { return 4; }
+        if (new[] { "security", "securitydraft", "securitysubmitted", "securityrejected", "assessmentaccepted" }.Contains(k)) { return 3; }
+        if (new[] { "approved", "assessment", "assessmentsubmitted", "assessmentdraft", "assessmentreturned" }.Contains(k)) { return 2; }
+        if (k == "submitted") { return 1; }
+        return 1; // draft and anything unmapped
     }
 
     // Filter group used by the summary cards: pending | progress | attention | done
     string GroupOf(string? status)
     {
         var k = Key(status);
-        if (k == "released") { return "done"; }
-        if (new[] { "assessmentreturned", "qareturn", "testingrejected", "finalrejected", "rejected" }.Contains(k)) { return "attention"; }
+        if (k == "released" || k == "deployed") { return "done"; }
+        if (new[] { "assessmentreturned", "qareturn", "testingrejected", "finalrejected", "rejected", "securityrejected" }.Contains(k)) { return "attention"; }
         if (k == "submitted" || k == "draft") { return "pending"; }
         return "progress";
     }
