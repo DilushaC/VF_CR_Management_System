@@ -366,10 +366,10 @@
         .ToDictionary(g => g.Key, g => g.Count());
 
     int RetryCountFor(int stageIndex) =>
-        stageVisitCounts.TryGetValue(stageIndex, out var c) && c > 1 ? c - 1 : 0;
+        stageVisitCounts.TryGetValue(stageIndex, out var c) ? c : 0;
 
     int DevelopmentCycleCount() =>
-    stageVisitCounts.TryGetValue(6, out var c) ? c : 0;
+        stageVisitCounts.TryGetValue(6, out var c) ? c : 0;
 
     int QaCycleCount()
     {
@@ -1798,34 +1798,44 @@ void FileGroup(string title, string icon, List<Attachment> items)
             var isDone = si < effectiveStage;
             var isCurrent = si == effectiveStage;
             var isDivHeadStage = si == 1 || si == 3 || si == 5 || si == 8;
+            var isAssessmentStage = si == 2;
+            var isSecurityStage = si == 4;
             var isDevStage = si == 6;
             var isQaStage = si == 7;
 
-            var cycleCount = isDivHeadStage ? 0
-                            : isDevStage ? DevelopmentCycleCount()
-                            : isQaStage ? QaCycleCount()
-                            : RetryCountFor(si);
+            var isPersistentBadgeStage = isAssessmentStage || isSecurityStage || isDevStage || isQaStage;
 
-            var badgeTitle = isDevStage ? $"Development cycle {cycleCount}"
+            // Only Assessment, Security, Development and QA ever show a cycle badge.
+            // Every other stage (the Div. Head Approval gates, Final Approval, Release
+            // Closure) shows no badge at all, regardless of how many rows it has.
+            var cycleCount = isPersistentBadgeStage
+                            ? (isDevStage ? DevelopmentCycleCount()
+                               : isQaStage ? QaCycleCount()
+                               : RetryCountFor(si))
+                            : 0;
+
+            var badgeTitle = isAssessmentStage ? $"Assessment cycle {cycleCount}"
+                            : isSecurityStage ? $"Security cycle {cycleCount}"
+                            : isDevStage ? $"Development cycle {cycleCount}"
                             : isQaStage ? $"QA test cycle {cycleCount}"
-                            : $"Returned to this stage {cycleCount} time(s)";
+                            : string.Empty;
 
-            var showBadge = !isDivHeadStage && cycleCount > 0;
+            // Badge (and the orange "returned" dot styling) only appears once a stage
+            // has genuinely been redone — i.e. visited 2+ times. A clean single pass
+            // shows nothing at all. When shown, the badge displays the raw visit count.
+            var isRetried = isPersistentBadgeStage && cycleCount > 1;
+            var showBadge = isRetried;
 
             var stateCss = isDone ? "is-done" : isCurrent ? "is-current" : "";
             if (isCurrent && isRejected) { stateCss += " is-rejected"; }
-            else if (isCurrent && !isDevStage && !isQaStage && !isDivHeadStage && cycleCount > 0) { stateCss += " is-returned"; }
+            else if (isCurrent && isRetried) { stateCss += " is-returned"; }
 
             <li class="cr-step @stateCss" style="--i:@(si)" aria-current="@(isCurrent ? "step" : null)">
                 <div class="cr-dot">
                     <i class="@(isDone ? "ri-check-line" : stageIcons[si])"></i>
-                    @if ((isDevStage || isQaStage) && showBadge)
+                    @if (showBadge)
                     {
                         <span class="cr-retry-badge cr-cycle-badge" title="@badgeTitle">@cycleCount</span>
-                    }
-                    else if (isCurrent && showBadge)
-                    {
-                        <span class="cr-retry-badge" title="@badgeTitle">@cycleCount</span>
                     }
                 </div>
                 <div>@stageNames[si]</div>
