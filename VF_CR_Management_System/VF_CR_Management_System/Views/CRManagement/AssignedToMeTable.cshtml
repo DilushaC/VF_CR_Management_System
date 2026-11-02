@@ -45,20 +45,23 @@
         };
     }
 
-    // Which of the 8 workflow stages the CR is on (1-based; 8 = released). Mirrors the details modal's stepper.
+    // Which of the 11 workflow stages the CR is on (1-based; 11 = released). Mirrors the details modal's stepper.
     int StageOf(string? status)
     {
         var k = Key(status);
-        if (k == "released" || k == "deployed") { return 8; }
-        if (k == "finalapproved" || k == "rejected" || k == "finalrejected") { return 7; }
-        if (k == "finalapprovalpending") { return 7; }
-        if (k == "testingapproved") { return 6; }
-        if (new[] { "devreturn", "testing", "testingdraft", "testingsubmitted", "testingrejected", "qareturn" }.Contains(k)) { return 5; }
-        if (new[] { "securityapproved", "developmentapproved" }.Contains(k)) { return 4; }
-        if (new[] { "security", "securitydraft", "securitysubmitted", "securityrejected", "assessmentaccepted" }.Contains(k)) { return 3; }
-        if (new[] { "approved", "assessment", "assessmentsubmitted", "assessmentdraft", "assessmentreturned" }.Contains(k)) { return 2; }
-        if (k == "submitted") { return 1; }
-        return 1; // draft and anything unmapped
+        if (k == "released" || k == "deployed") { return 11; }
+        if (k == "finalapproved") { return 10; }                         // approved, waiting on release/live link
+        if (k == "rejected" || k == "finalrejected") { return 10; }
+        if (k == "finalapprovalpending") { return 9; }
+        if (k == "testingapproved") { return 9; }                        // waiting on 3rd Div. Head Approval gate
+        if (new[] { "devreturn", "testing", "testingdraft", "testingsubmitted", "testingrejected", "qareturn" }.Contains(k)) { return 8; }
+        if (k == "developmentapproved") { return 7; }
+        if (k == "securityapproved") { return 6; }                       // waiting on 2nd Div. Head Approval gate
+        if (new[] { "security", "securitydraft", "securitysubmitted", "securityrejected", "assessmentaccepted" }.Contains(k)) { return 5; }
+        if (k == "assessment" || k == "assessmentsubmitted") { return 4; } // waiting on 1st Div. Head Approval gate
+        if (new[] { "approved", "assessmentdraft", "assessmentreturned" }.Contains(k)) { return 3; }
+        if (k == "submitted") { return 2; }
+        return 2; // draft and anything unmapped
     }
 
     // Filter group used by the summary cards: pending | progress | attention | done
@@ -711,13 +714,13 @@
                                 </td>
                                 <td data-order="@stage">
                                     <span class="cr-pill tone-@badge.Tone"><span class="cr-pill-dot"></span>@badge.Label</span>
-                                    <div class="cr-seg tone-@segTone" title="Stage @stage of 8" aria-hidden="true">
-                                        @for (var si = 0; si < 8; si++)
-                                        {
-                                            var segClass = group == "done" || si < stage - 1 ? "on" : si == stage - 1 ? "cur" : "";
-                                            <i class="@segClass"></i>
-                                        }
-                                    </div>
+                                        <div class="cr-seg tone-@segTone" title="Stage @stage of 11" aria-hidden="true">
+                                            @for (var si = 0; si < 11; si++)
+                                            {
+                                                var segClass = group == "done" || si < stage - 1 ? "on" : si == stage - 1 ? "cur" : "";
+                                                <i class="@segClass"></i>
+                                            }
+                                        </div>
                                 </td>
                                 <td data-order="@cr.RequestedDate.ToString("yyyyMMdd")">
                                     <div>@cr.RequestedDate.ToString("yyyy/MM/dd")</div>

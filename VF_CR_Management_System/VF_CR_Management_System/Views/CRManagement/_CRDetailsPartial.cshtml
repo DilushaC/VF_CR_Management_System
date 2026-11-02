@@ -276,21 +276,33 @@
 }
 
 @{
-    var stageNames = new[] { "Requested", "Approval", "Assessment", "Security", "Development", "QA", "Final approval", "Release" };
-    var stageIcons = new[] { "ri-file-add-line", "ri-user-follow-line", "ri-file-search-line", "ri-shield-check-line",
-                             "ri-code-s-slash-line", "ri-test-tube-line", "ri-check-double-line", "ri-rocket-line" };
+    // 11 stages: 3 of them are "Division Head Approval" gates that recur at
+    // different points in the flow (after Assessment, after Security, after QA).
+    var stageNames = new[] {
+        "Requested", "Approval", "Assessment", "Div. Head Approval", "Security",
+        "Div. Head Approval", "Development", "QA", "Div. Head Approval",
+        "Final approval", "Release"
+    };
+    var stageIcons = new[] {
+        "ri-file-add-line", "ri-user-follow-line", "ri-file-search-line", "ri-user-follow-line",
+        "ri-shield-check-line", "ri-user-follow-line", "ri-code-s-slash-line", "ri-test-tube-line",
+        "ri-user-follow-line", "ri-check-double-line", "ri-rocket-line"
+    };
 
     int activeStage =
         isReleased ? stageNames.Length :
-        isRejected || isFinalRejected ? 7 :
-        isFinalApproved || isFinalApprovalPending ? 7 :
-        isTestingApproved ? 6 :
+        isRejected || isFinalRejected ? 9 :
+        isFinalApproved ? 10 :                 
+        isFinalApprovalPending ? 9 :           
+        isTestingApproved ? 8 :
         (isTestingStatus || isTestingDraft || isTestingRejected
-            || isDevReturn || isQaReturn) ? 5 :
-        (isDevelopmentApproved || isSecurityApproved) ? 4 :
-        (isSecurityDraft || isSecurityRejected || isAssessmentAccepted) ? 3 :
-        (isApproved || isAssessment || isAssessmentDraft
-            || isAssessmentReturned) ? 2 :
+            || isDevReturn || isQaReturn) ? 7 :
+        (isDevelopmentApproved) ? 6 :
+        isSecurityApproved ? 5 :
+        (isSecurityDraft || isSecurityRejected) ? 4 :
+        isAssessmentAccepted ? 4 :
+        isAssessment ? 3 :
+        (isApproved || isAssessmentDraft || isAssessmentReturned) ? 2 :
         isSubmitted ? 1 :
         0;
 
@@ -310,27 +322,45 @@
 
     // ===== Workflow diagram: stage mapping, retries, and from/to flow =====
 
-    int StageIndexOf(string? stepName)
+    int StageIndexOf(WorkflowStepAssignment? step)
     {
-        var k = StepKey(stepName);
-        if (string.Equals(k, StepKey("Division Head Approval"), StringComparison.OrdinalIgnoreCase)) return 1;
+        if (step == null) { return -1; }
+        var k = StepKey(step.StepName);
+
+        if (string.Equals(k, StepKey("Division Head Approval"), StringComparison.OrdinalIgnoreCase))
+        {
+            var deptHeadRowsInOrder = displayStepRows
+                .Where(s => string.Equals(StepKey(s.StepName), StepKey("Division Head Approval"), StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var occurrenceIndex = deptHeadRowsInOrder.FindIndex(s => ReferenceEquals(s, step));
+
+            return occurrenceIndex switch
+            {
+                0 => 1,  
+                1 => 3,  
+                2 => 5,  
+                3 => 8, 
+                _ => 8   
+            };
+        }
+
         if (string.Equals(k, StepKey("Developer Documentation"), StringComparison.OrdinalIgnoreCase)) return 2;
-        if (string.Equals(k, StepKey("Security"), StringComparison.OrdinalIgnoreCase)) return 3;
-        if (string.Equals(k, StepKey("Developer Implementation"), StringComparison.OrdinalIgnoreCase)) return 4;
-        if (string.Equals(k, StepKey("Testing"), StringComparison.OrdinalIgnoreCase)) return 5;
-        if (string.Equals(k, StepKey("Final Approval"), StringComparison.OrdinalIgnoreCase)) return 6;
-        if (string.Equals(k, StepKey("Release Closure"), StringComparison.OrdinalIgnoreCase)) return 7;
+        if (string.Equals(k, StepKey("Security"), StringComparison.OrdinalIgnoreCase)) return 4;
+        if (string.Equals(k, StepKey("Developer Implementation"), StringComparison.OrdinalIgnoreCase)) return 6;
+        if (string.Equals(k, StepKey("Testing"), StringComparison.OrdinalIgnoreCase)) return 7;
+        if (string.Equals(k, StepKey("Final Approval"), StringComparison.OrdinalIgnoreCase)) return 9;
+        if (string.Equals(k, StepKey("Release Closure"), StringComparison.OrdinalIgnoreCase)) return 10;
         return -1;
     }
 
     var furthestStageReached = displayStepRows
-        .Select(s => StageIndexOf(s.StepName))
+        .Select(s => StageIndexOf(s))
         .Where(i => i >= 0)
         .DefaultIfEmpty(0)
         .Max();
 
     var stageVisitCounts = displayStepRows
-        .Select(s => StageIndexOf(s.StepName))
+        .Select(s => StageIndexOf(s))
         .Where(i => i >= 0)
         .GroupBy(i => i)
         .ToDictionary(g => g.Key, g => g.Count());
@@ -374,8 +404,8 @@
     bool IsBounceBackToNext(int index)
     {
         if (index < 0 || index >= displayStepRows.Count - 1) { return false; }
-        var curStage = StageIndexOf(displayStepRows[index].StepName);
-        var nextStage = StageIndexOf(displayStepRows[index + 1].StepName);
+        var curStage = StageIndexOf(displayStepRows[index]);
+        var nextStage = StageIndexOf(displayStepRows[index + 1]);
         return curStage >= 0 && nextStage >= 0 && nextStage < curStage;
     }
 
