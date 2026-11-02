@@ -368,6 +368,17 @@
     int RetryCountFor(int stageIndex) =>
         stageVisitCounts.TryGetValue(stageIndex, out var c) && c > 1 ? c - 1 : 0;
 
+    int DevelopmentCycleCount() =>
+    stageVisitCounts.TryGetValue(6, out var c) ? c : 0;
+
+    int QaCycleCount()
+    {
+        var testingRecordsForBadge = Model.Tests ?? new List<Testing>();
+        var activeForBadge = testingRecordsForBadge.Where(t => t.Active).ToList();
+        if (!activeForBadge.Any()) { return 0; }
+        return Math.Max(activeForBadge.Count, activeForBadge.Max(t => t.TestCycleNumber));
+    }
+
     var testingStepRowsInOrder = displayStepRows
         .Where(s => string.Equals(StepKey(s.StepName), StepKey("Testing"), StringComparison.OrdinalIgnoreCase))
         .ToList();
@@ -377,9 +388,7 @@
         if (index < 0 || index >= displayStepRows.Count) { return null; }
         var current = displayStepRows[index];
 
-        // Special case: the FIRST Testing row is handed over by Division Head
-        // Approval (tester assignment happens as part of that approval action),
-        // not by whatever row happens to precede it in the list.
+
         if (testingStepRowsInOrder.Count > 0 && ReferenceEquals(current, testingStepRowsInOrder[0]))
         {
             return "Assigned by: Division Head Approval";
@@ -397,7 +406,7 @@
         if (index < 0 || index >= displayStepRows.Count - 1) { return null; }
         var next = displayStepRows[index + 1];
         var bounce = IsBounceBackToNext(index);
-        var label = bounce ? "Returned to" : "Led to";
+        var label = "Led to";
         return $"{label}: {Pretty(next.StepName)}";
     }
 
@@ -1788,18 +1797,35 @@ void FileGroup(string title, string icon, List<Attachment> items)
         {
             var isDone = si < effectiveStage;
             var isCurrent = si == effectiveStage;
-            var retries = RetryCountFor(si);
+            var isDivHeadStage = si == 1 || si == 3 || si == 5 || si == 8;
+            var isDevStage = si == 6;
+            var isQaStage = si == 7;
+
+            var cycleCount = isDivHeadStage ? 0
+                            : isDevStage ? DevelopmentCycleCount()
+                            : isQaStage ? QaCycleCount()
+                            : RetryCountFor(si);
+
+            var badgeTitle = isDevStage ? $"Development cycle {cycleCount}"
+                            : isQaStage ? $"QA test cycle {cycleCount}"
+                            : $"Returned to this stage {cycleCount} time(s)";
+
+            var showBadge = !isDivHeadStage && cycleCount > 0;
 
             var stateCss = isDone ? "is-done" : isCurrent ? "is-current" : "";
             if (isCurrent && isRejected) { stateCss += " is-rejected"; }
-            else if (isCurrent && retries > 0) { stateCss += " is-returned"; }
+            else if (isCurrent && !isDevStage && !isQaStage && !isDivHeadStage && cycleCount > 0) { stateCss += " is-returned"; }
 
             <li class="cr-step @stateCss" style="--i:@(si)" aria-current="@(isCurrent ? "step" : null)">
                 <div class="cr-dot">
                     <i class="@(isDone ? "ri-check-line" : stageIcons[si])"></i>
-                    @if (isCurrent && retries > 0)
+                    @if ((isDevStage || isQaStage) && showBadge)
                     {
-                        <span class="cr-retry-badge" title="Returned to this stage @retries time(s)">@retries</span>
+                        <span class="cr-retry-badge cr-cycle-badge" title="@badgeTitle">@cycleCount</span>
+                    }
+                    else if (isCurrent && showBadge)
+                    {
+                        <span class="cr-retry-badge" title="@badgeTitle">@cycleCount</span>
                     }
                 </div>
                 <div>@stageNames[si]</div>

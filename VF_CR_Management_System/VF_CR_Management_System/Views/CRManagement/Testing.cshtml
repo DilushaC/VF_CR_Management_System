@@ -1073,7 +1073,7 @@
                         </div>
 
                         <div>
-                            <label class="ctst-label" for="testResultFiles">Test results attachments</label>
+                            <label class="ctst-label" for="testResultFiles">Test results attachments <span class="text-danger">*</span></label>
                             <div class="ctst-dropzone">
                                 <input type="file"
                                        id="testResultFiles"
@@ -1084,6 +1084,7 @@
                                 <div class="form-text">
                                     <i class="ri-information-line me-1"></i>PDF, Word, Excel, CSV, text, images or ZIP. Max 10 MB per file, up to 10 files.
                                 </div>
+                                <div class="ctst-field-error" id="err-attachments"><i class="ri-error-warning-line"></i><span>Please attach at least one test result file.</span></div>
                             </div>
 
                             <!-- Newly selected files (not yet uploaded) -->
@@ -1382,17 +1383,25 @@
                     done === 0 ? "Let's get started" : 'Almost there';
 
                 // ----- Inline field validation -----
-                // Test plan & results is REQUIRED before either "Test Passed" or "Test Failed" can be clicked.
+                // Test plan & results AND at least one attachment are REQUIRED before
+                // either "Test Passed" or "Test Failed" can be clicked.
                 showErr('plan', planOk, testPlanInput);
+                showErr('attachments', attachmentsOk, null);
 
-                submitBtn.disabled = !planOk;
-                submitBtn.classList.toggle('disabled', !planOk);
-                submitBtn.title = planOk ? '' : 'Fill in the test plan & results before submitting';
+                var canSubmit = planOk && attachmentsOk;
+                var missingMsg = !planOk && !attachmentsOk
+                    ? 'Fill in the test plan & results and attach at least one file before submitting'
+                    : !planOk
+                        ? 'Fill in the test plan & results before submitting'
+                        : 'Attach at least one test result file before submitting';
 
-                // Test Failed is always enabled — no test plan requirement.
-                failBtn.disabled = false;
-                failBtn.classList.remove('disabled');
-                failBtn.title = '';
+                submitBtn.disabled = !canSubmit;
+                submitBtn.classList.toggle('disabled', !canSubmit);
+                submitBtn.title = canSubmit ? '' : missingMsg;
+
+                failBtn.disabled = !canSubmit;
+                failBtn.classList.toggle('disabled', !canSubmit);
+                failBtn.title = canSubmit ? '' : missingMsg;
             }
 
             document.getElementById('testingForm').addEventListener('input', refreshProgress);

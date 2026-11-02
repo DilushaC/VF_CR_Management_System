@@ -986,7 +986,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                       AND cr.Active = 1
                 ) AS x
                 WHERE x.rn = 1
-                ORDER BY x.CRNumber DESC;";
+                ORDER BY
+                    CASE WHEN x.IsApproved IS NULL THEN 0 ELSE 1 END,
+                    x.CRNumber DESC;";
 
             var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,
