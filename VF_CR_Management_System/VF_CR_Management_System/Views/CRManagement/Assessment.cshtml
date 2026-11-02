@@ -1109,22 +1109,34 @@
                 if ($fieldEl) { $fieldEl.classList.toggle('is-invalid', !isValid); }
             }
 
-                        if (effortInput) {
+            if (effortInput) {
                 effortInput.addEventListener('keydown', function (e) {
                     var allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Home', 'End'];
                     if (allowedKeys.indexOf(e.key) !== -1 || e.ctrlKey || e.metaKey) {
                         return;
                     }
 
+                    // Block anything that isn't a plain digit — no 'e', 'E', '+', '-', '.'
+                    if (!/^[0-9]$/.test(e.key)) {
+                        e.preventDefault();
+                        return;
+                    }
+
                     var hasSelection = this.selectionStart !== this.selectionEnd;
-                    if (!hasSelection && this.value.replace('-', '').length >= 3 && /^[0-9]$/.test(e.key)) {
+                    if (!hasSelection && this.value.length >= 3) {
                         e.preventDefault();
                     }
                 });
 
+                // Catch paste, autofill, and any other way invalid/over-length content can land
                 effortInput.addEventListener('input', function () {
-                    if (this.value.length > 3) {
-                        this.value = this.value.slice(0, 3);
+                    // Strip anything that isn't a digit (handles paste of "456e10" etc.)
+                    var digitsOnly = this.value.replace(/[^0-9]/g, '');
+                    if (digitsOnly.length > 3) {
+                        digitsOnly = digitsOnly.slice(0, 3);
+                    }
+                    if (digitsOnly !== this.value) {
+                        this.value = digitsOnly;
                     }
                 });
             }

@@ -1060,7 +1060,10 @@ namespace VF_CR_Management_System.Controllers
         {
             var empNo = HttpContext.Session.GetString("EmpNo");
             ViewBag.CurrentEmpNo = empNo;
+
             var crs = await _changeRequestService.GetAllChangeRequestsAssignedToMeAsync(empNo);
+            ViewBag.PendingApprovalCrIds = await _changeRequestService.GetCrIdsPendingApprovalForUserAsync(empNo);
+
             return View(crs);
         }
 

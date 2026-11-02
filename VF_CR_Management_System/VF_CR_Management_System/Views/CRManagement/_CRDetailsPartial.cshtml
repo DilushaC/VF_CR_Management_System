@@ -2278,7 +2278,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
         }
 
         function initSwalUrlInput(options) {
-            var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d+)?(\/[^\s]*)?$/i;
+            var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9_-]+(\.[a-z0-9_-]+)+)(:\d+)?(\/[^\s]*)?$/i;
 
             var $input = $(options.inputId);
             var $err = $(options.errorId);
@@ -2838,7 +2838,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                     });
                 },
                 preConfirm: () => {
-                    var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d+)?(\/[^\s]*)?$/i;
+                    var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9_-]+(\.[a-z0-9_-]+)+)(:\d+)?(\/[^\s]*)?$/i;
                     var val = ($('#uat-link-input').val() || '').trim();
                     var $err = $('#uat-link-error');
 
@@ -2928,7 +2928,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                     });
                 },
                 preConfirm: () => {
-                    var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d+)?(\/[^\s]*)?$/i;
+                    var URL_REGEX = /^https?:\/\/(localhost|(\d{1,3}\.){3}\d{1,3}|[a-z0-9_-]+(\.[a-z0-9_-]+)+)(:\d+)?(\/[^\s]*)?$/i;
                     var val = ($('#live-link-input').val() || '').trim();
                     var $err = $('#live-link-error');
 

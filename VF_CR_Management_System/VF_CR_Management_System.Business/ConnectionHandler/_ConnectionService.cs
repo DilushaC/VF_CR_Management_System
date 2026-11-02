@@ -97,9 +97,17 @@ namespace VF_CR_Management_System.Business.ConnectionHandler
 
         public object ExecuteScalar(string query, object parameters = null)
         {
-            using var connection = _context.CreateConnection();
-            var result = connection.ExecuteScalar(query, parameters);
-            return result == DBNull.Value ? null : result;
+            try
+            {
+                using var connection = _context.CreateConnection();
+                var result = connection.ExecuteScalar(query, parameters);
+                return result == DBNull.Value ? null : result;
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
         }
 
 

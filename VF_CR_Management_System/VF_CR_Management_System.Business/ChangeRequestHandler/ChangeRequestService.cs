@@ -941,7 +941,17 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     x.Status,
                     x.RequestedBy,
                     x.ApproverUserName,
-                    x.RequestedDate
+                    x.RequestedDate,
+                    x.ApprovalID,
+                    x.StepID,
+                    x.IsApproved,
+                    x.Decision,
+                    x.ApprovalDate,
+                    CASE
+                        WHEN x.IsApproved IS NULL THEN 'Pending'
+                        WHEN x.IsApproved = 1    THEN 'Attended'
+                        WHEN x.IsApproved = 0    THEN 'Rejected'
+                    END AS ApprovalStatus
                 FROM (
                     SELECT
                         cr.CRID,
@@ -958,7 +968,12 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                         cr.RequesterUserName AS RequestedBy,
                         App.AssignedTo    AS ApproverUserName,
                         cr.RequestedDate,
-                        ROW_NUMBER() OVER (PARTITION BY cr.CRID ORDER BY App.ApprovalID DESC) AS rn
+                        App.ApprovalID,
+                        App.StepID,
+                        App.IsApproved,
+                        App.Decision,
+                        App.ApprovalDate,
+                        ROW_NUMBER() OVER (PARTITION BY cr.CRID, App.AssignedTo ORDER BY App.ApprovalID DESC) AS rn
                     FROM [CRManagementDB].[dbo].[Approval] AS App
                     INNER JOIN [CRManagementDB].[dbo].[ChangeRequest] AS cr ON App.CRID = cr.CRID
                     LEFT JOIN [CRManagementDB].[dbo].[ChangeType] AS ct ON ct.ChangeTypeID = cr.ChangeTypeID
@@ -989,9 +1004,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (userNames.Any())
             {
                 const string usersQuery = @"
-            SELECT UserName, FirstName, LastName
-            FROM Users
-            WHERE UserName IN @UserNames";
+                    SELECT UserName, FirstName, LastName
+                    FROM Users
+                    WHERE UserName IN @UserNames";
 
                 var userParams = new DynamicParameters();
                 userParams.Add("@UserNames", userNames);
@@ -1027,7 +1042,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return changeRequests;
         }
-
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsSubmissionsAsync(string empNo)
         {
             // 1. Division Head Approval StepID
@@ -3403,14 +3417,14 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 DECLARE @TesterAssignedTo NVARCHAR(100) = (
                     SELECT TOP 1 AssignedTo
                     FROM [CRManagementDB].[dbo].[Approval]
-                    WHERE CRID = @CRID AND StepID = @TestingStepID AND Active = 1
+                    WHERE CRID = @CRID AND StepID = @TestingStepID AND Active = 1 AND ApprovalDate IS NOT NULL
                     ORDER BY ApprovalID DESC);
 
-                IF @TesterAssignedTo IS NULL
-                BEGIN
-                    SELECT CAST(0 AS BIT) AS Success;
-                    RETURN;
-                END
+                --IF @TesterAssignedTo IS NULL
+                --BEGIN
+                --    SELECT CAST(0 AS BIT) AS Success;
+               --     RETURN;
+               -- END
 
                 BEGIN TRANSACTION;
 
@@ -3421,11 +3435,18 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     Comments = 'UAT Link Uploaded'
                 WHERE ApprovalID = @ApprovalID;
 
+
+
                 -- Open a new Testing approval row, assigned back to the same tester.
-                INSERT INTO [CRManagementDB].[dbo].[Approval]
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                VALUES
-                    (@CRID, @TestingStepID, @EmpNo, @TesterAssignedTo, @Now, 1);
+                IF @TesterAssignedTo IS NOT NULL
+                BEGIN
+                    INSERT INTO [CRManagementDB].[dbo].[Approval]
+                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                    VALUES
+                        (@CRID, @TestingStepID, @EmpNo, @TesterAssignedTo, @Now, 1);
+                END
+
+
 
                 -- Open a new Testing cycle record for the tester to fill in.
                 INSERT INTO [CRManagementDB].[dbo].[Testing]
@@ -3981,6 +4002,24 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return await Task.FromResult(result);
         }
 
+        public Task<HashSet<int>> GetCrIdsPendingApprovalForUserAsync(string empNo)
+        {
+            if (string.IsNullOrWhiteSpace(empNo))
+            {
+                return Task.FromResult(new HashSet<int>());
+            }
+
+            const string sql = @"
+                SELECT DISTINCT CRID
+                FROM [CRManagementDB].[dbo].[Approval]
+                WHERE AssignedTo = @EmpNo
+                  AND IsApproved IS NULL
+                  AND Active = 1";
+
+            var crIds = _connectionService.Query<int>(sql, new { EmpNo = empNo }) ?? Enumerable.Empty<int>();
+
+            return Task.FromResult(new HashSet<int>(crIds));
+        }
 
     }
 }
