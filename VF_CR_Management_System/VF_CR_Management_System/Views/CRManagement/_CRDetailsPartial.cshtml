@@ -296,8 +296,8 @@
         isFinalApprovalPending ? 9 :           
         isTestingApproved ? 8 :
         (isTestingStatus || isTestingDraft || isTestingRejected
-            || isDevReturn || isQaReturn) ? 7 :
-        (isDevelopmentApproved) ? 6 :
+            || isDevReturn) ? 7 :
+        (isDevelopmentApproved || isQaReturn) ? 6 :
         isSecurityApproved ? 5 :
         (isSecurityDraft || isSecurityRejected) ? 4 :
         isAssessmentAccepted ? 4 :
@@ -1788,11 +1788,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
         {
             var isDone = si < effectiveStage;
             var isCurrent = si == effectiveStage;
+            var retries = RetryCountFor(si);
+
             var stateCss = isDone ? "is-done" : isCurrent ? "is-current" : "";
             if (isCurrent && isRejected) { stateCss += " is-rejected"; }
-            else if (isCurrent && isReturned) { stateCss += " is-returned"; }
-
-            var retries = RetryCountFor(si);
+            else if (isCurrent && retries > 0) { stateCss += " is-returned"; }
 
             <li class="cr-step @stateCss" style="--i:@(si)" aria-current="@(isCurrent ? "step" : null)">
                 <div class="cr-dot">
