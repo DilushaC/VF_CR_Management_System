@@ -1268,7 +1268,8 @@ namespace VF_CR_Management_System.Controllers
                 var viewModel = new ReportViewModel
                 {
                     ChangeRequest = changeRequest,
-                    Testing = new Testing()
+                    Testing = new Testing(),
+                    IsPdfExport = true   // <-- tells the view NOT to call window.print()
                 };
 
                 _logger.LogInformation(
@@ -1280,7 +1281,7 @@ namespace VF_CR_Management_System.Controllers
                     FileName = $"CR_{changeRequest.CRNumber}.pdf",
                     PageSize = Rotativa.AspNetCore.Options.Size.A4,
                     PageMargins = new Rotativa.AspNetCore.Options.Margins(15, 10, 15, 10),
-                    CustomSwitches = "--disable-smart-shrinking"
+                    CustomSwitches = "--disable-smart-shrinking --disable-javascript",
                 };
             }
             catch (Exception ex)

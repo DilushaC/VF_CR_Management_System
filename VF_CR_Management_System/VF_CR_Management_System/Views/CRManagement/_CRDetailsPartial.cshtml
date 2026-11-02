@@ -279,7 +279,7 @@
     // 11 stages: 3 of them are "Division Head Approval" gates that recur at
     // different points in the flow (after Assessment, after Security, after QA).
     var stageNames = new[] {
-        "Requested", "Approval", "Assessment", "Div. Head Approval", "Security",
+        "Requested", "Div. Head Approval", "Assessment", "Div. Head Approval", "Security",
         "Div. Head Approval", "Development", "QA", "Div. Head Approval",
         "Final approval", "Release"
     };
@@ -1941,14 +1941,14 @@ void FileGroup(string title, string icon, List<Attachment> items)
             {
                 <div class="cr-people">
                     @{
-                        Person("Requested by", "ri-user-line", Model.RequestedBy);
-                        Person("CR approver", "ri-user-follow-line", Model.ApproverUserName);
+                        Person("Requested By", "ri-user-line", Model.RequestedBy);
+                        Person("Division Head", "ri-user-follow-line", Model.ApproverUserName);
                         Person("Developer", "ri-code-s-slash-line", developerUser);
-                        Person("InfoSec officer", "ri-shield-user-line", Model.SecurityUserName);
+                        Person("InfoSec Officer", "ri-shield-user-line", Model.SecurityUserName);
                         Person("QA tester", "ri-test-tube-line", Model.TestingUserName);
                         Person("QA assigned by", "ri-user-shared-line", Model.TesterUserName);
                         Person("QA approved by", "ri-user-star-line", Model.TestingApproverUserName);
-                        Person("Final CR approver", "ri-medal-line", Model.FinalApproverUserName);
+                        Person("Final Approver", "ri-medal-line", Model.FinalApproverUserName);
                     }
                 </div>
             }
