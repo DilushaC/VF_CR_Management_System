@@ -406,7 +406,7 @@
         if (index < 0 || index >= displayStepRows.Count - 1) { return null; }
         var next = displayStepRows[index + 1];
         var bounce = IsBounceBackToNext(index);
-        var label = "Led to";
+        var label = "To";
         return $"{label}: {Pretty(next.StepName)}";
     }
 
