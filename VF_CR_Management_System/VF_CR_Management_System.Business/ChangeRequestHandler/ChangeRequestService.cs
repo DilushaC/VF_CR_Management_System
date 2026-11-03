@@ -944,6 +944,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     x.RequestedDate,
                     x.ApprovalID,
                     x.StepID,
+                    x.StepName,
                     x.IsApproved,
                     x.Decision,
                     x.ApprovalDate,
@@ -970,6 +971,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                         cr.RequestedDate,
                         App.ApprovalID,
                         App.StepID,
+                        ws.StepName,
                         App.IsApproved,
                         App.Decision,
                         App.ApprovalDate,
@@ -981,6 +983,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     LEFT JOIN [CRManagementDB].[dbo].[Division]   AS d  ON d.DivisionID   = cr.DivisionID
                     LEFT JOIN [CRManagementDB].[dbo].[Module]     AS m  ON m.ModuleID     = cr.ModuleID
                     LEFT JOIN [CRManagementDB].[dbo].[CRStatus]   AS s  ON s.StatusID     = cr.StatusID
+                    LEFT JOIN [dbo].[WorkflowStep] AS ws ON ws.StepID = App.StepID
                     WHERE App.AssignedTo = @EmpNo
                       AND App.Active = 1
                       AND cr.Active = 1
@@ -4004,23 +4007,84 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return await Task.FromResult(result);
         }
 
-        public Task<HashSet<int>> GetCrIdsPendingApprovalForUserAsync(string empNo)
+        //public Task<HashSet<int>> GetCrIdsPendingApprovalForUserAsyncex(string empNo)
+        //{
+        //    if (string.IsNullOrWhiteSpace(empNo))
+        //    {
+        //        return Task.FromResult(new HashSet<int>());
+        //    }
+
+        //    const string sql = @"
+        //        SELECT DISTINCT CRID
+        //        FROM [CRManagementDB].[dbo].[Approval]
+        //        WHERE AssignedTo = @EmpNo
+        //          AND IsApproved IS NULL
+        //          AND Active = 1";
+
+        //    var crIds = _connectionService.Query<int>(sql, new { EmpNo = empNo }) ?? Enumerable.Empty<int>();
+
+        //    return Task.FromResult(new HashSet<int>(crIds));
+        //}
+
+        public Task<List<PendingApprovalViewModel>> GetCrIdsPendingApprovalForUserAsync(string empNo)
         {
             if (string.IsNullOrWhiteSpace(empNo))
             {
-                return Task.FromResult(new HashSet<int>());
+                return Task.FromResult(new List<PendingApprovalViewModel>());
             }
 
             const string sql = @"
-                SELECT DISTINCT CRID
-                FROM [CRManagementDB].[dbo].[Approval]
-                WHERE AssignedTo = @EmpNo
-                  AND IsApproved IS NULL
-                  AND Active = 1";
+                                WITH ApprovalCTE AS
+                                (
+                                    SELECT
+                                        AP.ApprovalID,
+                                        AP.CRID,
+                                        WS.StepName,
+                                        AP.IsApproved,
+                                        ROW_NUMBER() OVER (
+                                            PARTITION BY AP.CRID
+                                            ORDER BY AP.ApprovalID DESC
+                                        ) AS RowNum
+                                    FROM [CRManagementDB].[dbo].[Approval] AS AP
+                                    LEFT JOIN [CRManagementDB].[dbo].[WorkflowStep] AS WS
+                                        ON WS.StepID = AP.StepID
+                                    WHERE AP.AssignedTo = @EmpNo
+                                      AND AP.IsApproved IS NULL
+                                      AND AP.Active = 1
+                                )
+                                SELECT
+                                    ApprovalID,
+                                    CRID,
+                                    StepName,
+                                    IsApproved
+                                FROM ApprovalCTE
+                                WHERE RowNum = 1;";
 
-            var crIds = _connectionService.Query<int>(sql, new { EmpNo = empNo }) ?? Enumerable.Empty<int>();
+            var result = _connectionService.Query<PendingApprovalViewModel>(
+                sql,
+                new { EmpNo = empNo }
+            );
 
-            return Task.FromResult(new HashSet<int>(crIds));
+            return Task.FromResult(result?.ToList() ?? new List<PendingApprovalViewModel>());
+        }
+
+        public Task<List<PendingApprovalViewModel>> GetCRPendingApprovals(int CRID)
+        {
+            
+
+            const string sql = @"
+                                SELECT DISTINCT AP.ApprovalID,AP.CRID,WS.StepName,AP.IsApproved FROM [CRManagementDB].[dbo].[Approval] AS AP
+                                    LEFT JOIN [dbo].[WorkflowStep] AS WS ON WS.StepID = AP.StepID
+                                WHERE AP.CRID = @CRID
+                                  AND AP.IsApproved IS NULL
+                                  AND AP.Active = 1;";
+
+            var result = _connectionService.Query<PendingApprovalViewModel>(
+                sql,
+                new { CRID = CRID }
+            );
+
+            return Task.FromResult(result?.ToList() ?? new List<PendingApprovalViewModel>());
         }
 
     }

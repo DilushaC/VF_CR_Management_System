@@ -1062,7 +1062,25 @@ namespace VF_CR_Management_System.Controllers
             ViewBag.CurrentEmpNo = empNo;
 
             var crs = await _changeRequestService.GetAllChangeRequestsAssignedToMeAsync(empNo);
-            ViewBag.PendingApprovalCrIds = await _changeRequestService.GetCrIdsPendingApprovalForUserAsync(empNo);
+            var list = await _changeRequestService.GetCrIdsPendingApprovalForUserAsync(empNo);
+            foreach (var item in list)
+            {
+                var CrPendingList = await _changeRequestService.GetCRPendingApprovals(item.CRID);
+                if(CrPendingList.Count > 1)
+                {
+                    foreach (var cr in CrPendingList)
+                    {
+                        if (item.ApprovalID == cr.ApprovalID)
+                        {
+                            if (item.StepName == "Testing")
+                                item.IsApproved = true;
+                        }
+                    }
+                }
+            }
+            HashSet<int> listArrays = list.Where(a => a.IsApproved == null).Select(a => a.CRID).ToHashSet();
+            ViewBag.PendingApprovalCrIds = listArrays;
+            //ViewBag.PendingApprovalCrIdsss = await _changeRequestService.GetCrIdsPendingApprovalForUserAsyncex(empNo);
 
             return View(crs);
         }

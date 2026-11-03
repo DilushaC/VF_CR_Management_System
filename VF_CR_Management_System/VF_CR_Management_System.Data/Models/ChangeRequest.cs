@@ -48,6 +48,7 @@ namespace VF_CR_Management_System.Data.Models
         public string Vendor { get; set; }
         public string RiskAssessment { get; set; }
         public string ChangeImpact { get; set; }
+        public string StepName { get; set; }
 
         //SRS additional sections
         public string SecurityRequirements { get; set; }
@@ -59,6 +60,7 @@ namespace VF_CR_Management_System.Data.Models
         public string? ApproverUserName { get; set; }        
         public string? ImplementerUserName { get; set; }
         public string? ISOfficerUserName { get; set; }
+        public bool? IsApproved { get; set; }
 
         // NEW: one property per workflow step, populated from Approval by StepID
         public string? AssessmentUserName { get; set; }        // StepID 2 - Assessment
