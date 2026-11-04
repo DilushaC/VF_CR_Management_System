@@ -94,6 +94,16 @@
         return $"{days / 365} yr ago";
     }
 
+    // Numeric tail of the CR number (the running sequence, e.g. "CR/2026/11/010" -> 10),
+    // used as a tiebreaker so same-day rows still sort in the order they were actually
+    // issued. Draft rows ("Waiting-...") have no numeric sequence, so they sort as 0.
+    int CrSeq(string? crNumber)
+    {
+        if (string.IsNullOrWhiteSpace(crNumber) || !crNumber.Contains('/')) { return 0; }
+        var tail = crNumber.Split('/').Last();
+        return int.TryParse(tail, out var n) ? n : 0;
+    }
+
     var totalCount = crs.Count;
     var pendingCount = crs.Count(c => GroupOf(c.Status) == "pending");
     var progressCount = crs.Count(c => GroupOf(c.Status) == "progress");
@@ -662,6 +672,7 @@
                             <th>Status</th>
                             <th>Requested</th>
                             <th class="d-none">Pending</th>
+                            <th class="d-none">CRSeq</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -680,6 +691,7 @@
                             var isAssessmentDraft = string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase);
                             var isEmergency = prio.Rank == 4;
                             var waitingOnMe = pendingApprovalCrIds.Contains(cr.CRID);
+                            var crSeq = CrSeq(cr.CRNumber);
 
                             <tr class="cr-row @((isSecurityDraft || isAssessmentDraft) ? "" : "is-clickable") @(isEmergency ? "is-emergency" : "") @(waitingOnMe ? "is-mine" : "")" data-group="@group">
                                 <td title="@cr.CRNumber">
@@ -728,6 +740,7 @@
                                     <div class="cr-sub">@Ago(cr.RequestedDate)</div>
                                 </td>
                                 <td class="d-none">@(waitingOnMe ? 0 : 1)</td>
+                                <td class="d-none">@crSeq</td>
                                 <td>
                                     @if (isSecurityDraft)
                                     {
@@ -833,10 +846,10 @@
                 paging: true,
                 pageLength: 10,
                 lengthChange: true,
-                order: [[6, 'asc'], [5, 'desc']],
+                order: [[6, 'asc'], [7, 'desc'], [5, 'desc']],
                 columnDefs: [
-                    { orderable: false, targets: [2, 7] },
-                    { visible: false, targets: [6] }
+                    { orderable: false, targets: [2, 8] },
+                    { visible: false, targets: [6, 7] }
                 ],
                 dom: "<'cr-dt-top'lf>rt<'cr-dt-bottom'ip>",
                 language: {
