@@ -1397,10 +1397,10 @@ void FileGroup(string title, string icon, List<Attachment> items)
                 color: var(--cr-warn);
             }
 
-    .cr-tl-item.cr-tl-bounce::before {
-        background: repeating-linear-gradient( to bottom, var(--cr-warn) 0, var(--cr-warn) 4px, transparent 4px, transparent 8px );
-        width: 2px;
-    }
+    // .cr-tl-item.cr-tl-bounce::before {
+    //     background: repeating-linear-gradient( to bottom, var(--cr-warn) 0, var(--cr-warn) 4px, transparent 4px, transparent 8px );
+    //     width: 2px;
+    // }
 
     .cr-empty {
         text-align: center;
@@ -2107,11 +2107,8 @@ void FileGroup(string title, string icon, List<Attachment> items)
                         : state.Css == "warn" ? "ri-arrow-go-back-line"
                         : "ri-time-line";
                         var stepTime = FormatStepTime(step);
-                        var fromCaption = FromCaption(i);
-                        var toCaption = ToCaption(i);
-                        var bounceToNext = IsBounceBackToNext(i);
 
-                        <li class="cr-tl-item @(bounceToNext ? "cr-tl-bounce" : "")">
+                        <li class="cr-tl-item">
                             <span class="cr-tl-dot @state.Css"><i class="@dotIcon"></i></span>
                             <div class="cr-tl-body">
                                 <div class="cr-tl-head">
@@ -2129,16 +2126,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
                                 @if (!string.IsNullOrWhiteSpace(step.AssignedTo))
                                 {
                                     <div class="cr-tl-who">@DisplayUser(step.AssignedTo)</div>
-                                }
-                                @if (fromCaption != null)
-                                {
-                                    <div class="cr-tl-flow cr-tl-flow-from"><i class="ri-corner-left-up-line"></i>@fromCaption</div>
-                                }
-                                @if (toCaption != null)
-                                {
-                                    <div class="cr-tl-flow cr-tl-flow-to @(bounceToNext ? "is-bounce" : "")">
-                                        <i class="@(bounceToNext ? "ri-arrow-go-back-line" : "ri-corner-right-down-line")"></i>@toCaption
-                                    </div>
                                 }
                             </div>
                         </li>
