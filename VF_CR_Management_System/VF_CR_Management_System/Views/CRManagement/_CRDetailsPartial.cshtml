@@ -720,16 +720,23 @@ void FileGroup(string title, string icon, List<Attachment> items)
         top: 1rem;
         right: 3.2rem;
         z-index: 3;
-        width: 32px;
         height: 32px;
-        display: grid;
-        place-items: center;
-        border-radius: 50%;
+        padding: 0 .85rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        border-radius: 999px;
         background: rgba(255,255,255,.12);
         color: #fff;
-        font-size: 1.1rem;
+        font-size: .8rem;
+        font-weight: 600;
         text-decoration: none;
+        white-space: nowrap;
     }
+
+        .cr-close-form-btn i {
+            font-size: 1.05rem;
+        }
 
         .cr-close-form-btn:hover {
             background: rgba(255,255,255,.22);
@@ -1805,9 +1812,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
 
             var isPersistentBadgeStage = isAssessmentStage || isSecurityStage || isDevStage || isQaStage;
 
-            // Only Assessment, Security, Development and QA ever show a cycle badge.
-            // Every other stage (the Div. Head Approval gates, Final Approval, Release
-            // Closure) shows no badge at all, regardless of how many rows it has.
             var cycleCount = isPersistentBadgeStage
                             ? (isDevStage ? DevelopmentCycleCount()
                                : isQaStage ? QaCycleCount()
@@ -1820,9 +1824,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
                             : isQaStage ? $"QA test cycle {cycleCount}"
                             : string.Empty;
 
-            // Badge (and the orange "returned" dot styling) only appears once a stage
-            // has genuinely been redone — i.e. visited 2+ times. A clean single pass
-            // shows nothing at all. When shown, the badge displays the raw visit count.
             var isRetried = isPersistentBadgeStage && cycleCount > 1;
             var showBadge = isRetried;
 
@@ -2244,6 +2245,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
        target="_blank"
        title="Download CR Form (PDF)">
         <i class="ri-download-2-line"></i>
+        <span class="cr-close-form-label">Download CR Form</span>
     </a>
 </div>
 
