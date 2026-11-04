@@ -274,7 +274,6 @@
         <tr>
             <td class="label-cell">Change Summary and<br />Business Justification<br />for the Change</td>
             <td colspan="2">
-                Change Details shall be attached to this form:<br />
                 <span class="fill">@Model.ChangeRequest.Summary</span>
             </td>
         </tr>
@@ -284,11 +283,11 @@
             <td colspan="2" style="padding:0;">
                 <table style="width:100%; border-collapse:collapse;">
                     <tr class="option-row">
-                        <td class="@(isBugFix ? "checked" : "")">Bug Fix</td>
-                        <td class="@(isReportDev ? "checked" : "")">Report Development</td>
-                        <td class="@(isEnhancement ? "checked" : "")">Enhancements / Components</td>
-                        <td class="@(isInfra ? "checked" : "")">Infrastructure Changes</td>
-                        <td class="@(isOtherType ? "checked" : "")">Other@(isOtherType && !string.IsNullOrWhiteSpace(Model.ChangeRequest.OtherChangeType) ? $" ({Model.ChangeRequest.OtherChangeType})" : "")</td>
+                        <td class="@(isBugFix ? "checked" : "")">@(isBugFix ? "☑" : "☐") Bug Fix</td>
+                        <td class="@(isReportDev ? "checked" : "")">@(isReportDev ? "☑" : "☐") Report Development</td>
+                        <td class="@(isEnhancement ? "checked" : "")">@(isEnhancement ? "☑" : "☐") Enhancements / Components</td>
+                        <td class="@(isInfra ? "checked" : "")">@(isInfra ? "☑" : "☐") Infrastructure Changes</td>
+                        <td class="@(isOtherType ? "checked" : "")">@(isOtherType ? "☑" : "☐") Other@(isOtherType && !string.IsNullOrWhiteSpace(Model.ChangeRequest.OtherChangeType) ? $" ({Model.ChangeRequest.OtherChangeType})" : "")</td>
                     </tr>
                 </table>
             </td>
@@ -299,10 +298,10 @@
             <td colspan="2" style="padding:0;">
                 <table style="width:100%; border-collapse:collapse;">
                     <tr class="option-row">
-                        <td class="@(isLow ? "checked" : "")">Low</td>
-                        <td class="@(isMedium ? "checked" : "")">Medium</td>
-                        <td class="@(isHigh ? "checked" : "")">High</td>
-                        <td class="@(isEmergency ? "checked" : "")">Emergency</td>
+                        <td class="@(isLow ? "checked" : "")">@(isLow ? "☑" : "☐") Low</td>
+                        <td class="@(isMedium ? "checked" : "")">@(isMedium ? "☑" : "☐") Medium</td>
+                        <td class="@(isHigh ? "checked" : "")">@(isHigh ? "☑" : "☐") High</td>
+                        <td class="@(isEmergency ? "checked" : "")">@(isEmergency ? "☑" : "☐") Emergency</td>
                     </tr>
                 </table>
             </td>
@@ -310,7 +309,7 @@
 
         <tr>
             <td class="label-cell">Business Head Approval<br />(of the change requester)</td>
-            <td>Approval: Y / N &nbsp; <span class="fill">@(deptHeadStep?.IsApproved == true ? "Yes" : deptHeadStep?.IsApproved == false ? "No" : "")</span></td>
+            <td>Approval: <span class="fill">@(deptHeadStep?.IsApproved == true ? "Yes" : deptHeadStep?.IsApproved == false ? "No" : "")</span></td>
             <td>Date: <span class="fill">@(deptHeadStep?.ApprovalDate?.ToString("yyyy/MM/dd"))</span></td>
         </tr>
 
@@ -347,10 +346,14 @@
 
         <tr>
             <td class="label-cell">Effort Estimate (Days)</td>
-            <td>Days: <span class="fill">@(((double?)ViewBag.EffortEstimateDays)?.ToString("0") ?? "")</span></td>
+            <td>Days: <span class="fill">@(Model.EffortEstimateDays?.ToString("0") ?? "")</span></td>
             <td>
-                Vendor support required: Y/N &nbsp; <span class="fill">@(string.IsNullOrWhiteSpace(Model.ChangeRequest.Vendor) ? "N" : "Y")</span><br /><br />
-                Vendor Name: <span class="fill">@Model.ChangeRequest.Vendor</span>
+                Vendor support required: <span class="fill">@(string.IsNullOrWhiteSpace(Model.ChangeRequest.Vendor) ? "No" : "Yes")</span>
+                @if (!string.IsNullOrWhiteSpace(Model.ChangeRequest.Vendor))
+                {
+                    <br /><br />
+                    <text>Vendor Name: <span class="fill">@Model.ChangeRequest.Vendor</span></text>
+                }
             </td>
         </tr>
 
@@ -366,11 +369,14 @@
             </td>
         </tr>
 
-        <tr>
-            <td class="label-cell">Proposal No: @(Model.ChangeRequest.ProposalNumber)<br /><br />Date:</td>
-            <td>Amount:</td>
-            <td>Approved/Rejected: <span class="fill"></span></td>
-        </tr>
+        @if (!string.IsNullOrWhiteSpace(Model.ChangeRequest.Vendor))
+        {
+            <tr>
+                <td class="label-cell">Proposal No: @(Model.ChangeRequest.ProposalNumber)<br /><br />Date:</td>
+                <td>Amount:</td>
+                <td>Approved/Rejected: <span class="fill"></span></td>
+            </tr>
+        }
 
         <tr>
             <td colspan="3" class="subnote">SECURITY REQUIREMENTS <em>(to be filled by the IS Officer)</em></td>
@@ -395,9 +401,9 @@
             <td colspan="2" style="padding:0;">
                 <table style="width:100%; border-collapse:collapse;">
                     <tr class="option-row">
-                        <td class="@(impactMinor ? "checked" : "")">Minor</td>
-                        <td class="@(impactStandard ? "checked" : "")">Standard</td>
-                        <td class="@(impactMajor ? "checked" : "")">Major</td>
+                        <td class="@(impactMinor ? "checked" : "")">@(impactMinor ? "☑" : "☐") Minor</td>
+                        <td class="@(impactStandard ? "checked" : "")">@(impactStandard ? "☑" : "☐") Standard</td>
+                        <td class="@(impactMajor ? "checked" : "")">@(impactMajor ? "☑" : "☐") Major</td>
                     </tr>
                 </table>
             </td>

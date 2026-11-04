@@ -18,6 +18,7 @@ namespace VF_CR_Management_System.Data.Models
         public UserIdentity DeptHeadApprover { get; set; } = new UserIdentity();
         public UserIdentity SecurityOfficer { get; set; } = new UserIdentity();
         public UserIdentity Tester { get; set; } = new UserIdentity();
+        public double? EffortEstimateDays { get; set; }
     }
 
     public class UserIdentity

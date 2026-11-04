@@ -1275,18 +1275,12 @@ namespace VF_CR_Management_System.Controllers
                 // ApproverUserName lookup is needed.
                 var identities = await _changeRequestService.GetCRFormIdentitiesAsync(changeRequest);
 
-                double effortEstimateDays = 0;
-
+                double? effortEstimateDays = null;
                 if (changeRequest.DueDate.HasValue)
                 {
-                    effortEstimateDays = Math.Max(
-                        0,
-                        (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
+                    effortEstimateDays = Math.Max(0, (changeRequest.DueDate.Value.Date - DateTime.Now.Date).TotalDays);
                 }
 
-                ViewBag.EffortEstimateDays = effortEstimateDays;
-
-                // Create the ViewModel expected by CRFormPrint.cshtml
                 var viewModel = new ReportViewModel
                 {
                     ChangeRequest = changeRequest,
@@ -1296,7 +1290,8 @@ namespace VF_CR_Management_System.Controllers
                     Implementer = identities.Implementer,
                     DeptHeadApprover = identities.DeptHeadApprover,
                     SecurityOfficer = identities.SecurityOfficer,
-                    Tester = identities.Tester
+                    Tester = identities.Tester,
+                    EffortEstimateDays = effortEstimateDays   // instead of ViewBag.EffortEstimateDays
                 };
 
                 _logger.LogInformation(
