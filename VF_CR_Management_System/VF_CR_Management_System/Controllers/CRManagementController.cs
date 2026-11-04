@@ -1063,10 +1063,11 @@ namespace VF_CR_Management_System.Controllers
 
             var crs = await _changeRequestService.GetAllChangeRequestsAssignedToMeAsync(empNo);
             var list = await _changeRequestService.GetCrIdsPendingApprovalForUserAsync(empNo);
+
             foreach (var item in list)
             {
                 var CrPendingList = await _changeRequestService.GetCRPendingApprovals(item.CRID);
-                if(CrPendingList.Count > 1)
+                if (CrPendingList.Count > 1)
                 {
                     foreach (var cr in CrPendingList)
                     {
@@ -1078,9 +1079,15 @@ namespace VF_CR_Management_System.Controllers
                     }
                 }
             }
-            HashSet<int> listArrays = list.Where(a => a.IsApproved == null).Select(a => a.CRID).ToHashSet();
+
+            var pendingItems = list.Where(a => a.IsApproved == null).ToList();
+
+            HashSet<int> listArrays = pendingItems.Select(a => a.CRID).ToHashSet();
             ViewBag.PendingApprovalCrIds = listArrays;
-            //ViewBag.PendingApprovalCrIdsss = await _changeRequestService.GetCrIdsPendingApprovalForUserAsyncex(empNo);
+            var pendingStepByCrId = pendingItems
+                .GroupBy(a => a.CRID)
+                .ToDictionary(g => g.Key, g => g.First().StepName);
+            ViewBag.PendingStepByCrId = pendingStepByCrId;
 
             return View(crs);
         }

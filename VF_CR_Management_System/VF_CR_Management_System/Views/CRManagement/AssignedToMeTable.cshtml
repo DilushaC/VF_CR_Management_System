@@ -4,6 +4,7 @@
     ViewData["Title"] = "CR Management";
 
     var pendingApprovalCrIds = ViewBag.PendingApprovalCrIds as HashSet<int> ?? new HashSet<int>();
+    var pendingStepByCrId = ViewBag.PendingStepByCrId as Dictionary<int, string> ?? new Dictionary<int, string>();
     var crs = Model == null ? new List<ChangeRequest>() : Model.ToList();
 
     string Key(string? s) => (s ?? string.Empty).Replace(" ", string.Empty).ToLowerInvariant();
@@ -687,10 +688,14 @@
                             var group = GroupOf(cr.Status);
                             var segTone = (badge.Tone == "warn" || badge.Tone == "bad") ? badge.Tone : "info";
                             var prio = PriorityInfo(cr.Priority);
-                            var isSecurityDraft = string.Equals(cr.Status, "SecurityDraft", StringComparison.OrdinalIgnoreCase);
-                            var isAssessmentDraft = string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase);
+                            var myPendingStep = pendingStepByCrId.TryGetValue(cr.CRID, out var stepName) ? stepName : null;
+                            var isSecurityDraft = string.Equals(cr.Status, "SecurityDraft", StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(myPendingStep, "Security", StringComparison.OrdinalIgnoreCase);
+                            var isAssessmentDraft = string.Equals(cr.Status, "AssessmentDraft", StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(myPendingStep, "Developer Documentation", StringComparison.OrdinalIgnoreCase);
                             var isEmergency = prio.Rank == 4;
                             var waitingOnMe = pendingApprovalCrIds.Contains(cr.CRID);
+
                             var crSeq = CrSeq(cr.CRNumber);
 
                             <tr class="cr-row @((isSecurityDraft || isAssessmentDraft) ? "" : "is-clickable") @(isEmergency ? "is-emergency" : "") @(waitingOnMe ? "is-mine" : "")" data-group="@group">
