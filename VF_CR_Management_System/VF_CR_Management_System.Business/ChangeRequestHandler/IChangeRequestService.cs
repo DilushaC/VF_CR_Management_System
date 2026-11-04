@@ -44,5 +44,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         //Task<HashSet<int>> GetCrIdsPendingApprovalForUserAsyncex(string empNo);
         Task<List<PendingApprovalViewModel>> GetCrIdsPendingApprovalForUserAsync(string empNo);
         Task<List<PendingApprovalViewModel>> GetCRPendingApprovals(int CRID);
+        Task<(UserIdentity Requester, UserIdentity Implementer, UserIdentity DeptHeadApprover, UserIdentity SecurityOfficer, UserIdentity Tester)> GetCRFormIdentitiesAsync(ChangeRequest cr);
     }
 }

@@ -1268,8 +1268,12 @@ namespace VF_CR_Management_System.Controllers
                 changeRequest.Attachments = attachments?.ToList() ?? new List<Attachment>();
 
                 ViewBag.Users = await _userService.GetAllUsersAsync();
-                ViewBag.ApproverUserName =
-                    await _changeRequestService.GetAssignedApproverUserNameAsync(id);
+
+                // Resolve Requester / Implementer / Dept Head identities (name, designation, division)
+                // from the Users table in one round trip. DeptHeadApprover already comes from the
+                // Approval table's "Division Head Approval" step AssignedTo, so no separate
+                // ApproverUserName lookup is needed.
+                var identities = await _changeRequestService.GetCRFormIdentitiesAsync(changeRequest);
 
                 double effortEstimateDays = 0;
 
@@ -1287,7 +1291,12 @@ namespace VF_CR_Management_System.Controllers
                 {
                     ChangeRequest = changeRequest,
                     Testing = new Testing(),
-                    IsPdfExport = true   // <-- tells the view NOT to call window.print()
+                    IsPdfExport = true,
+                    Requester = identities.Requester,
+                    Implementer = identities.Implementer,
+                    DeptHeadApprover = identities.DeptHeadApprover,
+                    SecurityOfficer = identities.SecurityOfficer,
+                    Tester = identities.Tester
                 };
 
                 _logger.LogInformation(

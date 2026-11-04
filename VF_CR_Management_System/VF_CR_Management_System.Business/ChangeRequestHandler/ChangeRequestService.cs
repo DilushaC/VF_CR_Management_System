@@ -4100,5 +4100,111 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return Task.FromResult(result?.ToList() ?? new List<PendingApprovalViewModel>());
         }
 
+        public async Task<(UserIdentity Requester, UserIdentity Implementer, UserIdentity DeptHeadApprover, UserIdentity SecurityOfficer, UserIdentity Tester)>
+            GetCRFormIdentitiesAsync(ChangeRequest cr)
+        {
+            if (cr == null)
+                throw new ArgumentException("Invalid Change Request.");
+
+            const string getRawRequesterSql = @"
+                SELECT RequesterUserName
+                FROM [CRManagementDB].[dbo].[ChangeRequest]
+                WHERE CRID = @CRID";
+
+            var rawRequesterObj = _connectionService.ExecuteScalar(getRawRequesterSql, new { CRID = cr.CRID });
+            var rawRequester = rawRequesterObj != null && rawRequesterObj != DBNull.Value
+                ? rawRequesterObj.ToString()
+                : null;
+
+            var devDocAssignee = cr.StepAssignments?
+                .FirstOrDefault(s => string.Equals(
+                    (s.StepName ?? "").Replace(" ", ""),
+                    "DeveloperDocumentation",
+                    StringComparison.OrdinalIgnoreCase))
+                ?.AssignedTo;
+
+            var deptHeadAssignee = cr.StepAssignments?
+                .FirstOrDefault(s => string.Equals(
+                    (s.StepName ?? "").Replace(" ", ""),
+                    "DivisionHeadApproval",
+                    StringComparison.OrdinalIgnoreCase))
+                ?.AssignedTo;
+
+            var securityAssignee = cr.StepAssignments?
+                .FirstOrDefault(s => string.Equals(
+                    (s.StepName ?? "").Replace(" ", ""),
+                    "Security",
+                    StringComparison.OrdinalIgnoreCase))
+                ?.AssignedTo;
+
+            // Most recent Testing step row — mirrors ROW_NUMBER()/ORDER BY ApprovalID DESC
+            // pattern used elsewhere for "latest" assignment on a given step.
+            var testerAssignee = cr.StepAssignments?
+                .Where(s => string.Equals(
+                    (s.StepName ?? "").Replace(" ", ""),
+                    "Testing",
+                    StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(s => s.AssignedDate)
+                .FirstOrDefault()
+                ?.AssignedTo;
+
+            var userNames = new[] { rawRequester, devDocAssignee, deptHeadAssignee, securityAssignee, testerAssignee }
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var identities = new Dictionary<string, UserIdentity>(StringComparer.OrdinalIgnoreCase);
+
+            if (userNames.Any())
+            {
+                const string usersQuery = @"
+                    SELECT
+                        u.UserName,
+                        u.FirstName,
+                        u.LastName,
+                        des.DesignationName,
+                        dept.DepartmentName
+                    FROM [UserManagementRevamp].[dbo].[Users] u
+                    LEFT JOIN [UserManagementRevamp].[dbo].[Designation] des
+                        ON des.Id = u.DesignationId
+                    LEFT JOIN [UserManagementRevamp].[dbo].[Department] dept
+                        ON dept.Id = u.PrimaryDepartmentId
+                    WHERE u.UserName IN @UserNames";
+
+                var userParams = new DynamicParameters();
+                userParams.Add("@UserNames", userNames);
+
+                var usersTable = _connectionService.ReturnWithPara2(usersQuery, userParams);
+
+                foreach (var row in usersTable.AsEnumerable())
+                {
+                    var uName = row.Field<string>("UserName");
+                    if (string.IsNullOrWhiteSpace(uName)) continue;
+
+                    var fullName = $"{row.Field<string?>("FirstName")} {row.Field<string?>("LastName")}".Trim();
+
+                    identities[uName] = new UserIdentity
+                    {
+                        UserName = uName,
+                        DisplayName = string.IsNullOrWhiteSpace(fullName) ? uName : fullName,
+                        Designation = row.Field<string?>("DesignationName") ?? string.Empty,
+                        Division = row.Field<string?>("DepartmentName") ?? string.Empty
+                    };
+                }
+            }
+
+            UserIdentity Resolve(string userName) =>
+                !string.IsNullOrWhiteSpace(userName) && identities.TryGetValue(userName, out var id)
+                    ? id
+                    : new UserIdentity { UserName = userName ?? string.Empty, DisplayName = userName ?? string.Empty };
+
+            return (
+                Requester: Resolve(rawRequester),
+                Implementer: Resolve(devDocAssignee),
+                DeptHeadApprover: Resolve(deptHeadAssignee),
+                SecurityOfficer: Resolve(securityAssignee),
+                Tester: Resolve(testerAssignee)
+            );
+        }
     }
 }

@@ -264,9 +264,9 @@
         <tr>
             <td class="label-cell">Requester's Details</td>
             <td>
-                <div class="stacked-field">Name: <span class="fill">@DisplayUser(Model.ChangeRequest.RequestedBy)</span></div>
-                <div class="stacked-field">Designation: <span class="fill">@Model.ChangeRequest.AssessmentUserName</span></div>
-                <div class="stacked-field">Division: <span class="fill">@Model.ChangeRequest.Division</span></div>
+                <div class="stacked-field">Name: <span class="fill">@Model.Requester.DisplayName - @Model.Requester.UserName</span></div>
+                <div class="stacked-field">Designation: <span class="fill">@Model.Requester.Designation</span></div>
+                <div class="stacked-field">Division: <span class="fill">@Model.Requester.Division</span></div>
             </td>
             <td>Date: <span class="fill">@(Model.ChangeRequest.RequestedDate.ToString("yyyy/MM/dd"))</span></td>
         </tr>
@@ -326,10 +326,9 @@
         <tr>
             <td class="label-cell">Implementer Details</td>
             <td colspan="2">
-                <div class="stacked-field">Name: <span class="fill">@DisplayUser(developerUser)</span></div>
-                <div class="stacked-field">Designation: <span class="fill">@Model.ChangeRequest.ImplementerUserName</span></div>
-                @*                 <div class="stacked-field">Division: <span class="fill">@Model.ImplementerDivision</span></div> *@
-                <div class="stacked-field">Division: <span class="fill">Test</span></div>
+                <div class="stacked-field">Name: <span class="fill">@Model.Implementer.DisplayName - @Model.Implementer.UserName</span></div>
+                <div class="stacked-field">Designation: <span class="fill">@Model.Implementer.Designation</span></div>
+                <div class="stacked-field">Division: <span class="fill">@Model.Implementer.Division</span></div>
             </td>
         </tr>
 
@@ -356,14 +355,14 @@
         </tr>
 
         <tr>
-            <td class="label-cell">IT&nbsp;&nbsp;Section Head Approval</td>
+            <td class="label-cell">IT Section Head Approval</td>
             <td>
-                Name: <span class="fill">@DisplayUser(Model.ChangeRequest.ApproverUserName)</span><br /><br />
+                Name: <span class="fill">@Model.DeptHeadApprover.DisplayName (@Model.DeptHeadApprover.UserName) - @Model.DeptHeadApprover.Designation</span><br /><br />
                 Date: <span class="fill">@(itSectionHeadStep?.ApprovalDate?.ToString("yyyy/MM/dd"))</span>
             </td>
             <td>
                 Approved : Y/N &nbsp; <span class="fill">@(itSectionHeadStep?.IsApproved == true ? "Y" : itSectionHeadStep?.IsApproved == false ? "N" : "")</span><br /><br />
-                Comments: <span class="fill">test</span>
+                Comments: <span class="fill"></span>
             </td>
         </tr>
 
@@ -382,7 +381,12 @@
             <td colspan="2">
                 <span class="red-note">&lt;Refer to Section 5.2 of the latest Change and Release Management Procedure to determine if an Information Security Risk Assessment is required&gt;</span><br />
                 Potential information security risks arising from the suggested change and risk treatment options:<br />
-                <span class="fill">@Model.ChangeRequest.RiskAssessment</span>
+                Risk Assessment: <span class="fill">@Model.ChangeRequest.RiskAssessment</span><br />
+                Security Requirements: <span class="fill">@Model.ChangeRequest.SecurityRequirements</span><br />
+                Security Requirements: <span class="fill">@Model.ChangeRequest.SecurityRequirements</span><br />
+                Security RisksIdentified: <span class="fill">@Model.ChangeRequest.SecurityRisksIdentified</span><br />
+                Risk Treatment Controls: <span class="fill">@Model.ChangeRequest.RiskTreatmentControls</span><br />
+                Dependencies Impact: <span class="fill">@Model.ChangeRequest.DependenciesImpact</span>
             </td>
         </tr>
 
@@ -403,7 +407,7 @@
             <td class="label-cell">IS Officer Approval</td>
             <td colspan="2">
                 Change Approved/Rejected: <span class="fill">@(securityStep?.IsApproved == true ? "Approved" : securityStep?.IsApproved == false ? "Rejected" : "")</span><br /><br />
-                Name: <span class="fill">@DisplayUser(Model.ChangeRequest.SecurityUserName)</span>
+                Name: <span class="fill">@Model.SecurityOfficer.DisplayName (@Model.SecurityOfficer.UserName) - @Model.SecurityOfficer.Designation</span>
             </td>
         </tr>
 
@@ -411,7 +415,7 @@
             <td class="label-cell">IT Division Head Approval<br />(If the impact of change is<br />"Major")</td>
             <td colspan="2">
                 Change Approved/Rejected and Comments:<br />
-                <span class="fill">@DisplayUser(deptHeadStep?.AssignedTo)</span><br /><br />
+                <span class="fill">@Model.</span><br /><br />
                 Date: <span class="fill">@(deptHeadStep?.ApprovalDate?.ToString("yyyy/MM/dd"))</span>
             </td>
         </tr>
@@ -440,9 +444,9 @@
                 &nbsp;&nbsp;&nbsp; Date: <span class="fill">@(Model.Testing.TestingDate?.ToString("yyyy/MM/dd"))</span><br /><br />
                 Comments: <span class="fill">N/A</span>
                 <hr class="dashed-rule" />
-                Name: <span class="fill">@DisplayUser(Model.ChangeRequest.TesterUserName)</span><br /><br />
-                Designation: <span class="fill"></span><br /><br />
-                Department: <span class="fill"></span>
+                Name: <span class="fill">@Model.Tester.DisplayName - @Model.Tester.UserName</span><br /><br />
+                Designation: <span class="fill">@Model.Tester.Designation</span><br /><br />
+                Department: <span class="fill">@Model.Tester.Division</span>
             </td>
         </tr>
 
