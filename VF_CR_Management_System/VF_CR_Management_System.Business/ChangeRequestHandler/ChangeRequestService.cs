@@ -927,6 +927,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         public async Task<IEnumerable<ChangeRequest>> GetAllChangeRequestsAssignedToMeAsync(string empNo)
         {
             const string sql = @"
+                WITH LatestApprovalPerCR AS (
+                    SELECT
+                        AP.ApprovalID, AP.CRID, AP.AssignedTo, AP.IsApproved,
+                        ROW_NUMBER() OVER (PARTITION BY AP.CRID ORDER BY AP.ApprovalID DESC) AS RowNum
+                    FROM [CRManagementDB].[dbo].[Approval] AS AP
+                    WHERE AP.Active = 1
+                )
                 SELECT
                     x.CRID,
                     x.CRNumber,
@@ -952,7 +959,8 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                         WHEN x.IsApproved IS NULL THEN 'Pending'
                         WHEN x.IsApproved = 1    THEN 'Attended'
                         WHEN x.IsApproved = 0    THEN 'Rejected'
-                    END AS ApprovalStatus
+                    END AS ApprovalStatus,
+                    CASE WHEN p.CRID IS NOT NULL THEN 1 ELSE 0 END AS IsPendingForMe
                 FROM (
                     SELECT
                         cr.CRID,
@@ -988,10 +996,15 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                       AND App.Active = 1
                       AND cr.Active = 1
                 ) AS x
+                LEFT JOIN LatestApprovalPerCR p
+                    ON p.CRID = x.CRID
+                    AND p.RowNum = 1
+                    AND p.IsApproved IS NULL
+                    AND p.AssignedTo = @EmpNo
                 WHERE x.rn = 1
                 ORDER BY
-                    CASE WHEN x.IsApproved IS NULL THEN 0 ELSE 1 END,
-                    x.CRNumber DESC;";
+                    IsPendingForMe DESC,
+                    x.RequestedDate DESC;";
 
             var changeRequests = _connectionService.Query<ChangeRequest>(
                 sql,

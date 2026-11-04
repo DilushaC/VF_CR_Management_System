@@ -533,10 +533,10 @@
         transition: background .15s, color .15s;
     }
 
-    .cr-view-btn:hover {
-        background: var(--cr-accent);
-        color: #fff;
-    }
+        .cr-view-btn:hover {
+            background: var(--cr-accent);
+            color: #fff;
+        }
 
         .cr-view-btn.is-mine-btn {
             border-color: var(--cr-accent);
@@ -661,6 +661,7 @@
                             <th>Priority</th>
                             <th>Status</th>
                             <th>Requested</th>
+                            <th class="d-none">Pending</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -714,18 +715,19 @@
                                 </td>
                                 <td data-order="@stage">
                                     <span class="cr-pill tone-@badge.Tone"><span class="cr-pill-dot"></span>@badge.Label</span>
-                                        <div class="cr-seg tone-@segTone" title="Stage @stage of 11" aria-hidden="true">
-                                            @for (var si = 0; si < 11; si++)
-                                            {
-                                                var segClass = group == "done" || si < stage - 1 ? "on" : si == stage - 1 ? "cur" : "";
-                                                <i class="@segClass"></i>
-                                            }
-                                        </div>
+                                    <div class="cr-seg tone-@segTone" title="Stage @stage of 11" aria-hidden="true">
+                                        @for (var si = 0; si < 11; si++)
+                                        {
+                                            var segClass = group == "done" || si < stage - 1 ? "on" : si == stage - 1 ? "cur" : "";
+                                            <i class="@segClass"></i>
+                                        }
+                                    </div>
                                 </td>
                                 <td data-order="@cr.RequestedDate.ToString("yyyyMMdd")">
                                     <div>@cr.RequestedDate.ToString("yyyy/MM/dd")</div>
                                     <div class="cr-sub">@Ago(cr.RequestedDate)</div>
                                 </td>
+                                <td class="d-none">@(waitingOnMe ? 0 : 1)</td>
                                 <td>
                                     @if (isSecurityDraft)
                                     {
@@ -754,13 +756,13 @@
                                             @if (waitingOnMe)
                                             {
                                                 <i class="ri-shield-check-line"></i>
-                                    
+
                                                 <text>Action</text>
                                             }
                                             else
                                             {
                                                 <i class="ri-eye-line"></i>
-                                    
+
                                                 <text>View</text>
                                             }
                                         </button>
@@ -831,9 +833,10 @@
                 paging: true,
                 pageLength: 10,
                 lengthChange: true,
-                order: [[5, 'desc']],
+                order: [[6, 'asc'], [5, 'desc']],
                 columnDefs: [
-                    { orderable: false, targets: [2, 6] }
+                    { orderable: false, targets: [2, 7] },
+                    { visible: false, targets: [6] }
                 ],
                 dom: "<'cr-dt-top'lf>rt<'cr-dt-bottom'ip>",
                 language: {
