@@ -2092,23 +2092,26 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             if (crId <= 0)
                 throw new ArgumentException("Invalid Change Request.");
 
-            const string deleteApprovalsSql = @"
-            DELETE FROM Approval
-            WHERE CRID = @CRID";
+            const string deactivateApprovalsSql = @"
+                UPDATE Approval
+                SET Active = 0
+                WHERE CRID = @CRID";
 
-            const string deleteCrSql = @"
-            DELETE FROM ChangeRequest
-            WHERE CRID = @CRID
-              AND CRNumber LIKE 'Waiting-%'";
+            const string deactivateCrSql = @"
+                UPDATE ChangeRequest
+                SET Active = 0
+                WHERE CRID = @CRID
+                  AND CRNumber LIKE 'Waiting-%'";
 
             var parameters = new DynamicParameters();
             parameters.Add("@CRID", crId);
 
-            _connectionService.ExecuteWithPara(deleteApprovalsSql, parameters);
-            int rowsAffected = _connectionService.ExecuteWithPara(deleteCrSql, parameters);
+            _connectionService.ExecuteWithPara(deactivateApprovalsSql, parameters);
+            int rowsAffected = _connectionService.ExecuteWithPara(deactivateCrSql, parameters);
 
             return rowsAffected > 0;
         }
+
 
         public async Task<bool> CreateAssessmentAsync(int crId, IFormCollection collection, string userName, string empId)
         {
