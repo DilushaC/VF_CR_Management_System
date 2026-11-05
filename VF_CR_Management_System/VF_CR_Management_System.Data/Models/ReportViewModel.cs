@@ -27,5 +27,8 @@ namespace VF_CR_Management_System.Data.Models
         public string DisplayName { get; set; } = string.Empty;
         public string Designation { get; set; } = string.Empty;
         public string Division { get; set; } = string.Empty;
+        public DateTime? ApprovalDate { get; set; }
+        public bool? IsApproved { get; set; }
+        public string Decision { get; set; } = string.Empty;
     }
 }

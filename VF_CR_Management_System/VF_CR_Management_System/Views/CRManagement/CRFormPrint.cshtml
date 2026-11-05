@@ -361,11 +361,11 @@
             <td class="label-cell">IT Section Head Approval</td>
             <td>
                 Name: <span class="fill">@Model.DeptHeadApprover.DisplayName (@Model.DeptHeadApprover.UserName) - @Model.DeptHeadApprover.Designation</span><br /><br />
-                Date: <span class="fill">@(itSectionHeadStep?.ApprovalDate?.ToString("yyyy/MM/dd"))</span>
+                Date: <span class="fill">@(Model.DeptHeadApprover.ApprovalDate.HasValue? Model.DeptHeadApprover.ApprovalDate.Value.ToString("yyyy/MM/dd HH:mm") : "-")</span>
             </td>
             <td>
-                Approved : Y/N &nbsp; <span class="fill">@(itSectionHeadStep?.IsApproved == true ? "Y" : itSectionHeadStep?.IsApproved == false ? "N" : "")</span><br /><br />
-                Comments: <span class="fill"></span>
+                Approved :<span class="fill">@(Model.DeptHeadApprover?.IsApproved == true ? "Yes" : Model.DeptHeadApprover?.IsApproved == false ? "No" : "")</span><br /><br />
+@*                 Comments: <span class="fill"></span> *@
             </td>
         </tr>
 
@@ -417,14 +417,14 @@
             </td>
         </tr>
 
-        <tr>
+@*         <tr>
             <td class="label-cell">IT Division Head Approval<br />(If the impact of change is<br />"Major")</td>
             <td colspan="2">
                 Change Approved/Rejected and Comments:<br />
                 <span class="fill">@Model.</span><br /><br />
                 Date: <span class="fill">@(deptHeadStep?.ApprovalDate?.ToString("yyyy/MM/dd"))</span>
             </td>
-        </tr>
+        </tr> *@
 
         @* ===================== SECTION 3 ===================== *@
         <tr>
@@ -446,7 +446,7 @@
         <tr>
             <td class="label-cell">User Acceptance Testing<br />(UAT)</td>
             <td colspan="2">
-                UAT Confirmation: Accepted Date: <span class="fill">@(Model.Testing.TestingDate?.ToString("yyyy/MM/dd"))</span><br /><br />
+                UAT Confirmation: Accepted Date: <span class="fill">@(Model.Tester.ApprovalDate.HasValue? Model.Tester.ApprovalDate.Value.ToString("yyyy/MM/dd HH:mm") : "-")</span><br /><br />
                 Comments: <span class="fill">N/A</span>
                 <hr class="dashed-rule" />
                 Name: <span class="fill">@Model.Tester.DisplayName - @Model.Tester.UserName</span><br /><br />
@@ -458,7 +458,7 @@
         <tr>
             <td class="label-cell">Business User Head<br />Approval</td>
             <td colspan="2">
-                Test Results Approved/Rejected: <span class="fill">@(businessUserHeadStep?.IsApproved == true ? "Approved" : businessUserHeadStep?.IsApproved == false ? "Rejected" : "")</span>
+                Test Results Approved/Rejected: <span class="fill">@(Model.DeptHeadApprover?.IsApproved == true ? "Approved" : Model.DeptHeadApprover?.IsApproved == false ? "Rejected" : "")</span>
             </td>
         </tr>
 

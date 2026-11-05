@@ -4116,37 +4116,40 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 ? rawRequesterObj.ToString()
                 : null;
 
-            var devDocAssignee = cr.StepAssignments?
+            // Keep the whole step row (not just AssignedTo) so ApprovalDate / IsApproved / Decision
+            // can be read off it below.
+            var devDocStep = cr.StepAssignments?
                 .FirstOrDefault(s => string.Equals(
                     (s.StepName ?? "").Replace(" ", ""),
                     "DeveloperDocumentation",
-                    StringComparison.OrdinalIgnoreCase))
-                ?.AssignedTo;
+                    StringComparison.OrdinalIgnoreCase));
 
-            var deptHeadAssignee = cr.StepAssignments?
+            var deptHeadStep = cr.StepAssignments?
                 .FirstOrDefault(s => string.Equals(
                     (s.StepName ?? "").Replace(" ", ""),
                     "DivisionHeadApproval",
-                    StringComparison.OrdinalIgnoreCase))
-                ?.AssignedTo;
+                    StringComparison.OrdinalIgnoreCase));
 
-            var securityAssignee = cr.StepAssignments?
+            var securityStep = cr.StepAssignments?
                 .FirstOrDefault(s => string.Equals(
                     (s.StepName ?? "").Replace(" ", ""),
                     "Security",
-                    StringComparison.OrdinalIgnoreCase))
-                ?.AssignedTo;
+                    StringComparison.OrdinalIgnoreCase));
 
             // Most recent Testing step row — mirrors ROW_NUMBER()/ORDER BY ApprovalID DESC
             // pattern used elsewhere for "latest" assignment on a given step.
-            var testerAssignee = cr.StepAssignments?
+            var testerStep = cr.StepAssignments?
                 .Where(s => string.Equals(
                     (s.StepName ?? "").Replace(" ", ""),
                     "Testing",
                     StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(s => s.AssignedDate)
-                .FirstOrDefault()
-                ?.AssignedTo;
+                .FirstOrDefault();
+
+            var devDocAssignee = devDocStep?.AssignedTo;
+            var deptHeadAssignee = deptHeadStep?.AssignedTo;
+            var securityAssignee = securityStep?.AssignedTo;
+            var testerAssignee = testerStep?.AssignedTo;
 
             var userNames = new[] { rawRequester, devDocAssignee, deptHeadAssignee, securityAssignee, testerAssignee }
                 .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -4193,17 +4196,27 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 }
             }
 
-            UserIdentity Resolve(string userName) =>
-                !string.IsNullOrWhiteSpace(userName) && identities.TryGetValue(userName, out var id)
+            // Resolve a base UserIdentity (name/designation/division) by username, then
+            // stamp the approval-specific fields from the matching step row on top of it.
+            UserIdentity Resolve(string userName, WorkflowStepAssignment step)
+            {
+                var baseIdentity = !string.IsNullOrWhiteSpace(userName) && identities.TryGetValue(userName, out var id)
                     ? id
                     : new UserIdentity { UserName = userName ?? string.Empty, DisplayName = userName ?? string.Empty };
 
+                baseIdentity.ApprovalDate = step?.ApprovalDate;
+                baseIdentity.IsApproved = step?.IsApproved;
+                baseIdentity.Decision = step?.Decision ?? string.Empty;
+
+                return baseIdentity;
+            }
+
             return (
-                Requester: Resolve(rawRequester),
-                Implementer: Resolve(devDocAssignee),
-                DeptHeadApprover: Resolve(deptHeadAssignee),
-                SecurityOfficer: Resolve(securityAssignee),
-                Tester: Resolve(testerAssignee)
+                Requester: Resolve(rawRequester, null),               // requester has no approval row
+                Implementer: Resolve(devDocAssignee, devDocStep),
+                DeptHeadApprover: Resolve(deptHeadAssignee, deptHeadStep),
+                SecurityOfficer: Resolve(securityAssignee, securityStep),
+                Tester: Resolve(testerAssignee, testerStep)
             );
         }
     }
