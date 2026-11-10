@@ -41,7 +41,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
         Task<bool> SubmitLiveLink(int crId, string liveLink, string empNo);
         Task<DashboardMetrics> GetDashboardMetricsAsync();
         Task<IEnumerable<DashboardMetrics>> GetSubmissionTrendAsync(string period);
-        //Task<HashSet<int>> GetCrIdsPendingApprovalForUserAsyncex(string empNo);
         Task<List<PendingApprovalViewModel>> GetCrIdsPendingApprovalForUserAsync(string empNo);
         Task<List<PendingApprovalViewModel>> GetCRPendingApprovals(int CRID);
         Task<(UserIdentity Requester, UserIdentity Implementer, UserIdentity DeptHeadApprover, UserIdentity SecurityOfficer, UserIdentity Tester)> GetCRFormIdentitiesAsync(ChangeRequest cr);
