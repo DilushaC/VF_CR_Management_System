@@ -831,9 +831,9 @@
                             <div class="col-md-5">
                                 <label class="casm-label" for="effortEstimateDays">Effort estimate (days)</label>
                                 <input type="number" name="EffortEstimateDays" id="effortEstimateDays"
-                                       class="form-control casm-number-spin" min="0" max="200"
+                                       class="form-control casm-number-spin" min="0" max="30"
                                        value="@effortEstimateDays">
-                                <div class="casm-field-error" id="err-effort"><i class="ri-error-warning-line"></i><span>Please enter an effort estimate between 1 and 200 days.</span></div>
+                                <div class="casm-field-error" id="err-effort"><i class="ri-error-warning-line"></i><span>Please enter an effort estimate between 1 and 30 days.</span></div>
                             </div>
                         </div>
 
@@ -1123,17 +1123,15 @@
                     }
 
                     var hasSelection = this.selectionStart !== this.selectionEnd;
-                    if (!hasSelection && this.value.length >= 3) {
+                    if (!hasSelection && this.value.length >= 2) {
                         e.preventDefault();
                     }
                 });
 
-                // Catch paste, autofill, and any other way invalid/over-length content can land
                 effortInput.addEventListener('input', function () {
-                    // Strip anything that isn't a digit (handles paste of "456e10" etc.)
                     var digitsOnly = this.value.replace(/[^0-9]/g, '');
-                    if (digitsOnly.length > 3) {
-                        digitsOnly = digitsOnly.slice(0, 3);
+                    if (digitsOnly.length > 2) {
+                        digitsOnly = digitsOnly.slice(0, 2);
                     }
                     if (digitsOnly !== this.value) {
                         this.value = digitsOnly;
@@ -1143,12 +1141,25 @@
 
             function refreshProgress() {
                 var effortValue = effortInput ? parseFloat(effortInput.value) : NaN;
-                var effortOk = !isNaN(effortValue) && effortValue > 0 && effortValue <= 200;
+                var effortOk = !isNaN(effortValue) && effortValue > 0 && effortValue <= 30;
                 var activitiesOk = !!(activitiesInput && activitiesInput.value.trim().length > 0);
                 var fixedAssetOk = !!(fixedAssetInput && fixedAssetInput.value.trim().length > 0);
-                var srsOk = hasExistingFiles('existingSrsList') || hasNewFiles(srsFileInput);
-                var baOk = hasExistingFiles('existingBaList') || hasNewFiles(baFileInput);
-                var vendorOk = vendorNo.checked || (vendorYes.checked && !!vendorSelect.value);
+
+                var vendorSupportYes = vendorYes.checked;
+
+                // SRS/BA are mandatory only when vendor support is "No"
+                var srsHasFile = hasExistingFiles('existingSrsList') || hasNewFiles(srsFileInput);
+                var baHasFile = hasExistingFiles('existingBaList') || hasNewFiles(baFileInput);
+                var srsOk = vendorSupportYes || srsHasFile;
+                var baOk = vendorSupportYes || baHasFile;
+
+                // Vendor fields are mandatory only when vendor support is "Yes"
+                var proposalInput = document.getElementById('proposalNumberInput');
+                var vendorAttachmentHasFile = hasExistingFiles('existingAttachmentsList') || hasNewFiles(attachmentInput);
+
+                var vendorOk = !vendorSupportYes || !!vendorSelect.value;
+                var proposalOk = !vendorSupportYes || !!(proposalInput && proposalInput.value.trim().length > 0);
+                var vendorAttachmentOk = !vendorSupportYes || vendorAttachmentHasFile;
 
                 var state = {
                     effort: effortOk,
@@ -1156,7 +1167,7 @@
                     fixedAsset: fixedAssetOk,
                     srs: srsOk,
                     ba: baOk,
-                    vendor: vendorOk
+                    vendor: vendorOk && proposalOk && vendorAttachmentOk
                 };
 
                 var done = 0;
@@ -1182,16 +1193,23 @@
                 showErr('effort', effortOk, effortInput);
                 showErr('activities', activitiesOk, activitiesInput);
                 showErr('fixedAsset', fixedAssetOk, fixedAssetInput);
+
+                // SRS/BA errors only show when they're actually required (vendor support = No)
                 showErr('srs', srsOk, null);
                 document.getElementById('srsUploadBox').classList.toggle('is-invalid', !srsOk);
                 showErr('ba', baOk, null);
                 document.getElementById('baUploadBox').classList.toggle('is-invalid', !baOk);
 
-                // Vendor error only matters while vendor support is "Yes"
-                var vendorFieldInvalid = vendorYes.checked && !vendorSelect.value;
-                showErr('vendor', !vendorFieldInvalid, vendorSelect);
+                // Vendor/proposal/attachment errors only show when vendor support = Yes
+                showErr('vendor', vendorOk, vendorSelect);
 
-                var allValid = effortOk && activitiesOk && fixedAssetOk && srsOk && baOk && vendorOk;
+                if (proposalInput) {
+                    proposalInput.classList.toggle('is-invalid', vendorSupportYes && !proposalOk);
+                }
+                document.getElementById('attachmentSection').classList.toggle('is-invalid', vendorSupportYes && !vendorAttachmentOk);
+
+                var allValid = effortOk && activitiesOk && fixedAssetOk && srsOk && baOk &&
+                                vendorOk && proposalOk && vendorAttachmentOk;
                 submitBtn.disabled = !allValid;
                 submitBtn.classList.toggle('disabled', !allValid);
             }
