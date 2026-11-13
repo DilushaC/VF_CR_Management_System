@@ -431,6 +431,15 @@
                 chart: { type: "bar", height: 300, toolbar: { show: false }, fontFamily: "inherit" },
                 series: [{ name: "Submissions", data: [] }],
                 xaxis: { categories: [] },
+                yaxis: {
+                    labels: {
+                        formatter: function (val) {
+                            return Math.round(val);
+                        }
+                    },
+                    forceNiceScale: true,
+                    tickAmount: undefined
+                },
                 colors: ["#3b5bdb"],
                 plotOptions: { bar: { columnWidth: "45%", borderRadius: 5 } },
                 dataLabels: { enabled: false },
