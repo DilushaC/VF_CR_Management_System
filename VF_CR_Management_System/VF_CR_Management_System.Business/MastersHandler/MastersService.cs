@@ -19,6 +19,8 @@ namespace VF_CR_Management_System.Business.MastersHandler
 
         public Task<IEnumerable<Vendor>> GetAllVendorsAsync()
         {
+            // Active = 1 only: a "deleted" vendor is soft-deleted (Active = 0) and should
+            // no longer appear in the Vendor Master list.
             const string sql = @"
                 SELECT
                     VendorID,
@@ -26,6 +28,7 @@ namespace VF_CR_Management_System.Business.MastersHandler
                     Description,
                     Active
                 FROM [CRManagementDB].[dbo].[Vendor]
+                WHERE Active = 1
                 ORDER BY VendorID";
 
             var result = _connectionService.Query<Vendor>(sql, new { })
@@ -111,8 +114,11 @@ namespace VF_CR_Management_System.Business.MastersHandler
             if (vendorId <= 0)
                 throw new ArgumentException("Invalid Vendor.");
 
+            // Soft delete: Vendor rows may be referenced elsewhere (e.g. ChangeRequest.VendorID),
+            // so we deactivate instead of removing the row.
             const string sql = @"
-                DELETE FROM [CRManagementDB].[dbo].[Vendor]
+                UPDATE [CRManagementDB].[dbo].[Vendor]
+                SET Active = 0
                 WHERE VendorID = @VendorID";
 
             var parameters = new DynamicParameters();
@@ -131,12 +137,12 @@ namespace VF_CR_Management_System.Business.MastersHandler
         {
             const string sql = @"
                 SELECT
-                    DivisionID,
+                    Id,
                     DivisionName,
                     Description,
                     Active
                 FROM [CRManagementDB].[dbo].[Division]
-                ORDER BY DivisionID";
+                ORDER BY Id";
 
             var result = _connectionService.Query<Division>(sql, new { })
                             ?? Enumerable.Empty<Division>();
@@ -151,12 +157,12 @@ namespace VF_CR_Management_System.Business.MastersHandler
 
             const string sql = @"
                 SELECT
-                    DivisionID,
+                    Id,
                     DivisionName,
                     Description,
                     Active
                 FROM [CRManagementDB].[dbo].[Division]
-                WHERE Id = @DivisionID";
+                WHERE Id = @Id";
 
             var result = _connectionService.Query<Division>(sql, new { Id = id });
             var division = result?.FirstOrDefault();
@@ -203,13 +209,13 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 SET DivisionName = @DivisionName,
                     Description  = @Description,
                     Active       = @Active
-                WHERE DivisionID         = @DivisionID";
+                WHERE Id         = @Id";
 
             var parameters = new DynamicParameters();
             parameters.Add("@DivisionName", division.DivisionName.Trim());
             parameters.Add("@Description", (division.Description ?? string.Empty).Trim());
             parameters.Add("@Active", division.Active);
-            parameters.Add("@DivisionID", division.DivisionID);
+            parameters.Add("@Id", division.DivisionID);
 
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
 
@@ -223,10 +229,10 @@ namespace VF_CR_Management_System.Business.MastersHandler
 
             const string sql = @"
                 DELETE FROM [CRManagementDB].[dbo].[Division]
-                WHERE DivisionID = @DivisionID";
+                WHERE Id = @Id";
 
             var parameters = new DynamicParameters();
-            parameters.Add("@DivisionID", id);
+            parameters.Add("@Id", id);
 
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
 

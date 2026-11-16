@@ -422,7 +422,7 @@
             </button>
         </div>
 
-        <div class="vd-kpis">
+@*         <div class="vd-kpis">
             <div class="vd-kpi tone-info">
                 <span class="vd-kpi-ico"><i class="ri-building-2-line"></i></span>
                 <span><span class="vd-kpi-num">@totalCount</span><span class="vd-kpi-label">Total vendors</span></span>
@@ -435,7 +435,7 @@
                 <span class="vd-kpi-ico"><i class="ri-close-circle-line"></i></span>
                 <span><span class="vd-kpi-num" id="vdInactiveCount">@inactiveCount</span><span class="vd-kpi-label">Inactive</span></span>
             </div>
-        </div>
+        </div> *@
 
         <div class="vd-table-wrap">
             <div class="table-responsive">
@@ -445,32 +445,19 @@
                             <th>Vendor ID</th>
                             <th>Vendor Name</th>
                             <th>Description</th>
-                            <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var v in vendors)
                         {
-                            <tr class="vd-row" data-id="@v.VendorID">
-                                <td><span class="vd-id">#@v.VendorID</span></td>
+                            <tr class="vd-row" data-id="@v.VendorID" data-active="@v.Active.ToString().ToLower()">
+                                <td data-order="@v.VendorID"><span class="vd-id">#@v.VendorID</span></td>
                                 <td class="vd-cell-name">
                                     <span class="vd-view vd-name">@v.VendorName</span>
                                 </td>
                                 <td class="vd-cell-desc">
                                     <span class="vd-view vd-desc" title="@v.Description">@v.Description</span>
-                                </td>
-                                <td class="vd-cell-active" data-active="@v.Active.ToString().ToLower()">
-                                    <span class="vd-view">
-                                        @if (v.Active)
-                                        {
-                                            <span class="vd-pill tone-ok"><span class="vd-pill-dot"></span>Active</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="vd-pill tone-bad"><span class="vd-pill-dot"></span>Inactive</span>
-                                        }
-                                    </span>
                                 </td>
                                 <td>
                                     <span class="vd-row-actions vd-view-actions">
@@ -505,7 +492,8 @@
                 lengthChange: true,
                 order: [[0, 'asc']],
                 columnDefs: [
-                    { orderable: false, targets: [4] }
+                    { targets: [0], type: 'num' },
+                    { orderable: false, targets: [3] }
                 ],
                 dom: "<'vd-dt-top'lf>rt<'vd-dt-bottom'ip>",
                 language: {
@@ -525,47 +513,39 @@
                 return token ? { "RequestVerificationToken": token } : {};
             }
 
+            // Active/Inactive is no longer shown in the table, but we still track it per row
+            // (data-active on <tr>) so the KPI cards above stay accurate after add/edit/delete.
             function refreshKpis() {
-                var active = $('#vendor-datatable tbody tr .vd-cell-active[data-active="true"]').length;
-                var inactive = $('#vendor-datatable tbody tr .vd-cell-active[data-active="false"]').length;
+                var active = $('#vendor-datatable tbody tr.vd-row[data-active="true"]').length;
+                var inactive = $('#vendor-datatable tbody tr.vd-row[data-active="false"]').length;
                 $('#vdActiveCount').text(active);
                 $('#vdInactiveCount').text(inactive);
             }
 
-            function activePillHtml(isActive) {
-                return isActive
-                    ? '<span class="vd-pill tone-ok"><span class="vd-pill-dot"></span>Active</span>'
-                    : '<span class="vd-pill tone-bad"><span class="vd-pill-dot"></span>Inactive</span>';
-            }
+            // Single source of truth for "which row (if any) is currently being edited".
+            // Using one tracked jQuery reference instead of an 'is-editing' CSS class avoids
+            // the class and the actual input markup ever drifting out of sync with each other
+            // (which is what let multiple rows end up stuck showing <input> fields at once).
+            var $editingRow = null;
 
             // Turn a row into edit mode
             function enterEditMode($row) {
-                $('#vendor-datatable tbody tr.is-editing').each(function () { exitEditMode($(this), false); });
+                // Close out any other row that's still mid-edit first, discarding its changes.
+                if ($editingRow && $editingRow.length && !$editingRow.is($row)) {
+                    exitEditMode($editingRow, true);
+                }
 
                 var $nameCell = $row.find('.vd-cell-name');
                 var $descCell = $row.find('.vd-cell-desc');
-                var $activeCell = $row.find('.vd-cell-active');
 
                 var currentName = $nameCell.find('.vd-view').text().trim();
                 var currentDesc = $descCell.find('.vd-view').attr('title') || '';
-                var isActive = $activeCell.attr('data-active') === 'true';
 
                 $nameCell.data('orig', currentName);
                 $descCell.data('orig', currentDesc);
-                $activeCell.data('orig', isActive);
 
                 $nameCell.html('<input type="text" class="vd-edit-input vd-input-name" value="' + $('<div>').text(currentName).html() + '" />');
                 $descCell.html('<input type="text" class="vd-edit-input vd-input-desc" value="' + $('<div>').text(currentDesc).html() + '" />');
-                $activeCell.html(
-                    '<label class="vd-edit-switch">' +
-                    '<input type="checkbox" class="form-check-input vd-input-active" ' + (isActive ? 'checked' : '') + ' />' +
-                    '<span class="vd-switch-label">' + (isActive ? 'Active' : 'Inactive') + '</span>' +
-                    '</label>'
-                );
-
-                $activeCell.off('change', '.vd-input-active').on('change', '.vd-input-active', function () {
-                    $(this).siblings('.vd-switch-label').text($(this).is(':checked') ? 'Active' : 'Inactive');
-                });
 
                 $row.find('.vd-view-actions').html(
                     '<button type="button" class="vd-btn vd-btn-save btn-save-vendor"><i class="ri-check-line"></i> Save</button>' +
@@ -573,6 +553,7 @@
                 );
 
                 $row.addClass('is-editing');
+                $editingRow = $row;
                 $row.find('.vd-input-name').trigger('focus');
             }
 
@@ -580,21 +561,16 @@
             function exitEditMode($row, restoreOriginal) {
                 var $nameCell = $row.find('.vd-cell-name');
                 var $descCell = $row.find('.vd-cell-desc');
-                var $activeCell = $row.find('.vd-cell-active');
 
                 if (restoreOriginal !== false) {
                     var name = $nameCell.data('orig');
                     var desc = $descCell.data('orig');
-                    var isActive = $activeCell.data('orig');
 
                     $nameCell.html('<span class="vd-view vd-name"></span>');
                     $nameCell.find('.vd-view').text(name);
 
                     $descCell.html('<span class="vd-view vd-desc"></span>');
                     $descCell.find('.vd-view').text(desc).attr('title', desc);
-
-                    $activeCell.attr('data-active', isActive ? 'true' : 'false');
-                    $activeCell.html('<span class="vd-view">' + activePillHtml(isActive) + '</span>');
                 }
 
                 $row.find('.vd-view-actions').html(
@@ -603,6 +579,10 @@
                 );
 
                 $row.removeClass('is-editing');
+
+                if ($editingRow && $editingRow.is($row)) {
+                    $editingRow = null;
+                }
             }
 
             $('#vendor-datatable tbody').on('click', '.btn-edit-vendor', function () {
@@ -612,6 +592,9 @@
             $('#vendor-datatable tbody').on('click', '.btn-cancel-vendor', function () {
                 var $row = $(this).closest('tr');
                 if ($row.data('isNew')) {
+                    if ($editingRow && $editingRow.is($row)) {
+                        $editingRow = null;
+                    }
                     table.row($row).remove().draw(false);
                     return;
                 }
@@ -620,12 +603,18 @@
 
             $('#vendor-datatable tbody').on('click', '.btn-save-vendor', function () {
                 var $row = $(this).closest('tr');
-                var vendorId = $row.data('id');
+                // Read via .attr(), not .data(): the id is written with .attr('data-id', ...)
+                // after save, and jQuery's .data() cache does not pick up attribute changes
+                // made that way once a key has been cached, which was causing stale/'0' ids.
+                var vendorId = parseInt($row.attr('data-id'), 10) || 0;
                 var isNew = !!$row.data('isNew');
 
                 var name = $row.find('.vd-input-name').val().trim();
                 var desc = $row.find('.vd-input-desc').val().trim();
-                var isActive = $row.find('.vd-input-active').is(':checked');
+
+                // Active flag is no longer editable in the UI. New vendors default to Active;
+                // existing vendors keep whatever Active value they already had.
+                var isActive = $row.attr('data-active') === 'true';
 
                 if (!name) {
                     Swal.fire({ title: 'Vendor name is required', icon: 'warning' });
@@ -655,7 +644,7 @@
 
                         $row.find('.vd-cell-name').data('orig', name);
                         $row.find('.vd-cell-desc').data('orig', desc);
-                        $row.find('.vd-cell-active').data('orig', isActive);
+                        $row.find('.vd-id').closest('td').attr('data-order', newId);
                         $row.find('.vd-id').text('#' + newId);
 
                         var $nameCell = $row.find('.vd-cell-name');
@@ -666,12 +655,11 @@
                         $descCell.html('<span class="vd-view vd-desc"></span>');
                         $descCell.find('.vd-view').text(desc).attr('title', desc);
 
-                        var $activeCell = $row.find('.vd-cell-active');
-                        $activeCell.attr('data-active', isActive ? 'true' : 'false');
-                        $activeCell.html('<span class="vd-view">' + activePillHtml(isActive) + '</span>');
-
+                        // No table.row().invalidate()/draw() here: DataTables doesn't know about
+                        // the hand-built view/edit markup in these cells, and invalidating can
+                        // redraw the row from its cached data, leaving edit-mode DOM and the
+                        // $editingRow tracker out of sync with what's actually on screen.
                         exitEditMode($row, false);
-                        table.row($row).invalidate();
                         refreshKpis();
 
                         Swal.fire({
@@ -692,12 +680,17 @@
             $('#vendor-datatable tbody').on('click', '.btn-delete-vendor', function () {
                 var $row = $(this).closest('tr');
 
+                if ($editingRow && $editingRow.is($row)) {
+                    $editingRow = null;
+                }
+
                 if ($row.data('isNew')) {
                     table.row($row).remove().draw(false);
                     return;
                 }
 
-                var vendorId = $row.data('id');
+                // Read via .attr(), not .data() — see the note in the save handler above.
+                var vendorId = parseInt($row.attr('data-id'), 10) || 0;
                 var vendorName = $row.find('.vd-cell-name .vd-view').text().trim();
 
                 Swal.fire({
@@ -730,14 +723,14 @@
                 });
             });
 
-            // Add new vendor: insert an empty editable row at the top and focus it
+            // Add new vendor: insert an empty editable row at the top and focus it.
+            // Defaults to Active = true (not shown in the UI, but sent on save).
             $('#vdAddBtn').on('click', function () {
                 var rowHtml =
-                    '<tr class="vd-row" data-id="0">' +
-                    '<td><span class="vd-id">New</span></td>' +
+                    '<tr class="vd-row" data-id="0" data-active="true">' +
+                    '<td data-order="0"><span class="vd-id">New</span></td>' +
                     '<td class="vd-cell-name"><span class="vd-view vd-name"></span></td>' +
                     '<td class="vd-cell-desc"><span class="vd-view vd-desc" title=""></span></td>' +
-                    '<td class="vd-cell-active" data-active="true"><span class="vd-view">' + activePillHtml(true) + '</span></td>' +
                     '<td><span class="vd-row-actions vd-view-actions">' +
                     '<button type="button" class="vd-btn vd-btn-edit btn-edit-vendor"><i class="ri-edit-line"></i> Edit</button>' +
                     '<button type="button" class="vd-btn vd-btn-delete btn-delete-vendor"><i class="ri-delete-bin-line"></i></button>' +
