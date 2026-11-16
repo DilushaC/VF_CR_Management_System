@@ -65,11 +65,14 @@
         return 2; // draft and anything unmapped
     }
 
-    // Filter group used by the summary cards: pending | progress | attention | done
-    string GroupOf(string? status)
+    string GroupOf(string? status, string? priority)
     {
         var k = Key(status);
         if (k == "released" || k == "deployed") { return "done"; }
+
+        var isEmergency = PriorityInfo(priority).Rank == 4;
+        if (isEmergency) { return "attention"; }
+
         if (new[] { "assessmentreturned", "qareturn", "testingrejected", "finalrejected", "rejected", "securityrejected" }.Contains(k)) { return "attention"; }
         if (k == "submitted" || k == "draft") { return "pending"; }
         return "progress";
@@ -106,10 +109,10 @@
     }
 
     var totalCount = crs.Count;
-    var pendingCount = crs.Count(c => GroupOf(c.Status) == "pending");
-    var progressCount = crs.Count(c => GroupOf(c.Status) == "progress");
-    var attentionCount = crs.Count(c => GroupOf(c.Status) == "attention");
-    var doneCount = crs.Count(c => GroupOf(c.Status) == "done");
+    var pendingCount = crs.Count(c => GroupOf(c.Status, c.Priority) == "pending");
+    var progressCount = crs.Count(c => GroupOf(c.Status, c.Priority) == "progress");
+    var attentionCount = crs.Count(c => GroupOf(c.Status, c.Priority) == "attention");
+    var doneCount = crs.Count(c => GroupOf(c.Status, c.Priority) == "done");
 }
 
 @Html.AntiForgeryToken()
@@ -685,7 +688,7 @@
                             var displayCrNumber = isDraft ? "WAITING" : cr.CRNumber;
                             var badge = StatusBadge(cr.Status);
                             var stage = StageOf(cr.Status);
-                            var group = GroupOf(cr.Status);
+                            var group = GroupOf(cr.Status, cr.Priority);
                             var segTone = (badge.Tone == "warn" || badge.Tone == "bad") ? badge.Tone : "info";
                             var prio = PriorityInfo(cr.Priority);
                             var myPendingStep = pendingStepByCrId.TryGetValue(cr.CRID, out var stepName) ? stepName : null;
