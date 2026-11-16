@@ -70,12 +70,10 @@
         var k = Key(status);
         if (k == "released" || k == "deployed") { return "done"; }
 
-        var isEmergency = PriorityInfo(priority).Rank == 4;
-        if (isEmergency) { return "attention"; }
+        if (new[] { "rejected", "testingrejected", "finalrejected", "securityrejected" }.Contains(k)) { return "attention"; }
 
-        if (new[] { "assessmentreturned", "qareturn", "testingrejected", "finalrejected", "rejected", "securityrejected" }.Contains(k)) { return "attention"; }
         if (k == "submitted" || k == "draft") { return "pending"; }
-        return "progress";
+        return "progress"; // includes assessmentreturned, qareturn, and everything else in-flight
     }
 
     (string Tone, int Rank) PriorityInfo(string? p)
@@ -656,7 +654,7 @@
             </button>
             <button type="button" class="cr-kpi tone-bad" data-group="attention" data-label="Needs attention">
                 <span class="cr-kpi-ico"><i class="ri-error-warning-line"></i></span>
-                <span><span class="cr-kpi-num" data-count="@attentionCount">@attentionCount</span><span class="cr-kpi-label">Needs attention</span></span>
+                <span><span class="cr-kpi-num" data-count="@attentionCount">@attentionCount</span><span class="cr-kpi-label">Rejected</span></span>
             </button>
             <button type="button" class="cr-kpi tone-ok" data-group="done" data-label="Released">
                 <span class="cr-kpi-ico"><i class="ri-checkbox-circle-line"></i></span>
