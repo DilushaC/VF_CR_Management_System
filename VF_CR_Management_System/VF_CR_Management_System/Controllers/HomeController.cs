@@ -29,7 +29,7 @@ namespace CR_Management_System.Controllers
                 var model = new DashboardViewModel
                 {
                     TotalCRs = metrics.TotalCRs,
-                    PendingApprovals = metrics.ApprovedCRs,
+                    PendingApprovals = metrics.InProgressCRs,  // repurposed: now represents "In Progress"
                     TotalHolds = metrics.DeployedCRs,
                     RejectedCRs = metrics.RejectedCRs
                 };

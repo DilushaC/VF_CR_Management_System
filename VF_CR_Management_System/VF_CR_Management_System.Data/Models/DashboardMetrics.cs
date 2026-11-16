@@ -9,7 +9,7 @@ namespace VF_CR_Management_System.Data.Models
     public class DashboardMetrics
     {
         public int TotalCRs { get; set; }
-        public int ApprovedCRs { get; set; }
+        public int InProgressCRs { get; set; }
         public int DeployedCRs { get; set; }
         public int RejectedCRs { get; set; }
         public string Label { get; set; } = string.Empty;

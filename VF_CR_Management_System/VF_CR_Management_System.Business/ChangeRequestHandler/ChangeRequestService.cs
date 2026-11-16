@@ -3864,19 +3864,13 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
         public async Task<DashboardMetrics> GetDashboardMetricsAsync()
         {
-            // Single round-trip: count all active CRs, then bucket them by CRStatus.StatusName.
-            //   - ApprovedCRs : CRs currently sitting in the "Approved" status
-            //   - DeployedCRs : CRs that have gone live / been closed out
-            //   - RejectedCRs : CRs currently in the "Rejected" status
-            // Adjust the status names in the CASE WHEN clauses below if your CRStatus table
-            // uses different labels for "deployed" (e.g. just "Closed").
             const string sql = @"
                 SELECT
                     COUNT(*) AS TotalCRs,
-                    SUM(CASE WHEN s.StatusName = 'Approved' THEN 1 ELSE 0 END) AS ApprovedCRs,
-                    SUM(CASE WHEN s.StatusName IN ('Closed', 'Released', 'Completed', 'ReleaseClosed', 'LiveLinkSubmitted')
-                              THEN 1 ELSE 0 END) AS DeployedCRs,
-                    SUM(CASE WHEN s.StatusName = 'Rejected' THEN 1 ELSE 0 END) AS RejectedCRs
+                    SUM(CASE WHEN s.StatusName IN ('Deployed', 'Released') THEN 1 ELSE 0 END) AS DeployedCRs,
+                    SUM(CASE WHEN s.StatusName IN ('Rejected', 'TestingRejected', 'FinalRejected', 'SecurityRejected') THEN 1 ELSE 0 END) AS RejectedCRs,
+                    SUM(CASE WHEN s.StatusName NOT IN ('Deployed', 'Released', 'Rejected', 'TestingRejected', 'FinalRejected', 'SecurityRejected')
+                              OR s.StatusName IS NULL THEN 1 ELSE 0 END) AS InProgressCRs
                 FROM [CRManagementDB].[dbo].[ChangeRequest] cr
                 LEFT JOIN [CRManagementDB].[dbo].[CRStatus] s ON s.StatusID = cr.StatusID
                 WHERE cr.Active = 1";
@@ -3895,7 +3889,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             return await Task.FromResult(new DashboardMetrics
             {
                 TotalCRs = SafeInt(row["TotalCRs"]),
-                ApprovedCRs = SafeInt(row["ApprovedCRs"]),
+                InProgressCRs = SafeInt(row["InProgressCRs"]),
                 DeployedCRs = SafeInt(row["DeployedCRs"]),
                 RejectedCRs = SafeInt(row["RejectedCRs"])
             });

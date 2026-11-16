@@ -5,8 +5,10 @@
     ViewData["Title"] = "Home Page";
 
     // Simple derived figures for the hero strip - no new model fields needed.
+    // NOTE: Model.PendingApprovals now holds the "In Progress" count (everything
+    // that is neither Deployed nor Rejected), not "Approved" specifically.
     var total = Model.TotalCRs <= 0 ? 0 : Model.TotalCRs;
-    var approvedPct = total == 0 ? 0 : Math.Round((double)Model.PendingApprovals / total * 100, 0);
+    var inProgressPct = total == 0 ? 0 : Math.Round((double)Model.PendingApprovals / total * 100, 0);
     var deployedPct = total == 0 ? 0 : Math.Round((double)Model.TotalHolds / total * 100, 0);
     var rejectedPct = total == 0 ? 0 : Math.Round((double)Model.RejectedCRs / total * 100, 0);
 }
@@ -279,6 +281,51 @@
         color: var(--cd-muted);
     }
 
+    /* ===== Donut center overlay ===== */
+    .crdash-pie-wrap {
+        position: relative;
+    }
+
+    .crdash-pie-center {
+        position: absolute;
+        top: 44%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        pointer-events: none;
+        line-height: 1.35;
+        width: 150px;
+    }
+
+        .crdash-pie-center .pc-label {
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            color: var(--cd-muted);
+        }
+
+        .crdash-pie-center .pc-total {
+            font-size: 1.7rem;
+            font-weight: 800;
+            line-height: 1.15;
+        }
+
+        .crdash-pie-center .pc-breakdown {
+            margin-top: .35rem;
+            font-size: .72rem;
+            color: var(--cd-muted);
+        }
+
+            .crdash-pie-center .pc-breakdown div {
+                margin-top: .1rem;
+            }
+
+            .crdash-pie-center .pc-breakdown b {
+                color: inherit;
+                font-weight: 700;
+            }
+
     @@media (prefers-reduced-motion: reduce) {
         .crdash-stat {
             animation: none;
@@ -323,13 +370,13 @@
             <div class="crdash-stat is-ok">
                 <div class="crdash-stat-top">
                     <div>
-                        <h5 class="crdash-stat-label">Approved CRs</h5>
+                        <h5 class="crdash-stat-label">In Progress</h5>
                         <h3 class="crdash-stat-value">@Model.PendingApprovals</h3>
                     </div>
-                    <span class="crdash-stat-ico"><iconify-icon icon="solar:armchair-2-bold"></iconify-icon></span>
+                    <span class="crdash-stat-ico"><iconify-icon icon="solar:hourglass-bold-duotone"></iconify-icon></span>
                 </div>
-                <div class="crdash-stat-bar"><span style="width:@(approvedPct)%;"></span></div>
-                <div class="crdash-stat-foot"><i class="ri-percent-line"></i>@(approvedPct)% of total</div>
+                <div class="crdash-stat-bar"><span style="width:@(inProgressPct)%;"></span></div>
+                <div class="crdash-stat-foot"><i class="ri-percent-line"></i>@(inProgressPct)% of total</div>
             </div>
         </div><!-- end col -->
 
@@ -391,8 +438,17 @@
                     <p class="crdash-chart-sub">Share of requests by current state</p>
                 </div>
                 <div class="card-body">
-                    <div dir="ltr">
-                        <div id="simple-pie" class="apex-charts" data-colors="#3b5bdb,#45bbe0,#0acf97,#fa5c7c"></div>
+                    <div dir="ltr" class="crdash-pie-wrap">
+                        <div id="simple-pie" class="apex-charts" data-colors="#0acf97,#fa5c7c,#f7b84b"></div>
+                        <div class="crdash-pie-center">
+                            <div class="pc-label">Total CRs</div>
+                            <div class="pc-total" id="pc-total">0</div>
+                            <div class="pc-breakdown">
+                                <div>Deployed: <b id="pc-deployed">0</b></div>
+                                <div>Rejected: <b id="pc-rejected">0</b></div>
+                                <div>In Progress: <b id="pc-inprogress">0</b></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -403,128 +459,138 @@
 
 @section Scripts {
     <script>
-        const crStats = @Html.Raw(JsonSerializer.Serialize(new
-        {
-                        totalCRs = Model.TotalCRs,
-                        pending = Model.PendingApprovals,
-                        holds = Model.TotalHolds,
-                        rejected = Model.RejectedCRs
-        }));
+            // NOTE: "inProgress" here is the "everything not Deployed and not Rejected"
+            // bucket, computed server-side in GetDashboardMetricsAsync so Deployed +
+            // Rejected + InProgress always sums exactly to TotalCRs.
+            const crStats = @Html.Raw(JsonSerializer.Serialize(new
+            {
+                                totalCRs = Model.TotalCRs,
+                                inProgress = Model.PendingApprovals,
+                                holds = Model.TotalHolds,
+                                rejected = Model.RejectedCRs
+            }));
 
     document.addEventListener("DOMContentLoaded", function () {
 
-            // Animate the stat bars in after load
-            requestAnimationFrame(function () {
-                document.querySelectorAll('.crdash-stat-bar > span').forEach(function (el) {
-                    var target = el.style.width;
-                    el.style.width = '0%';
-                    requestAnimationFrame(function () {
+                // Animate the stat bars in after load
+                requestAnimationFrame(function () {
+                    document.querySelectorAll('.crdash-stat-bar > span').forEach(function (el) {
+                        var target = el.style.width;
+                        el.style.width = '0%';
                         requestAnimationFrame(function () {
-                            el.style.width = target;
+                            requestAnimationFrame(function () {
+                                el.style.width = target;
+                            });
                         });
                     });
                 });
-            });
 
-            // ===== CR Submissions bar chart: single series, Week/Month/Year filter =====
-            var trendChart = new ApexCharts(document.querySelector("#statistics-chart"), {
-                chart: { type: "bar", height: 300, toolbar: { show: false }, fontFamily: "inherit" },
-                series: [{ name: "Submissions", data: [] }],
-                xaxis: { categories: [] },
-                yaxis: {
-                    labels: {
+                // ===== CR Submissions bar chart: single series, Week/Month/Year filter =====
+                var trendChart = new ApexCharts(document.querySelector("#statistics-chart"), {
+                    chart: { type: "bar", height: 300, toolbar: { show: false }, fontFamily: "inherit" },
+                    series: [{ name: "Submissions", data: [] }],
+                    xaxis: { categories: [] },
+                    yaxis: {
+                        labels: {
+                            formatter: function (val) {
+                                return Math.round(val);
+                            }
+                        },
+                        forceNiceScale: true,
+                        tickAmount: undefined
+                    },
+                    colors: ["#3b5bdb"],
+                    plotOptions: { bar: { columnWidth: "45%", borderRadius: 5 } },
+                    dataLabels: { enabled: false },
+                    grid: { borderColor: "rgba(120,130,150,.15)", strokeDashArray: 4 },
+                    legend: { show: false }
+                });
+                trendChart.render();
+
+                var trendSubLabels = {
+                    week: "Last 8 weeks",
+                    month: "Monthly submissions for @DateTime.Now.Year",
+                    year: "Submissions by year"
+                };
+
+                function loadTrend(period) {
+                    $.ajax({
+                        url: '@Url.Action("GetSubmissionTrend", "Home")',
+                        type: 'GET',
+                        data: { period: period },
+                        success: function (response) {
+                            if (!response || response.success === false) { return; }
+
+                            trendChart.updateOptions({
+                                xaxis: { categories: response.labels }
+                            });
+                            trendChart.updateSeries([
+                                { name: "Submissions", data: response.counts }
+                            ]);
+
+                            document.getElementById('trend-sub').textContent =
+                                trendSubLabels[period] || 'Submissions';
+                        },
+                        error: function () {
+                            console.error('Failed to load submission trend for period: ' + period);
+                        }
+                    });
+                }
+
+                // Filter button clicks
+                document.querySelectorAll('.crdash-trend-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        document.querySelectorAll('.crdash-trend-btn').forEach(function (b) {
+                            b.classList.remove('active');
+                        });
+                        this.classList.add('active');
+                        loadTrend(this.dataset.period);
+                    });
+                });
+
+                // Initial load: monthly
+                loadTrend('month');
+
+                // ===== Donut chart: Deployed / Rejected / In Progress only =====
+                // These three buckets are computed server-side (GetDashboardMetricsAsync)
+                // so that Deployed + Rejected + InProgress always sums exactly to TotalCRs.
+                // TotalCRs itself is shown only in the center overlay, never as a ring slice,
+                // since a "total" slice next to its own parts double-counts the ring.
+                document.getElementById('pc-total').textContent = crStats.totalCRs;
+                document.getElementById('pc-deployed').textContent = crStats.holds;
+                document.getElementById('pc-rejected').textContent = crStats.rejected;
+                document.getElementById('pc-inprogress').textContent = crStats.inProgress;
+
+                new ApexCharts(document.querySelector("#simple-pie"), {
+                    chart: { type: "donut", height: 320, fontFamily: "inherit" },
+                    series: [crStats.holds, crStats.rejected, crStats.inProgress],
+                    labels: ["Deployed CRs", "Rejected CRs", "In Progress"],
+                    colors: ["#0acf97", "#fa5c7c", "#f7b84b"],
+                    legend: { position: "bottom" },
+                    dataLabels: {
+                        enabled: true,
                         formatter: function (val) {
-                            return Math.round(val);
+                            return val.toFixed(1) + "%";
                         }
                     },
-                    forceNiceScale: true,
-                    tickAmount: undefined
-                },
-                colors: ["#3b5bdb"],
-                plotOptions: { bar: { columnWidth: "45%", borderRadius: 5 } },
-                dataLabels: { enabled: false },
-                grid: { borderColor: "rgba(120,130,150,.15)", strokeDashArray: 4 },
-                legend: { show: false }
-            });
-            trendChart.render();
-
-            var trendSubLabels = {
-                week: "Last 8 weeks",
-                month: "Monthly submissions for @DateTime.Now.Year",
-                year: "Submissions by year"
-            };
-
-            function loadTrend(period) {
-                $.ajax({
-                    url: '@Url.Action("GetSubmissionTrend", "Home")',
-                    type: 'GET',
-                    data: { period: period },
-                    success: function (response) {
-                        if (!response || response.success === false) { return; }
-
-                        trendChart.updateOptions({
-                            xaxis: { categories: response.labels }
-                        });
-                        trendChart.updateSeries([
-                            { name: "Submissions", data: response.counts }
-                        ]);
-
-                        document.getElementById('trend-sub').textContent =
-                            trendSubLabels[period] || 'Submissions';
-                    },
-                    error: function () {
-                        console.error('Failed to load submission trend for period: ' + period);
-                    }
-                });
-            }
-
-            // Filter button clicks
-            document.querySelectorAll('.crdash-trend-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    document.querySelectorAll('.crdash-trend-btn').forEach(function (b) {
-                        b.classList.remove('active');
-                    });
-                    this.classList.add('active');
-                    loadTrend(this.dataset.period);
-                });
-            });
-
-            // Initial load: monthly
-            loadTrend('month');
-
-            // Pie chart - unchanged
-            new ApexCharts(document.querySelector("#simple-pie"), {
-                chart: { type: "donut", height: 320, fontFamily: "inherit" },
-                series: [crStats.totalCRs, crStats.pending, crStats.holds, crStats.rejected],
-                labels: ["Total CRs", "Pending Approvals", "Total Holds", "Rejected CRs"],
-                colors: ["#3b5bdb", "#45bbe0", "#0acf97", "#fa5c7c"],
-                legend: { position: "bottom" },
-                dataLabels: {
-                    enabled: true,
-                    formatter: function (val) {
-                        return val.toFixed(1) + "%";
-                    }
-                },
-                plotOptions: {
-                    pie: {
-                        donut: {
-                            size: "62%",
-                            labels: {
-                                show: true,
-                                total: { show: true, label: "Total", fontWeight: 700 }
+                    plotOptions: {
+                        pie: {
+                            donut: {
+                                size: "65%",
+                                labels: { show: false } // built-in label hidden; using HTML overlay instead
                             }
                         }
-                    }
-                },
-                responsive: [{
-                    breakpoint: 480,
-                    options: {
-                        chart: { width: 260 },
-                        legend: { position: "bottom" }
-                    }
-                }]
-            }).render();
+                    },
+                    noData: { text: 'No change requests yet' },
+                    responsive: [{
+                        breakpoint: 480,
+                        options: {
+                            chart: { width: 260 },
+                            legend: { position: "bottom" }
+                        }
+                    }]
+                }).render();
 
-        });
+            });
     </script>
 }
