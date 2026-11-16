@@ -8,6 +8,7 @@ using VF_CR_Management_System.Business.DivisionHandler;
 using VF_CR_Management_System.Business.ModuleHandler;
 using VF_CR_Management_System.Business.UserHandler;
 using VF_CR_Management_System.Business.VendorHandler;
+using VF_CR_Management_System.Business.MastersHandler;
 using VF_CR_Management_System.Data.Context;
 using VF_CR_Management_System.Presentation.Filters;
 
@@ -42,6 +43,7 @@ builder.Services.AddScoped<IChangeRequestService, ChangeRequestService>();
 builder.Services.AddScoped<IModuleService, ModuleService>();
 builder.Services.AddScoped<IDivisionService, DivisionService>();
 builder.Services.AddScoped<IVendorService, VendorService>();
+builder.Services.AddScoped<IMastersService, MastersService>();
 
 // Add session services
 builder.Services.AddDistributedMemoryCache();

@@ -36,7 +36,7 @@ namespace VF_CR_Management_System.Business.VendorHandler
             var vendors = vendorData.AsEnumerable()
                 .Select(r => new Vendor
                 {
-                    Id = r.Field<int>("VendorID"),
+                    VendorID = r.Field<int>("VendorID"),
                     VendorName = r.Field<string>("VendorName"),
                     Active = r.Field<bool>("Active")
                 })
