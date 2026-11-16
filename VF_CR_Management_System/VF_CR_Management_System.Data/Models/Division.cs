@@ -8,7 +8,7 @@ namespace VF_CR_Management_System.Data.Models
 {
     public class Division
     {
-        public int Id { get; set; }
+        public int DivisionID { get; set; }
         public string DivisionName { get; set; }
         public string Description { get; set; }
         public bool Active { get; set; }

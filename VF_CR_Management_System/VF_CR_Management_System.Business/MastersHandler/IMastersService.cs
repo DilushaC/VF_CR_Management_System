@@ -11,5 +11,12 @@ namespace VF_CR_Management_System.Business.MastersHandler
         Task<int> AddVendorAsync(Vendor vendor);
         Task<bool> UpdateVendorAsync(Vendor vendor);
         Task<bool> DeleteVendorAsync(int vendorId);
+
+        // ---- Division ----
+        Task<IEnumerable<Division>> GetAllDivisionsAsync();
+        Task<Division> GetDivisionByIdAsync(int id);
+        Task<int> AddDivisionAsync(Division division);
+        Task<bool> UpdateDivisionAsync(Division division);
+        Task<bool> DeleteDivisionAsync(int id);
     }
 }

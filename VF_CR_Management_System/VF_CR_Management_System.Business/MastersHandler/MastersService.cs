@@ -122,5 +122,115 @@ namespace VF_CR_Management_System.Business.MastersHandler
 
             return Task.FromResult(rowsAffected > 0);
         }
+
+        // =====================================================================
+        // Division
+        // =====================================================================
+
+        public Task<IEnumerable<Division>> GetAllDivisionsAsync()
+        {
+            const string sql = @"
+                SELECT
+                    DivisionID,
+                    DivisionName,
+                    Description,
+                    Active
+                FROM [CRManagementDB].[dbo].[Division]
+                ORDER BY DivisionID";
+
+            var result = _connectionService.Query<Division>(sql, new { })
+                            ?? Enumerable.Empty<Division>();
+
+            return Task.FromResult(result);
+        }
+
+        public Task<Division> GetDivisionByIdAsync(int id)
+        {
+            if (id <= 0)
+                throw new ArgumentException("Invalid Division.");
+
+            const string sql = @"
+                SELECT
+                    DivisionID,
+                    DivisionName,
+                    Description,
+                    Active
+                FROM [CRManagementDB].[dbo].[Division]
+                WHERE Id = @DivisionID";
+
+            var result = _connectionService.Query<Division>(sql, new { Id = id });
+            var division = result?.FirstOrDefault();
+
+            return Task.FromResult(division);
+        }
+
+        public Task<int> AddDivisionAsync(Division division)
+        {
+            if (division == null)
+                throw new ArgumentException("Invalid Division.");
+
+            if (string.IsNullOrWhiteSpace(division.DivisionName))
+                throw new ArgumentException("Division name is required.");
+
+            const string sql = @"
+                INSERT INTO [CRManagementDB].[dbo].[Division]
+                    (DivisionName, Description, Active)
+                VALUES
+                    (@DivisionName, @Description, @Active);
+                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@DivisionName", division.DivisionName.Trim());
+            parameters.Add("@Description", (division.Description ?? string.Empty).Trim());
+            parameters.Add("@Active", division.Active);
+
+            var scalarResult = _connectionService.ExecuteScalar(sql, parameters);
+            var newId = scalarResult != null ? Convert.ToInt32(scalarResult) : 0;
+
+            return Task.FromResult(newId);
+        }
+
+        public Task<bool> UpdateDivisionAsync(Division division)
+        {
+            if (division == null || division.DivisionID <= 0)
+                throw new ArgumentException("Invalid Division.");
+
+            if (string.IsNullOrWhiteSpace(division.DivisionName))
+                throw new ArgumentException("Division name is required.");
+
+            const string sql = @"
+                UPDATE [CRManagementDB].[dbo].[Division]
+                SET DivisionName = @DivisionName,
+                    Description  = @Description,
+                    Active       = @Active
+                WHERE DivisionID         = @DivisionID";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@DivisionName", division.DivisionName.Trim());
+            parameters.Add("@Description", (division.Description ?? string.Empty).Trim());
+            parameters.Add("@Active", division.Active);
+            parameters.Add("@DivisionID", division.DivisionID);
+
+            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+
+            return Task.FromResult(rowsAffected > 0);
+        }
+
+        public Task<bool> DeleteDivisionAsync(int id)
+        {
+            if (id <= 0)
+                throw new ArgumentException("Invalid Division.");
+
+            const string sql = @"
+                DELETE FROM [CRManagementDB].[dbo].[Division]
+                WHERE DivisionID = @DivisionID";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@DivisionID", id);
+
+            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+
+            return Task.FromResult(rowsAffected > 0);
+        }
     }
 }

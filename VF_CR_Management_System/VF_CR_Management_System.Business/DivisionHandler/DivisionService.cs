@@ -38,7 +38,7 @@ namespace VF_CR_Management_System.Business.DivisionHandler
             var divisions = divisionData.AsEnumerable()
                 .Select(r => new Division
                 {
-                    Id = r.Field<int>("DivisionID"),
+                    DivisionID = r.Field<int>("DivisionID"),
                     DivisionName = r.Field<string>("DivisionName"),
                     Active = r.Field<bool>("Active")
                 })

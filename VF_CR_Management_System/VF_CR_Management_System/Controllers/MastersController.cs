@@ -27,6 +27,14 @@ namespace VF_CR_Management_System.Controllers
             return View(vendors);
         }
 
+
+        [HttpGet]
+        public async Task<IActionResult> DivisionMaster()
+        {
+            var divisions = await _mastersService.GetAllDivisionsAsync();
+            return View(divisions);
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddVendor(string VendorName, string Description, bool Active)
@@ -95,6 +103,84 @@ namespace VF_CR_Management_System.Controllers
                 if (!success)
                 {
                     return NotFound(new { message = "Vendor not found." });
+                }
+
+                return Ok();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddDivision(string DivisionName, string Description, bool Active)
+        {
+            try
+            {
+                var division = new Division
+                {
+                    DivisionName = DivisionName,
+                    Description = Description,
+                    Active = Active
+                };
+
+                var newId = await _mastersService.AddDivisionAsync(division);
+
+                if (newId <= 0)
+                {
+                    return BadRequest(new { message = "Failed to add the division. Please try again." });
+                }
+
+                return Json(new { id = newId });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditDivision(int Id, string DivisionName, string Description, bool Active)
+        {
+            try
+            {
+                var division = new Division
+                {
+                    DivisionID = Id,
+                    DivisionName = DivisionName,
+                    Description = Description,
+                    Active = Active
+                };
+
+                var success = await _mastersService.UpdateDivisionAsync(division);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Division not found or could not be updated." });
+                }
+
+                return Json(new { id = Id });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteDivision(int id)
+        {
+            try
+            {
+                var success = await _mastersService.DeleteDivisionAsync(id);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Division not found." });
                 }
 
                 return Ok();

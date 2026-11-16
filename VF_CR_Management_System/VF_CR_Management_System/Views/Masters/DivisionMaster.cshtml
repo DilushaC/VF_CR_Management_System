@@ -1,0 +1,758 @@
+﻿@using VF_CR_Management_System.Data.Models
+@model IEnumerable<VF_CR_Management_System.Data.Models.Division>
+@{
+    ViewData["Title"] = "Division Management";
+
+    var divisions = Model == null ? new List<Division>() : Model.ToList();
+    var totalCount = divisions.Count;
+    var activeCount = divisions.Count(d => d.Active);
+    var inactiveCount = totalCount - activeCount;
+}
+
+@Html.AntiForgeryToken()
+
+<style>
+    .vd-page {
+        --vd-ink: #17213b;
+        --vd-accent: #3b5bdb;
+        --vd-ok: #1f9d6b;
+        --vd-bad: #d6384a;
+        --vd-line: var(--bs-border-color, #e3e6ec);
+        --vd-muted: var(--bs-secondary-color, #6b7385);
+        --vd-surface: var(--bs-tertiary-bg, #f5f7fb);
+        --vd-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+        --vd-hover: var(--bs-tertiary-bg, #f1f4fb);
+    }
+
+        .vd-page .tone-ok {
+            --t: #1f9d6b;
+            --t-bg: rgba(31,157,107,.14);
+        }
+
+        .vd-page .tone-bad {
+            --t: #d6384a;
+            --t-bg: rgba(255,93,108,.16);
+        }
+
+        .vd-page .tone-info {
+            --t: #4a63d6;
+            --t-bg: rgba(59,91,219,.13);
+        }
+
+    [data-bs-theme="dark"] .vd-page .tone-ok {
+        --t: #3ddc97;
+    }
+
+    [data-bs-theme="dark"] .vd-page .tone-bad {
+        --t: #ff7b88;
+    }
+
+    [data-bs-theme="dark"] .vd-page .tone-info {
+        --t: #9db0ff;
+    }
+
+    .vd-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: .75rem;
+        margin-bottom: 1.1rem;
+    }
+
+    .vd-head-title {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+    }
+
+    .vd-head-sub {
+        margin: .15rem 0 0;
+        font-size: .88rem;
+        color: var(--vd-muted);
+    }
+
+    .vd-add-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .55rem 1.1rem;
+        border-radius: .6rem;
+        font-weight: 600;
+        font-size: .88rem;
+        border: 1px solid var(--vd-accent);
+        color: #fff;
+        background: var(--vd-accent);
+        cursor: pointer;
+    }
+
+        .vd-add-btn:hover {
+            background: #2a46c7;
+            border-color: #2a46c7;
+            color: #fff;
+        }
+
+    .vd-kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: .75rem;
+        margin-bottom: 1.25rem;
+        max-width: 560px;
+    }
+
+    .vd-kpi {
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        padding: .9rem 1rem;
+        border: 1px solid var(--vd-line);
+        border-radius: .85rem;
+        background: var(--vd-card);
+    }
+
+    .vd-kpi-ico {
+        flex: 0 0 auto;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: .7rem;
+        font-size: 1.35rem;
+        color: var(--t);
+        background: var(--t-bg);
+    }
+
+    .vd-kpi-num {
+        display: block;
+        font-size: 1.7rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+
+    .vd-kpi-label {
+        display: block;
+        font-size: .82rem;
+        color: var(--vd-muted);
+    }
+
+    .vd-table-wrap {
+        border: 1px solid var(--vd-line);
+        border-radius: .85rem;
+        background: var(--vd-card);
+        overflow: hidden;
+    }
+
+    .vd-dt-top, .vd-dt-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: .75rem;
+        padding: .85rem 1rem;
+    }
+
+    .vd-dt-bottom {
+        border-top: 1px solid var(--vd-line);
+    }
+
+    .vd-dt-top .dataTables_filter label,
+    .vd-dt-top .dataTables_length label {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        color: var(--vd-muted);
+        font-size: .88rem;
+    }
+
+    .vd-dt-top .dataTables_filter input {
+        width: 280px;
+        max-width: 100%;
+        margin: 0;
+        padding: .5rem .8rem .5rem 2.2rem;
+        border-radius: 999px;
+        border: 1px solid var(--vd-line);
+        background-color: var(--vd-surface);
+        background-repeat: no-repeat;
+        background-position: .75rem center;
+        background-size: 16px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7385' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+    }
+
+        .vd-dt-top .dataTables_filter input:focus {
+            outline: 0;
+            border-color: var(--vd-accent);
+            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        }
+
+    .vd-dt-top .dataTables_length select {
+        margin: 0;
+        border-radius: .5rem;
+    }
+
+    .vd-dt-bottom .dataTables_info {
+        color: var(--vd-muted);
+        font-size: .85rem;
+        padding: 0;
+    }
+
+    .vd-dt-bottom .dataTables_paginate {
+        margin: 0;
+    }
+
+    .vd-dt-bottom .pagination {
+        margin: 0;
+        gap: .2rem;
+    }
+
+    .vd-dt-bottom .page-link {
+        border: 0;
+        border-radius: .5rem;
+        background: transparent;
+        color: inherit;
+    }
+
+    .vd-dt-bottom .page-item.active .page-link {
+        background: var(--vd-accent);
+        color: #fff;
+    }
+
+    .vd-dt-bottom .page-item.disabled .page-link {
+        opacity: .4;
+    }
+
+    #division-datatable {
+        --bs-table-bg: transparent;
+        --bs-table-accent-bg: transparent;
+        --bs-table-hover-bg: transparent;
+        margin: 0 !important;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+        #division-datatable > thead > tr > th {
+            padding: .8rem 1rem;
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--vd-muted);
+            white-space: nowrap;
+            background: var(--vd-surface);
+            border-top: 1px solid var(--vd-line);
+            border-bottom: 1px solid var(--vd-line);
+        }
+
+        #division-datatable > tbody > tr > td {
+            padding: .7rem 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--vd-line);
+            background: transparent;
+        }
+
+        #division-datatable > tbody > tr:last-child > td {
+            border-bottom: 0;
+        }
+
+        #division-datatable > tbody > tr:hover > td {
+            background: var(--vd-hover);
+        }
+
+        #division-datatable > tbody > tr.is-editing > td {
+            background: rgba(59,91,219,.06);
+        }
+
+        #division-datatable > thead > tr > th:last-child,
+        #division-datatable > tbody > tr > td:last-child {
+            position: sticky;
+            right: 0;
+            z-index: 2;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        #division-datatable > thead > tr > th:last-child {
+            z-index: 3;
+            background: var(--vd-surface);
+        }
+
+        #division-datatable > tbody > tr > td:last-child {
+            background: var(--vd-card);
+        }
+
+        #division-datatable > tbody > tr:hover > td:last-child {
+            background: var(--vd-hover);
+        }
+
+        #division-datatable > tbody > tr.is-editing > td:last-child {
+            background: rgba(59,91,219,.06);
+        }
+
+    .vd-id {
+        display: inline-block;
+        padding: .2rem .55rem;
+        border-radius: .5rem;
+        font-weight: 700;
+        font-size: .82rem;
+        color: var(--vd-accent);
+        background: rgba(59,91,219,.1);
+    }
+
+    .vd-name {
+        font-weight: 600;
+    }
+
+    .vd-desc {
+        max-width: 420px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--vd-muted);
+        font-size: .88rem;
+    }
+
+    .vd-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .22rem .7rem;
+        border-radius: 999px;
+        font-size: .8rem;
+        font-weight: 600;
+        white-space: nowrap;
+        color: var(--t);
+        background: var(--t-bg);
+    }
+
+    .vd-pill-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .vd-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        padding: .3rem .7rem;
+        border-radius: .5rem;
+        font-weight: 600;
+        font-size: .8rem;
+        border: 1px solid var(--vd-line);
+        color: var(--vd-ink);
+        background: transparent;
+        cursor: pointer;
+    }
+
+        .vd-btn:hover {
+            background: var(--vd-surface);
+        }
+
+        .vd-btn.vd-btn-edit {
+            border-color: var(--vd-accent);
+            color: var(--vd-accent);
+        }
+
+            .vd-btn.vd-btn-edit:hover {
+                background: var(--vd-accent);
+                color: #fff;
+            }
+
+        .vd-btn.vd-btn-save {
+            border-color: var(--vd-ok);
+            color: var(--vd-ok);
+        }
+
+            .vd-btn.vd-btn-save:hover {
+                background: var(--vd-ok);
+                color: #fff;
+            }
+
+        .vd-btn.vd-btn-cancel {
+            border-color: var(--vd-muted);
+            color: var(--vd-muted);
+        }
+
+        .vd-btn.vd-btn-delete {
+            border-color: var(--vd-bad);
+            color: var(--vd-bad);
+        }
+
+            .vd-btn.vd-btn-delete:hover {
+                background: var(--vd-bad);
+                color: #fff;
+            }
+
+    .vd-row-actions {
+        display: inline-flex;
+        gap: .35rem;
+    }
+
+    .vd-edit-input {
+        width: 100%;
+        min-width: 140px;
+        padding: .3rem .55rem;
+        border-radius: .4rem;
+        border: 1px solid var(--vd-accent);
+        background: var(--vd-card);
+        color: inherit;
+        font-size: .88rem;
+    }
+
+        .vd-edit-input:focus {
+            outline: 0;
+            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        }
+
+    .vd-edit-switch {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+</style>
+
+<div class="row vd-page">
+    <div class="col-12">
+
+        <div class="vd-head">
+            <div>
+                <h4 class="vd-head-title">Divisions</h4>
+                <p class="vd-head-sub">Click "Edit" on any row to update it in place.</p>
+            </div>
+            <button type="button" class="vd-add-btn" id="dvAddBtn">
+                <i class="ri-add-line"></i> Add Division
+            </button>
+        </div>
+
+        <div class="vd-kpis">
+            <div class="vd-kpi tone-info">
+                <span class="vd-kpi-ico"><i class="ri-building-4-line"></i></span>
+                <span><span class="vd-kpi-num">@totalCount</span><span class="vd-kpi-label">Total divisions</span></span>
+            </div>
+            <div class="vd-kpi tone-ok">
+                <span class="vd-kpi-ico"><i class="ri-checkbox-circle-line"></i></span>
+                <span><span class="vd-kpi-num" id="dvActiveCount">@activeCount</span><span class="vd-kpi-label">Active</span></span>
+            </div>
+            <div class="vd-kpi tone-bad">
+                <span class="vd-kpi-ico"><i class="ri-close-circle-line"></i></span>
+                <span><span class="vd-kpi-num" id="dvInactiveCount">@inactiveCount</span><span class="vd-kpi-label">Inactive</span></span>
+            </div>
+        </div>
+
+        <div class="vd-table-wrap">
+            <div class="table-responsive">
+                <table id="division-datatable" class="table nowrap w-100">
+                    <thead>
+                        <tr>
+                            <th>Division ID</th>
+                            <th>Division Name</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var d in divisions)
+                        {
+                            <tr class="vd-row" data-id="@d.DivisionID">
+                                <td><span class="vd-id">#@d.DivisionID</span></td>
+                                <td class="vd-cell-name">
+                                    <span class="vd-view vd-name">@d.DivisionName</span>
+                                </td>
+                                <td class="vd-cell-desc">
+                                    <span class="vd-view vd-desc" title="@d.Description">@d.Description</span>
+                                </td>
+                                <td class="vd-cell-active" data-active="@d.Active.ToString().ToLower()">
+                                    <span class="vd-view">
+                                        @if (d.Active)
+                                        {
+                                            <span class="vd-pill tone-ok"><span class="vd-pill-dot"></span>Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="vd-pill tone-bad"><span class="vd-pill-dot"></span>Inactive</span>
+                                        }
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="vd-row-actions vd-view-actions">
+                                        <button type="button" class="vd-btn vd-btn-edit btn-edit-division">
+                                            <i class="ri-edit-line"></i> Edit
+                                        </button>
+                                        <button type="button" class="vd-btn vd-btn-delete btn-delete-division">
+                                            <i class="ri-delete-bin-line"></i>
+                                        </button>
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(document).ready(function () {
+
+            var table = $('#division-datatable').DataTable({
+                responsive: false,
+                autoWidth: false,
+                paging: true,
+                pageLength: 10,
+                lengthChange: true,
+                order: [[0, 'asc']],
+                columnDefs: [
+                    { orderable: false, targets: [4] }
+                ],
+                dom: "<'vd-dt-top'lf>rt<'vd-dt-bottom'ip>",
+                language: {
+                    search: '',
+                    searchPlaceholder: 'Search divisions...',
+                    lengthMenu: 'Show _MENU_',
+                    zeroRecords: 'No divisions match your search.',
+                    emptyTable: 'No divisions found.',
+                    info: 'Showing _START_ to _END_ of _TOTAL_',
+                    infoEmpty: 'No divisions',
+                    infoFiltered: '(filtered from _MAX_)'
+                }
+            });
+
+            function antiForgeryHeaders() {
+                var token = $('input[name="__RequestVerificationToken"]').val();
+                return token ? { "RequestVerificationToken": token } : {};
+            }
+
+            function refreshKpis() {
+                var active = $('#division-datatable tbody tr .vd-cell-active[data-active="true"]').length;
+                var inactive = $('#division-datatable tbody tr .vd-cell-active[data-active="false"]').length;
+                $('#dvActiveCount').text(active);
+                $('#dvInactiveCount').text(inactive);
+            }
+
+            function activePillHtml(isActive) {
+                return isActive
+                    ? '<span class="vd-pill tone-ok"><span class="vd-pill-dot"></span>Active</span>'
+                    : '<span class="vd-pill tone-bad"><span class="vd-pill-dot"></span>Inactive</span>';
+            }
+
+            // Turn a row into edit mode
+            function enterEditMode($row) {
+                $('#division-datatable tbody tr.is-editing').each(function () { exitEditMode($(this), false); });
+
+                var $nameCell = $row.find('.vd-cell-name');
+                var $descCell = $row.find('.vd-cell-desc');
+                var $activeCell = $row.find('.vd-cell-active');
+
+                var currentName = $nameCell.find('.vd-view').text().trim();
+                var currentDesc = $descCell.find('.vd-view').attr('title') || '';
+                var isActive = $activeCell.attr('data-active') === 'true';
+
+                $nameCell.data('orig', currentName);
+                $descCell.data('orig', currentDesc);
+                $activeCell.data('orig', isActive);
+
+                $nameCell.html('<input type="text" class="vd-edit-input vd-input-name" value="' + $('<div>').text(currentName).html() + '" />');
+                $descCell.html('<input type="text" class="vd-edit-input vd-input-desc" value="' + $('<div>').text(currentDesc).html() + '" />');
+                $activeCell.html(
+                    '<label class="vd-edit-switch">' +
+                    '<input type="checkbox" class="form-check-input vd-input-active" ' + (isActive ? 'checked' : '') + ' />' +
+                    '<span class="vd-switch-label">' + (isActive ? 'Active' : 'Inactive') + '</span>' +
+                    '</label>'
+                );
+
+                $activeCell.off('change', '.vd-input-active').on('change', '.vd-input-active', function () {
+                    $(this).siblings('.vd-switch-label').text($(this).is(':checked') ? 'Active' : 'Inactive');
+                });
+
+                $row.find('.vd-view-actions').html(
+                    '<button type="button" class="vd-btn vd-btn-save btn-save-division"><i class="ri-check-line"></i> Save</button>' +
+                    '<button type="button" class="vd-btn vd-btn-cancel btn-cancel-division"><i class="ri-close-line"></i> Cancel</button>'
+                );
+
+                $row.addClass('is-editing');
+                $row.find('.vd-input-name').trigger('focus');
+            }
+
+            // Restore a row to view mode. restoreOriginal=false after a successful save (caller sets fresh values first).
+            function exitEditMode($row, restoreOriginal) {
+                var $nameCell = $row.find('.vd-cell-name');
+                var $descCell = $row.find('.vd-cell-desc');
+                var $activeCell = $row.find('.vd-cell-active');
+
+                if (restoreOriginal !== false) {
+                    var name = $nameCell.data('orig');
+                    var desc = $descCell.data('orig');
+                    var isActive = $activeCell.data('orig');
+
+                    $nameCell.html('<span class="vd-view vd-name"></span>');
+                    $nameCell.find('.vd-view').text(name);
+
+                    $descCell.html('<span class="vd-view vd-desc"></span>');
+                    $descCell.find('.vd-view').text(desc).attr('title', desc);
+
+                    $activeCell.attr('data-active', isActive ? 'true' : 'false');
+                    $activeCell.html('<span class="vd-view">' + activePillHtml(isActive) + '</span>');
+                }
+
+                $row.find('.vd-view-actions').html(
+                    '<button type="button" class="vd-btn vd-btn-edit btn-edit-division"><i class="ri-edit-line"></i> Edit</button>' +
+                    '<button type="button" class="vd-btn vd-btn-delete btn-delete-division"><i class="ri-delete-bin-line"></i></button>'
+                );
+
+                $row.removeClass('is-editing');
+            }
+
+            $('#division-datatable tbody').on('click', '.btn-edit-division', function () {
+                enterEditMode($(this).closest('tr'));
+            });
+
+            $('#division-datatable tbody').on('click', '.btn-cancel-division', function () {
+                var $row = $(this).closest('tr');
+                if ($row.data('isNew')) {
+                    table.row($row).remove().draw(false);
+                    return;
+                }
+                exitEditMode($row, true);
+            });
+
+            $('#division-datatable tbody').on('click', '.btn-save-division', function () {
+                var $row = $(this).closest('tr');
+                var divisionId = $row.data('id');
+                var isNew = !!$row.data('isNew');
+
+                var name = $row.find('.vd-input-name').val().trim();
+                var desc = $row.find('.vd-input-desc').val().trim();
+                var isActive = $row.find('.vd-input-active').is(':checked');
+
+                if (!name) {
+                    Swal.fire({ title: 'Division name is required', icon: 'warning' });
+                    return;
+                }
+
+                var payload = {
+                    Id: isNew ? 0 : divisionId,
+                    DivisionName: name,
+                    Description: desc,
+                    Active: isActive
+                };
+
+                var url = isNew
+                    ? '@Url.Action("AddDivision", "Masters")'
+                    : '@Url.Action("EditDivision", "Masters")';
+
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    data: payload,
+                    headers: antiForgeryHeaders(),
+                    success: function (resp) {
+                        var newId = (resp && resp.id) ? resp.id : divisionId;
+                        $row.attr('data-id', newId);
+                        $row.removeData('isNew');
+
+                        $row.find('.vd-cell-name').data('orig', name);
+                        $row.find('.vd-cell-desc').data('orig', desc);
+                        $row.find('.vd-cell-active').data('orig', isActive);
+                        $row.find('.vd-id').text('#' + newId);
+
+                        var $nameCell = $row.find('.vd-cell-name');
+                        $nameCell.html('<span class="vd-view vd-name"></span>');
+                        $nameCell.find('.vd-view').text(name);
+
+                        var $descCell = $row.find('.vd-cell-desc');
+                        $descCell.html('<span class="vd-view vd-desc"></span>');
+                        $descCell.find('.vd-view').text(desc).attr('title', desc);
+
+                        var $activeCell = $row.find('.vd-cell-active');
+                        $activeCell.attr('data-active', isActive ? 'true' : 'false');
+                        $activeCell.html('<span class="vd-view">' + activePillHtml(isActive) + '</span>');
+
+                        exitEditMode($row, false);
+                        table.row($row).invalidate();
+                        refreshKpis();
+
+                        Swal.fire({
+                            title: 'Saved',
+                            text: 'Division details updated.',
+                            icon: 'success',
+                            timer: 1200,
+                            showConfirmButton: false
+                        });
+                    },
+                    error: function (xhr) {
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to save division. Please try again.';
+                        Swal.fire({ title: 'Error', text: msg, icon: 'error' });
+                    }
+                });
+            });
+
+            $('#division-datatable tbody').on('click', '.btn-delete-division', function () {
+                var $row = $(this).closest('tr');
+
+                if ($row.data('isNew')) {
+                    table.row($row).remove().draw(false);
+                    return;
+                }
+
+                var divisionId = $row.data('id');
+                var divisionName = $row.find('.vd-cell-name .vd-view').text().trim();
+
+                Swal.fire({
+                    title: 'Delete this division?',
+                    text: divisionName + ' will be permanently removed.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, delete it',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#fa5c7c',
+                    cancelButtonColor: '#6c757d'
+                }).then(function (result) {
+                    if (!result.isConfirmed) return;
+
+                    $.ajax({
+                        url: '@Url.Action("DeleteDivision", "Masters")',
+                        type: 'POST',
+                        data: { id: divisionId },
+                        headers: antiForgeryHeaders(),
+                        success: function () {
+                            table.row($row).remove().draw(false);
+                            refreshKpis();
+                            Swal.fire({ title: 'Deleted', text: 'Division removed.', icon: 'success', timer: 1200, showConfirmButton: false });
+                        },
+                        error: function (xhr) {
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete division. Please try again.';
+                            Swal.fire({ title: 'Error', text: msg, icon: 'error' });
+                        }
+                    });
+                });
+            });
+
+            // Add new division: insert an empty editable row at the top and focus it
+            $('#dvAddBtn').on('click', function () {
+                var rowHtml =
+                    '<tr class="vd-row" data-id="0">' +
+                    '<td><span class="vd-id">New</span></td>' +
+                    '<td class="vd-cell-name"><span class="vd-view vd-name"></span></td>' +
+                    '<td class="vd-cell-desc"><span class="vd-view vd-desc" title=""></span></td>' +
+                    '<td class="vd-cell-active" data-active="true"><span class="vd-view">' + activePillHtml(true) + '</span></td>' +
+                    '<td><span class="vd-row-actions vd-view-actions">' +
+                    '<button type="button" class="vd-btn vd-btn-edit btn-edit-division"><i class="ri-edit-line"></i> Edit</button>' +
+                    '<button type="button" class="vd-btn vd-btn-delete btn-delete-division"><i class="ri-delete-bin-line"></i></button>' +
+                    '</span></td></tr>';
+
+                var $newRow = $(table.row.add($(rowHtml)).draw(false).node());
+                $newRow.data('isNew', true);
+                table.page('first').draw(false);
+                enterEditMode($newRow);
+            });
+
+            $('#division-datatable tbody').on('click', 'tr', function (e) {
+                // No row-click-to-open behavior for divisions; edits are explicit via the Edit button.
+            });
+        });
+    </script>
+}
