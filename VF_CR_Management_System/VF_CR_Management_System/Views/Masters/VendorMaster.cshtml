@@ -286,16 +286,6 @@
             background: rgba(59,91,219,.06);
         }
 
-    .vd-id {
-        display: inline-block;
-        padding: .2rem .55rem;
-        border-radius: .5rem;
-        font-weight: 700;
-        font-size: .82rem;
-        color: var(--vd-accent);
-        background: rgba(59,91,219,.1);
-    }
-
     .vd-name {
         font-weight: 600;
     }
@@ -422,27 +412,11 @@
             </button>
         </div>
 
-@*         <div class="vd-kpis">
-            <div class="vd-kpi tone-info">
-                <span class="vd-kpi-ico"><i class="ri-building-2-line"></i></span>
-                <span><span class="vd-kpi-num">@totalCount</span><span class="vd-kpi-label">Total vendors</span></span>
-            </div>
-            <div class="vd-kpi tone-ok">
-                <span class="vd-kpi-ico"><i class="ri-checkbox-circle-line"></i></span>
-                <span><span class="vd-kpi-num" id="vdActiveCount">@activeCount</span><span class="vd-kpi-label">Active</span></span>
-            </div>
-            <div class="vd-kpi tone-bad">
-                <span class="vd-kpi-ico"><i class="ri-close-circle-line"></i></span>
-                <span><span class="vd-kpi-num" id="vdInactiveCount">@inactiveCount</span><span class="vd-kpi-label">Inactive</span></span>
-            </div>
-        </div> *@
-
         <div class="vd-table-wrap">
             <div class="table-responsive">
                 <table id="vendor-datatable" class="table nowrap w-100">
                     <thead>
                         <tr>
-                            <th>Vendor ID</th>
                             <th>Vendor Name</th>
                             <th>Description</th>
                             <th>Actions</th>
@@ -452,7 +426,6 @@
                         @foreach (var v in vendors)
                         {
                             <tr class="vd-row" data-id="@v.VendorID" data-active="@v.Active.ToString().ToLower()">
-                                <td data-order="@v.VendorID"><span class="vd-id">#@v.VendorID</span></td>
                                 <td class="vd-cell-name">
                                     <span class="vd-view vd-name">@v.VendorName</span>
                                 </td>
@@ -492,8 +465,7 @@
                 lengthChange: true,
                 order: [[0, 'asc']],
                 columnDefs: [
-                    { targets: [0], type: 'num' },
-                    { orderable: false, targets: [3] }
+                    { orderable: false, targets: [2] }
                 ],
                 dom: "<'vd-dt-top'lf>rt<'vd-dt-bottom'ip>",
                 language: {
@@ -513,8 +485,6 @@
                 return token ? { "RequestVerificationToken": token } : {};
             }
 
-            // Active/Inactive is no longer shown in the table, but we still track it per row
-            // (data-active on <tr>) so the KPI cards above stay accurate after add/edit/delete.
             function refreshKpis() {
                 var active = $('#vendor-datatable tbody tr.vd-row[data-active="true"]').length;
                 var inactive = $('#vendor-datatable tbody tr.vd-row[data-active="false"]').length;
@@ -523,14 +493,9 @@
             }
 
             // Single source of truth for "which row (if any) is currently being edited".
-            // Using one tracked jQuery reference instead of an 'is-editing' CSS class avoids
-            // the class and the actual input markup ever drifting out of sync with each other
-            // (which is what let multiple rows end up stuck showing <input> fields at once).
             var $editingRow = null;
 
-            // Turn a row into edit mode
             function enterEditMode($row) {
-                // Close out any other row that's still mid-edit first, discarding its changes.
                 if ($editingRow && $editingRow.length && !$editingRow.is($row)) {
                     exitEditMode($editingRow, true);
                 }
@@ -605,14 +570,14 @@
                 var $row = $(this).closest('tr');
                 // Read via .attr(), not .data(): the id is written with .attr('data-id', ...)
                 // after save, and jQuery's .data() cache does not pick up attribute changes
-                // made that way once a key has been cached, which was causing stale/'0' ids.
+                // made that way once a key has been cached, which caused stale/'0' ids.
                 var vendorId = parseInt($row.attr('data-id'), 10) || 0;
                 var isNew = !!$row.data('isNew');
 
                 var name = $row.find('.vd-input-name').val().trim();
                 var desc = $row.find('.vd-input-desc').val().trim();
 
-                // Active flag is no longer editable in the UI. New vendors default to Active;
+                // Active flag is not editable in the UI. New vendors default to Active;
                 // existing vendors keep whatever Active value they already had.
                 var isActive = $row.attr('data-active') === 'true';
 
@@ -625,7 +590,8 @@
                     VendorID: isNew ? 0 : vendorId,
                     VendorName: name,
                     Description: desc,
-                    Active: isActive
+                    Active: isActive,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
                 };
 
                 var url = isNew
@@ -639,13 +605,16 @@
                     headers: antiForgeryHeaders(),
                     success: function (resp) {
                         var newId = (resp && resp.vendorId) ? resp.vendorId : vendorId;
+
+                        // data-id must be updated via .attr() so later .attr('data-id') reads
+                        // (used above) always see the real, current id - not a stale jQuery
+                        // .data() cache value from before the save.
                         $row.attr('data-id', newId);
                         $row.removeData('isNew');
+                        $row.removeAttr('data-isnew');
 
                         $row.find('.vd-cell-name').data('orig', name);
                         $row.find('.vd-cell-desc').data('orig', desc);
-                        $row.find('.vd-id').closest('td').attr('data-order', newId);
-                        $row.find('.vd-id').text('#' + newId);
 
                         var $nameCell = $row.find('.vd-cell-name');
                         $nameCell.html('<span class="vd-view vd-name"></span>');
@@ -689,7 +658,6 @@
                     return;
                 }
 
-                // Read via .attr(), not .data() — see the note in the save handler above.
                 var vendorId = parseInt($row.attr('data-id'), 10) || 0;
                 var vendorName = $row.find('.vd-cell-name .vd-view').text().trim();
 
@@ -708,7 +676,10 @@
                     $.ajax({
                         url: '@Url.Action("DeleteVendor", "Masters")',
                         type: 'POST',
-                        data: { id: vendorId },
+                        data: {
+                            id: vendorId,
+                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                        },
                         headers: antiForgeryHeaders(),
                         success: function () {
                             table.row($row).remove().draw(false);
@@ -725,22 +696,46 @@
 
             // Add new vendor: insert an empty editable row at the top and focus it.
             // Defaults to Active = true (not shown in the UI, but sent on save).
-            $('#vdAddBtn').on('click', function () {
-                var rowHtml =
-                    '<tr class="vd-row" data-id="0" data-active="true">' +
-                    '<td data-order="0"><span class="vd-id">New</span></td>' +
+        $('#vdAddBtn').on('click', function () {
+
+            // Cancel any existing edit
+            if ($editingRow && $editingRow.length) {
+                if ($editingRow.data('isNew')) {
+                    table.row($editingRow).remove();
+                } else {
+                    exitEditMode($editingRow, true);
+                }
+
+                $editingRow = null;
+            }
+
+            var rowHtml =
+                '<tr class="vd-row" data-id="0" data-active="true">' +
                     '<td class="vd-cell-name"><span class="vd-view vd-name"></span></td>' +
                     '<td class="vd-cell-desc"><span class="vd-view vd-desc" title=""></span></td>' +
                     '<td><span class="vd-row-actions vd-view-actions">' +
-                    '<button type="button" class="vd-btn vd-btn-edit btn-edit-vendor"><i class="ri-edit-line"></i> Edit</button>' +
-                    '<button type="button" class="vd-btn vd-btn-delete btn-delete-vendor"><i class="ri-delete-bin-line"></i></button>' +
-                    '</span></td></tr>';
+                        '<button type="button" class="vd-btn vd-btn-edit btn-edit-vendor">Edit</button>' +
+                        '<button type="button" class="vd-btn vd-btn-delete btn-delete-vendor">Delete</button>' +
+                    '</span></td>' +
+                '</tr>';
 
-                var $newRow = $(table.row.add($(rowHtml)).draw(false).node());
-                $newRow.data('isNew', true);
-                table.page('first').draw(false);
-                enterEditMode($newRow);
-            });
+            // Add new row
+            var newRow = table.row.add($(rowHtml));
+
+            var $newRow = $(newRow.node());
+
+            $newRow.data('isNew', true);
+
+            // Temporarily disable sorting to keep the new row at the top
+            table.order([]);
+
+            // Navigate to first page
+            table.page('first').draw(false);
+
+            // Enable edit mode
+            enterEditMode($newRow);
+
+        });
 
             $('#vendor-datatable tbody').on('click', 'tr', function (e) {
                 // No row-click-to-open behavior for vendors; edits are explicit via the Edit button.

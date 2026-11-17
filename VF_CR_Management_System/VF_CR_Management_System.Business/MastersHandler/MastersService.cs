@@ -66,21 +66,53 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 throw new ArgumentException("Vendor name is required.");
 
             const string sql = @"
-                INSERT INTO [CRManagementDB].[dbo].[Vendor]
-                    (VendorName, Description, Active)
-                VALUES
-                    (@VendorName, @Description, @Active);
-                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                DECLARE @ExistingVendorID INT;
+                DECLARE @ExistingActive BIT;
+
+                SELECT
+                    @ExistingVendorID = VendorID,
+                    @ExistingActive = Active
+                FROM [CRManagementDB].[dbo].[Vendor]
+                WHERE LTRIM(RTRIM(VendorName)) = @VendorName;
+
+                IF @ExistingVendorID IS NOT NULL
+                BEGIN
+                    IF @ExistingActive = 1
+                    BEGIN
+                        THROW 50001, 'This vendor already exists.', 1;
+                    END
+                    ELSE
+                    BEGIN
+                        UPDATE [CRManagementDB].[dbo].[Vendor]
+                        SET Active = 1,
+                            Description = @Description
+                        WHERE VendorID = @ExistingVendorID;
+
+                        SELECT @ExistingVendorID;
+                    END
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO [CRManagementDB].[dbo].[Vendor]
+                        (VendorName, Description, Active)
+                    VALUES
+                        (@VendorName, @Description, 1);
+
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
+                END";
 
             var parameters = new DynamicParameters();
+
             parameters.Add("@VendorName", vendor.VendorName.Trim());
             parameters.Add("@Description", (vendor.Description ?? string.Empty).Trim());
-            parameters.Add("@Active", vendor.Active);
 
             var scalarResult = _connectionService.ExecuteScalar(sql, parameters);
-            var newVendorId = scalarResult != null ? Convert.ToInt32(scalarResult) : 0;
 
-            return Task.FromResult(newVendorId);
+            int vendorId = scalarResult != null
+                ? Convert.ToInt32(scalarResult)
+                : 0;
+
+            return Task.FromResult(vendorId);
         }
 
         public Task<bool> UpdateVendorAsync(Vendor vendor)
