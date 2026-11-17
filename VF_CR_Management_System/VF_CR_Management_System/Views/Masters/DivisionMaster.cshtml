@@ -426,7 +426,7 @@
                         @foreach (var d in divisions)
                         {
                             <tr class="vd-row" data-id="@d.DivisionID">
-                                <td class="vd-cell-name">
+                                <td class="vd-cell-name" data-order="@d.DivisionID">
                                     <span class="vd-view vd-name">@d.DivisionName</span>
                                 </td>
                                 <td class="vd-cell-desc">
@@ -463,7 +463,7 @@
                 paging: true,
                 pageLength: 10,
                 lengthChange: true,
-                order: [[0, 'asc']],
+                order: [[0, 'desc']],
                 columnDefs: [
                     { orderable: false, targets: [2] }
                 ],
@@ -606,31 +606,49 @@
                     data: payload,
                     headers: antiForgeryHeaders(),
                     success: function (resp) {
-                        var savedId = (resp && resp.id) ? resp.id : divisionId;
 
+                        if (!resp || !resp.id) {
+                            Swal.fire({
+                                title: 'Error',
+                                text: 'The division was saved, but the returned Division ID is missing. Please refresh the page.',
+                                icon: 'error'
+                            });
+                            return;
+                        }
+
+                        var savedId = parseInt(resp.id, 10);
+
+                        // Update the row with the actual DivisionID.
                         $row.attr('data-id', savedId);
                         $row.removeData('isNew');
                         $row.removeAttr('data-isnew');
 
                         var $nameCell = $row.find('.vd-cell-name');
+
+                        // Replace the temporary sorting value with the actual DivisionID.
+                        $nameCell.attr('data-order', savedId);
                         $nameCell.data('orig', name);
+
                         $nameCell.html('<span class="vd-view vd-name"></span>');
                         $nameCell.find('.vd-view').text(name);
 
                         var $descCell = $row.find('.vd-cell-desc');
+
                         $descCell.data('orig', desc);
                         $descCell.html('<span class="vd-view vd-desc"></span>');
                         $descCell.find('.vd-view').text(desc).attr('title', desc);
 
                         exitEditMode($row, false);
 
-                        // Refresh DataTables' cached values so alphabetical ordering remains correct.
-                        table.row($row).invalidate();
-                        table.draw(false);
+                        // Refresh DataTables sorting using the actual DivisionID.
+                        table.row($row).invalidate('dom');
+                        table.order([[0, 'desc']]).draw(false);
 
                         Swal.fire({
                             title: 'Saved',
-                            text: isNew ? 'Division added successfully.' : 'Division details updated.',
+                            text: isNew
+                                ? 'Division added successfully.'
+                                : 'Division details updated.',
                             icon: 'success',
                             timer: 1200,
                             showConfirmButton: false
@@ -700,14 +718,24 @@
 
             // Add a new editable row. The blank name sorts before existing names
             // under the table's ascending alphabetical order, so it appears first.
+            // Add a new editable row and temporarily place it at the top.
             $('#dvAddBtn').on('click', function () {
+
                 var rowHtml =
                     '<tr class="vd-row" data-id="0">' +
-                        '<td class="vd-cell-name"><span class="vd-view vd-name"></span></td>' +
-                        '<td class="vd-cell-desc"><span class="vd-view vd-desc" title=""></span></td>' +
+                        '<td class="vd-cell-name" data-order="2147483647">' +
+                            '<span class="vd-view vd-name"></span>' +
+                        '</td>' +
+                        '<td class="vd-cell-desc">' +
+                            '<span class="vd-view vd-desc" title=""></span>' +
+                        '</td>' +
                         '<td><span class="vd-row-actions vd-view-actions">' +
-                            '<button type="button" class="vd-btn vd-btn-edit btn-edit-division"><i class="ri-edit-line"></i> Edit</button>' +
-                            '<button type="button" class="vd-btn vd-btn-delete btn-delete-division"><i class="ri-delete-bin-line"></i></button>' +
+                            '<button type="button" class="vd-btn vd-btn-edit btn-edit-division">' +
+                                '<i class="ri-edit-line"></i> Edit' +
+                            '</button>' +
+                            '<button type="button" class="vd-btn vd-btn-delete btn-delete-division">' +
+                                '<i class="ri-delete-bin-line"></i>' +
+                            '</button>' +
                         '</span></td>' +
                     '</tr>';
 
@@ -716,8 +744,8 @@
 
                 $newRow.data('isNew', true);
 
-                // Keep the existing ascending sort; the empty new name is placed first.
-                table.order([[0, 'asc']]).page('first').draw(false);
+                // Keep DivisionID descending and show the new row first.
+                table.order([[0, 'desc']]).page('first').draw(false);
 
                 enterEditMode($newRow);
             });

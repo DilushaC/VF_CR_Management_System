@@ -19,8 +19,6 @@ namespace VF_CR_Management_System.Business.MastersHandler
 
         public Task<IEnumerable<Vendor>> GetAllVendorsAsync()
         {
-            // Active = 1 only: a "deleted" vendor is soft-deleted (Active = 0) and should
-            // no longer appear in the Vendor Master list.
             const string sql = @"
                 SELECT
                     VendorID,
@@ -29,7 +27,7 @@ namespace VF_CR_Management_System.Business.MastersHandler
                     Active
                 FROM [CRManagementDB].[dbo].[Vendor]
                 WHERE Active = 1
-                ORDER BY VendorID";
+                ORDER BY VendorID DESC";
 
             var result = _connectionService.Query<Vendor>(sql, new { })
                             ?? Enumerable.Empty<Vendor>();
@@ -175,7 +173,7 @@ namespace VF_CR_Management_System.Business.MastersHandler
                     Active
                 FROM [CRManagementDB].[dbo].[Division]
                 WHERE Active = 1
-                ORDER BY DivisionID";
+                ORDER BY DivisionID DESC";
 
             var result = _connectionService.Query<Division>(sql, new { })
                             ?? Enumerable.Empty<Division>();

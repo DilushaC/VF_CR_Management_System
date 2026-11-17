@@ -426,7 +426,7 @@
                         @foreach (var v in vendors)
                         {
                             <tr class="vd-row" data-id="@v.VendorID" data-active="@v.Active.ToString().ToLower()">
-                                <td class="vd-cell-name">
+                                <td class="vd-cell-name" data-order="@v.VendorID">
                                     <span class="vd-view vd-name">@v.VendorName</span>
                                 </td>
                                 <td class="vd-cell-desc">
@@ -463,11 +463,16 @@
                 paging: true,
                 pageLength: 10,
                 lengthChange: true,
-                order: [[0, 'asc']],
+
+                // Latest VendorID first
+                order: [[0, 'desc']],
+
                 columnDefs: [
                     { orderable: false, targets: [2] }
                 ],
+
                 dom: "<'vd-dt-top'lf>rt<'vd-dt-bottom'ip>",
+
                 language: {
                     search: '',
                     searchPlaceholder: 'Search vendors...',
@@ -551,7 +556,15 @@
             }
 
             $('#vendor-datatable tbody').on('click', '.btn-edit-vendor', function () {
-                enterEditMode($(this).closest('tr'));
+                var $row = $(this).closest('tr');
+
+                // Bring the selected row to the top of the visible page before editing.
+                // This keeps the user from having to scroll down to see the edit controls.
+                $('html, body').stop(true).animate({
+                    scrollTop: Math.max(0, $row.offset().top - 110)
+                }, 300);
+
+                enterEditMode($row);
             });
 
             $('#vendor-datatable tbody').on('click', '.btn-cancel-vendor', function () {
@@ -604,36 +617,52 @@
                     data: payload,
                     headers: antiForgeryHeaders(),
                     success: function (resp) {
-                        var newId = (resp && resp.vendorId) ? resp.vendorId : vendorId;
 
-                        // data-id must be updated via .attr() so later .attr('data-id') reads
-                        // (used above) always see the real, current id - not a stale jQuery
-                        // .data() cache value from before the save.
+                        if (!resp || !resp.vendorId || resp.vendorId <= 0) {
+                            Swal.fire({
+                                title: 'Error',
+                                text: 'The vendor was saved, but the returned Vendor ID is invalid.',
+                                icon: 'error'
+                            });
+                            return;
+                        }
+
+                        var newId = parseInt(resp.vendorId, 10);
+
+                        // Update the actual VendorID
                         $row.attr('data-id', newId);
                         $row.removeData('isNew');
                         $row.removeAttr('data-isnew');
 
-                        $row.find('.vd-cell-name').data('orig', name);
-                        $row.find('.vd-cell-desc').data('orig', desc);
-
+                        // Update the sorting key to the actual VendorID
                         var $nameCell = $row.find('.vd-cell-name');
+
+                        $nameCell.attr('data-order', newId);
+                        $nameCell.data('orig', name);
+
+                        var $descCell = $row.find('.vd-cell-desc');
+                        $descCell.data('orig', desc);
+
+                        // Update displayed values
                         $nameCell.html('<span class="vd-view vd-name"></span>');
                         $nameCell.find('.vd-view').text(name);
 
-                        var $descCell = $row.find('.vd-cell-desc');
                         $descCell.html('<span class="vd-view vd-desc"></span>');
                         $descCell.find('.vd-view').text(desc).attr('title', desc);
 
-                        // No table.row().invalidate()/draw() here: DataTables doesn't know about
-                        // the hand-built view/edit markup in these cells, and invalidating can
-                        // redraw the row from its cached data, leaving edit-mode DOM and the
-                        // $editingRow tracker out of sync with what's actually on screen.
                         exitEditMode($row, false);
+
+                        // Refresh DataTables sorting cache and apply latest-ID-first sorting
+                        table.row($row).invalidate('dom');
+                        table.order([[0, 'desc']]).draw(false);
+
                         refreshKpis();
 
                         Swal.fire({
                             title: 'Saved',
-                            text: 'Vendor details updated.',
+                            text: isNew
+                                ? 'Vendor added successfully.'
+                                : 'Vendor details updated.',
                             icon: 'success',
                             timer: 1200,
                             showConfirmButton: false
@@ -698,8 +727,9 @@
             // Defaults to Active = true (not shown in the UI, but sent on save).
         $('#vdAddBtn').on('click', function () {
 
-            // Cancel any existing edit
+            // Close any currently edited row
             if ($editingRow && $editingRow.length) {
+
                 if ($editingRow.data('isNew')) {
                     table.row($editingRow).remove();
                 } else {
@@ -711,30 +741,37 @@
 
             var rowHtml =
                 '<tr class="vd-row" data-id="0" data-active="true">' +
-                    '<td class="vd-cell-name"><span class="vd-view vd-name"></span></td>' +
-                    '<td class="vd-cell-desc"><span class="vd-view vd-desc" title=""></span></td>' +
-                    '<td><span class="vd-row-actions vd-view-actions">' +
-                        '<button type="button" class="vd-btn vd-btn-edit btn-edit-vendor">Edit</button>' +
-                        '<button type="button" class="vd-btn vd-btn-delete btn-delete-vendor">Delete</button>' +
-                    '</span></td>' +
+                    '<td class="vd-cell-name" data-order="2147483647">' +
+                        '<span class="vd-view vd-name"></span>' +
+                    '</td>' +
+                    '<td class="vd-cell-desc">' +
+                        '<span class="vd-view vd-desc" title=""></span>' +
+                    '</td>' +
+                    '<td>' +
+                        '<span class="vd-row-actions vd-view-actions">' +
+                            '<button type="button" class="vd-btn vd-btn-edit btn-edit-vendor">Edit</button>' +
+                            '<button type="button" class="vd-btn vd-btn-delete btn-delete-vendor">Delete</button>' +
+                        '</span>' +
+                    '</td>' +
                 '</tr>';
 
-            // Add new row
             var newRow = table.row.add($(rowHtml));
-
             var $newRow = $(newRow.node());
 
             $newRow.data('isNew', true);
 
-            // Temporarily disable sorting to keep the new row at the top
-            table.order([]);
+            // The temporary high sorting value places the blank row first.
+            table.order([[0, 'desc']]).draw();
 
-            // Navigate to first page
-            table.page('first').draw(false);
+            // Navigate to the first page
+            table.page('first').draw('page');
 
-            // Enable edit mode
             enterEditMode($newRow);
 
+            // Scroll to the new row
+            $('html, body').stop(true).animate({
+                scrollTop: Math.max(0, $newRow.offset().top - 110)
+            }, 300);
         });
 
             $('#vendor-datatable tbody').on('click', 'tr', function (e) {
