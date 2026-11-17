@@ -18,5 +18,11 @@ namespace VF_CR_Management_System.Business.MastersHandler
         Task<int> AddDivisionAsync(Division division);
         Task<bool> UpdateDivisionAsync(Division division);
         Task<bool> DeleteDivisionAsync(int id);
+
+        // ---- Modules ----
+        Task<IEnumerable<Module>> GetAllModulesAsync();
+        Task<int> AddModuleAsync(Module module);
+        Task<bool> UpdateModuleAsync(Module module);
+        Task<bool> DeleteModuleAsync(int moduleId);
     }
 }

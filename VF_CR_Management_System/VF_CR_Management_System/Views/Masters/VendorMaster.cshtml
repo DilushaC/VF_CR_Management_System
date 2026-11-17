@@ -502,7 +502,12 @@
 
             function enterEditMode($row) {
                 if ($editingRow && $editingRow.length && !$editingRow.is($row)) {
-                    exitEditMode($editingRow, true);
+                    if ($editingRow.data('isNew')) {
+                        table.row($editingRow).remove();
+                        table.draw(false);
+                    } else {
+                        exitEditMode($editingRow, true);
+                    }
                 }
 
                 var $nameCell = $row.find('.vd-cell-name');

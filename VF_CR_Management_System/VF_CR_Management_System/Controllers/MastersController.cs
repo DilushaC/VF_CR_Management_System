@@ -190,5 +190,109 @@ namespace VF_CR_Management_System.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpGet]
+        public async Task<IActionResult> ModuleMaster()
+        {
+            var modules = await _mastersService.GetAllModulesAsync();
+            var divisions = await _mastersService.GetAllDivisionsAsync();
+
+            var model = new ModuleMasterViewModel
+            {
+                Modules = modules,
+                Divisions = divisions
+            };
+
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddModule(
+            int DivisionID,
+            string ModuleName,
+            string Description,
+            bool Active)
+        {
+            try
+            {
+                var module = new Module
+                {
+                    DivisionID = DivisionID,
+                    ModuleName = ModuleName,
+                    Description = Description,
+                    IsActive = Active
+                };
+
+                var newId = await _mastersService.AddModuleAsync(module);
+
+                if (newId <= 0)
+                {
+                    return BadRequest(new { message = "Failed to add the module." });
+                }
+
+                return Json(new { id = newId });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditModule(
+            int Id,
+            int DivisionID,
+            string ModuleName,
+            string Description,
+            bool Active)
+        {
+            try
+            {
+                var module = new Module
+                {
+                    Id = Id,
+                    DivisionID = DivisionID,
+                    ModuleName = ModuleName,
+                    Description = Description,
+                    IsActive = Active
+                };
+
+                var success = await _mastersService.UpdateModuleAsync(module);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Module not found or could not be updated." });
+                }
+
+                return Json(new { id = Id });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteModule(int id)
+        {
+            try
+            {
+                var success = await _mastersService.DeleteModuleAsync(id);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Module not found." });
+                }
+
+                return Ok();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }

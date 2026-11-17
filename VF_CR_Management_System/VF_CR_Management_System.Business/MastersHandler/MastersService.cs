@@ -17,20 +17,20 @@ namespace VF_CR_Management_System.Business.MastersHandler
             _connectionService = connectionService;
         }
 
+        // =====================================================================
+        // Vendor
+        // =====================================================================
+
         public Task<IEnumerable<Vendor>> GetAllVendorsAsync()
         {
             const string sql = @"
-                SELECT
-                    VendorID,
-                    VendorName,
-                    Description,
-                    Active
+                SELECT VendorID, VendorName, Description, Active
                 FROM [CRManagementDB].[dbo].[Vendor]
                 WHERE Active = 1
                 ORDER BY VendorID DESC";
 
             var result = _connectionService.Query<Vendor>(sql, new { })
-                            ?? Enumerable.Empty<Vendor>();
+                         ?? Enumerable.Empty<Vendor>();
 
             return Task.FromResult(result);
         }
@@ -41,18 +41,12 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 throw new ArgumentException("Invalid Vendor.");
 
             const string sql = @"
-                SELECT
-                    VendorID,
-                    VendorName,
-                    Description,
-                    Active
+                SELECT VendorID, VendorName, Description, Active
                 FROM [CRManagementDB].[dbo].[Vendor]
                 WHERE VendorID = @VendorID";
 
             var result = _connectionService.Query<Vendor>(sql, new { VendorID = vendorId });
-            var vendor = result?.FirstOrDefault();
-
-            return Task.FromResult(vendor);
+            return Task.FromResult(result?.FirstOrDefault());
         }
 
         public Task<int> AddVendorAsync(Vendor vendor)
@@ -63,52 +57,46 @@ namespace VF_CR_Management_System.Business.MastersHandler
             if (string.IsNullOrWhiteSpace(vendor.VendorName))
                 throw new ArgumentException("Vendor name is required.");
 
+            // Requires a FILTERED unique index on VendorName WHERE Active = 1
+            // (replacing the old table-wide unique index) so a deleted vendor's
+            // name no longer blocks inserting a new, active vendor with that name.
             const string sql = @"
-                DECLARE @ExistingVendorID INT;
-                DECLARE @ExistingActive BIT;
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
 
-                SELECT
-                    @ExistingVendorID = VendorID,
-                    @ExistingActive = Active
-                FROM [CRManagementDB].[dbo].[Vendor]
-                WHERE LTRIM(RTRIM(VendorName)) = @VendorName;
-
-                IF @ExistingVendorID IS NOT NULL
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Vendor] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE LTRIM(RTRIM(VendorName)) = @VendorName
+                      AND Active = 1
+                )
                 BEGIN
-                    IF @ExistingActive = 1
-                    BEGIN
-                        THROW 50001, 'This vendor already exists.', 1;
-                    END
-                    ELSE
-                    BEGIN
-                        UPDATE [CRManagementDB].[dbo].[Vendor]
-                        SET Active = 1,
-                            Description = @Description
-                        WHERE VendorID = @ExistingVendorID;
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
 
-                        SELECT @ExistingVendorID;
-                    END
-                END
-                ELSE
-                BEGIN
-                    INSERT INTO [CRManagementDB].[dbo].[Vendor]
-                        (VendorName, Description, Active)
-                    VALUES
-                        (@VendorName, @Description, 1);
+                INSERT INTO [CRManagementDB].[dbo].[Vendor] (VendorName, Description, Active)
+                VALUES (@VendorName, @Description, 1);
 
-                    SELECT CAST(SCOPE_IDENTITY() AS INT);
-                END";
+                DECLARE @NewVendorID INT = CAST(SCOPE_IDENTITY() AS INT);
+
+                COMMIT TRANSACTION;
+                SELECT @NewVendorID;
+            ";
 
             var parameters = new DynamicParameters();
-
             parameters.Add("@VendorName", vendor.VendorName.Trim());
             parameters.Add("@Description", (vendor.Description ?? string.Empty).Trim());
 
-            var scalarResult = _connectionService.ExecuteScalar(sql, parameters);
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int vendorId = result != null ? Convert.ToInt32(result) : 0;
 
-            int vendorId = scalarResult != null
-                ? Convert.ToInt32(scalarResult)
-                : 0;
+            if (vendorId == -1)
+                throw new ArgumentException("This vendor already exists.");
+
+            if (vendorId == 0)
+                throw new ArgumentException("Unable to save vendor.");
 
             return Task.FromResult(vendorId);
         }
@@ -122,11 +110,33 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 throw new ArgumentException("Vendor name is required.");
 
             const string sql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Vendor] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE LTRIM(RTRIM(VendorName)) = @VendorName
+                      AND Active = 1
+                      AND VendorID <> @VendorID
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
+
                 UPDATE [CRManagementDB].[dbo].[Vendor]
-                SET VendorName  = @VendorName,
+                SET VendorName = @VendorName,
                     Description = @Description,
-                    Active      = @Active
-                WHERE VendorID  = @VendorID";
+                    Active = @Active
+                WHERE VendorID = @VendorID;
+
+                DECLARE @RowsAffected INT = @@ROWCOUNT;
+
+                COMMIT TRANSACTION;
+                SELECT @RowsAffected;
+            ";
 
             var parameters = new DynamicParameters();
             parameters.Add("@VendorName", vendor.VendorName.Trim());
@@ -134,7 +144,11 @@ namespace VF_CR_Management_System.Business.MastersHandler
             parameters.Add("@Active", vendor.Active);
             parameters.Add("@VendorID", vendor.VendorID);
 
-            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int rowsAffected = result != null ? Convert.ToInt32(result) : 0;
+
+            if (rowsAffected == -1)
+                throw new ArgumentException("This vendor already exists.");
 
             return Task.FromResult(rowsAffected > 0);
         }
@@ -155,7 +169,6 @@ namespace VF_CR_Management_System.Business.MastersHandler
             parameters.Add("@VendorID", vendorId);
 
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
-
             return Task.FromResult(rowsAffected > 0);
         }
 
@@ -166,17 +179,13 @@ namespace VF_CR_Management_System.Business.MastersHandler
         public Task<IEnumerable<Division>> GetAllDivisionsAsync()
         {
             const string sql = @"
-                SELECT
-                    DivisionID,
-                    DivisionName,
-                    Description,
-                    Active
+                SELECT DivisionID, DivisionName, Description, Active
                 FROM [CRManagementDB].[dbo].[Division]
                 WHERE Active = 1
                 ORDER BY DivisionID DESC";
 
             var result = _connectionService.Query<Division>(sql, new { })
-                            ?? Enumerable.Empty<Division>();
+                         ?? Enumerable.Empty<Division>();
 
             return Task.FromResult(result);
         }
@@ -187,18 +196,12 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 throw new ArgumentException("Invalid Division.");
 
             const string sql = @"
-                SELECT
-                    DivisionID,
-                    DivisionName,
-                    Description,
-                    Active
+                SELECT DivisionID, DivisionName, Description, Active
                 FROM [CRManagementDB].[dbo].[Division]
                 WHERE DivisionID = @DivisionID";
 
             var result = _connectionService.Query<Division>(sql, new { DivisionID = id });
-            var division = result?.FirstOrDefault();
-
-            return Task.FromResult(division);
+            return Task.FromResult(result?.FirstOrDefault());
         }
 
         public Task<int> AddDivisionAsync(Division division)
@@ -209,51 +212,51 @@ namespace VF_CR_Management_System.Business.MastersHandler
             if (string.IsNullOrWhiteSpace(division.DivisionName))
                 throw new ArgumentException("Division name is required.");
 
+            // DivisionName has a table-level UNIQUE index across ALL rows, active or not.
+            // Deleted (inactive) rows are never reactivated or touched on Add.
+            // Division has no table-wide unique index on DivisionName (only the PK on
+            // DivisionID), so an active-only duplicate check is all that's needed.
             const string sql = @"
-                DECLARE @ExistingDivisionID INT;
-                DECLARE @ExistingActive BIT;
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
 
-                SELECT
-                    @ExistingDivisionID = DivisionID,
-                    @ExistingActive = Active
-                FROM [CRManagementDB].[dbo].[Division]
-                WHERE LTRIM(RTRIM(DivisionName)) = @DivisionName;
-
-                IF @ExistingDivisionID IS NOT NULL
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Division] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE LTRIM(RTRIM(DivisionName)) = @DivisionName
+                      AND Active = 1
+                )
                 BEGIN
-                    IF @ExistingActive = 1
-                    BEGIN
-                        THROW 50001, 'This division already exists.', 1;
-                    END
-                    ELSE
-                    BEGIN
-                        UPDATE [CRManagementDB].[dbo].[Division]
-                        SET Active = 1,
-                            Description = @Description
-                        WHERE DivisionID = @ExistingDivisionID;
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
 
-                        SELECT @ExistingDivisionID;
-                    END
-                END
-                ELSE
-                BEGIN
-                    INSERT INTO [CRManagementDB].[dbo].[Division]
-                        (DivisionName, Description, Active)
-                    VALUES
-                        (@DivisionName, @Description, 1);
+                INSERT INTO [CRManagementDB].[dbo].[Division] (DivisionName, Description, Active)
+                VALUES (@DivisionName, @Description, 1);
 
-                    SELECT CAST(SCOPE_IDENTITY() AS INT);
-                END";
+                DECLARE @NewDivisionID INT = CAST(SCOPE_IDENTITY() AS INT);
+
+                COMMIT TRANSACTION;
+                SELECT @NewDivisionID;
+            ";
 
             var parameters = new DynamicParameters();
             parameters.Add("@DivisionName", division.DivisionName.Trim());
             parameters.Add("@Description", (division.Description ?? string.Empty).Trim());
 
-            var scalarResult = _connectionService.ExecuteScalar(sql, parameters);
-            var newId = scalarResult != null ? Convert.ToInt32(scalarResult) : 0;
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int divisionId = result != null ? Convert.ToInt32(result) : 0;
 
-            return Task.FromResult(newId);
+            if (divisionId == -1)
+                throw new ArgumentException("This division already exists.");
+
+            if (divisionId == 0)
+                throw new ArgumentException("Unable to save division.");
+
+            return Task.FromResult(divisionId);
         }
+
         public Task<bool> UpdateDivisionAsync(Division division)
         {
             if (division == null || division.DivisionID <= 0)
@@ -263,11 +266,33 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 throw new ArgumentException("Division name is required.");
 
             const string sql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Division] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE LTRIM(RTRIM(DivisionName)) = @DivisionName
+                      AND Active = 1
+                      AND DivisionID <> @DivisionID
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
+
                 UPDATE [CRManagementDB].[dbo].[Division]
                 SET DivisionName = @DivisionName,
-                    Description  = @Description,
-                    Active       = @Active
-                WHERE DivisionID         = @DivisionID";
+                    Description = @Description,
+                    Active = @Active
+                WHERE DivisionID = @DivisionID;
+
+                DECLARE @RowsAffected INT = @@ROWCOUNT;
+
+                COMMIT TRANSACTION;
+                SELECT @RowsAffected;
+            ";
 
             var parameters = new DynamicParameters();
             parameters.Add("@DivisionName", division.DivisionName.Trim());
@@ -275,7 +300,11 @@ namespace VF_CR_Management_System.Business.MastersHandler
             parameters.Add("@Active", division.Active);
             parameters.Add("@DivisionID", division.DivisionID);
 
-            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int rowsAffected = result != null ? Convert.ToInt32(result) : 0;
+
+            if (rowsAffected == -1)
+                throw new ArgumentException("This division already exists.");
 
             return Task.FromResult(rowsAffected > 0);
         }
@@ -294,7 +323,188 @@ namespace VF_CR_Management_System.Business.MastersHandler
             parameters.Add("@DivisionID", id);
 
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+            return Task.FromResult(rowsAffected > 0);
+        }
 
+        // =====================================================================
+        // Module
+        // =====================================================================
+
+        public Task<IEnumerable<Module>> GetAllModulesAsync()
+        {
+            const string sql = @"
+                SELECT
+                    M.ModuleID AS Id,
+                    M.ModuleName,
+                    M.DivisionID,
+                    M.Description,
+                    M.Active AS IsActive,
+                    D.DivisionName
+                FROM [CRManagementDB].[dbo].[Module] M
+                LEFT JOIN [CRManagementDB].[dbo].[Division] D
+                    ON M.DivisionID = D.DivisionID
+                WHERE M.Active = 1
+                ORDER BY M.ModuleID DESC";
+
+            var result = _connectionService.Query<Module>(sql, new { })
+                         ?? Enumerable.Empty<Module>();
+
+            return Task.FromResult(result);
+        }
+
+        public Task<int> AddModuleAsync(Module module)
+        {
+            if (module == null)
+                throw new ArgumentException("Invalid Module.");
+
+            if (module.DivisionID <= 0)
+                throw new ArgumentException("Please select a division.");
+
+            if (string.IsNullOrWhiteSpace(module.ModuleName))
+                throw new ArgumentException("Module name is required.");
+
+            const string sql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Division]
+                    WHERE DivisionID = @DivisionID
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT 0;
+                    RETURN;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Module] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE DivisionID = @DivisionID
+                      AND LTRIM(RTRIM(ModuleName)) = @ModuleName
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
+
+                INSERT INTO [CRManagementDB].[dbo].[Module] (DivisionID, ModuleName, Description, Active)
+                VALUES (@DivisionID, @ModuleName, @Description, 1);
+
+                DECLARE @NewModuleID INT = CAST(SCOPE_IDENTITY() AS INT);
+
+                COMMIT TRANSACTION;
+                SELECT @NewModuleID;
+            ";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@DivisionID", module.DivisionID);
+            parameters.Add("@ModuleName", module.ModuleName.Trim());
+            parameters.Add("@Description", (module.Description ?? string.Empty).Trim());
+
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int moduleId = result != null ? Convert.ToInt32(result) : 0;
+
+            if (moduleId == -1)
+                throw new ArgumentException("This module already exists under the selected division.");
+
+            if (moduleId == 0)
+                throw new ArgumentException("The selected division is invalid or inactive.");
+
+            return Task.FromResult(moduleId);
+        }
+
+        public Task<bool> UpdateModuleAsync(Module module)
+        {
+            if (module == null || module.Id <= 0)
+                throw new ArgumentException("Invalid Module.");
+
+            if (module.DivisionID <= 0)
+                throw new ArgumentException("Please select a division.");
+
+            if (string.IsNullOrWhiteSpace(module.ModuleName))
+                throw new ArgumentException("Module name is required.");
+
+            const string sql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Division]
+                    WHERE DivisionID = @DivisionID
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT 0;
+                    RETURN;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Module] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE DivisionID = @DivisionID
+                      AND LTRIM(RTRIM(ModuleName)) = @ModuleName
+                      AND Active = 1
+                      AND ModuleID <> @ModuleID
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
+
+                UPDATE [CRManagementDB].[dbo].[Module]
+                SET DivisionID = @DivisionID,
+                    ModuleName = @ModuleName,
+                    Description = @Description,
+                    Active = @Active
+                WHERE ModuleID = @ModuleID;
+
+                DECLARE @RowsAffected INT = @@ROWCOUNT;
+
+                COMMIT TRANSACTION;
+                SELECT @RowsAffected;
+            ";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@DivisionID", module.DivisionID);
+            parameters.Add("@ModuleName", module.ModuleName.Trim());
+            parameters.Add("@Description", (module.Description ?? string.Empty).Trim());
+            parameters.Add("@Active", module.IsActive);
+            parameters.Add("@ModuleID", module.Id);
+
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int rowsAffected = result != null ? Convert.ToInt32(result) : 0;
+
+            if (rowsAffected == -1)
+                throw new ArgumentException("This module already exists under the selected division.");
+
+            if (rowsAffected == 0)
+                throw new ArgumentException("Unable to update module. Check the selected division and module.");
+
+            return Task.FromResult(rowsAffected > 0);
+        }
+
+        public Task<bool> DeleteModuleAsync(int moduleId)
+        {
+            if (moduleId <= 0)
+                throw new ArgumentException("Invalid Module.");
+
+            const string sql = @"
+                UPDATE [CRManagementDB].[dbo].[Module]
+                SET Active = 0
+                WHERE ModuleID = @ModuleID";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@ModuleID", moduleId);
+
+            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
             return Task.FromResult(rowsAffected > 0);
         }
     }

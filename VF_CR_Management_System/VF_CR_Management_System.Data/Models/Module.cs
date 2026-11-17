@@ -14,5 +14,8 @@ namespace VF_CR_Management_System.Data.Models
         public int VendorID { get; set; }
         public string Description { get; set; }
         public bool IsActive { get; set; }
+
+        // Display-only property from Division table
+        public string DivisionName { get; set; }
     }
 }
