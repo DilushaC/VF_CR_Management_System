@@ -286,16 +286,6 @@
             background: rgba(59,91,219,.06);
         }
 
-    .vd-id {
-        display: inline-block;
-        padding: .2rem .55rem;
-        border-radius: .5rem;
-        font-weight: 700;
-        font-size: .82rem;
-        color: var(--vd-accent);
-        background: rgba(59,91,219,.1);
-    }
-
     .vd-name {
         font-weight: 600;
     }
@@ -415,27 +405,11 @@
 
         <div class="vd-head">
             <div>
-                <h4 class="vd-head-title">Divisions</h4>
-                <p class="vd-head-sub">Click "Edit" on any row to update it in place.</p>
+                <h4 class="vd-head-title">Divisions Master</h4>
             </div>
             <button type="button" class="vd-add-btn" id="dvAddBtn">
                 <i class="ri-add-line"></i> Add Division
             </button>
-        </div>
-
-        <div class="vd-kpis">
-            <div class="vd-kpi tone-info">
-                <span class="vd-kpi-ico"><i class="ri-building-4-line"></i></span>
-                <span><span class="vd-kpi-num">@totalCount</span><span class="vd-kpi-label">Total divisions</span></span>
-            </div>
-            <div class="vd-kpi tone-ok">
-                <span class="vd-kpi-ico"><i class="ri-checkbox-circle-line"></i></span>
-                <span><span class="vd-kpi-num" id="dvActiveCount">@activeCount</span><span class="vd-kpi-label">Active</span></span>
-            </div>
-            <div class="vd-kpi tone-bad">
-                <span class="vd-kpi-ico"><i class="ri-close-circle-line"></i></span>
-                <span><span class="vd-kpi-num" id="dvInactiveCount">@inactiveCount</span><span class="vd-kpi-label">Inactive</span></span>
-            </div>
         </div>
 
         <div class="vd-table-wrap">
@@ -443,10 +417,8 @@
                 <table id="division-datatable" class="table nowrap w-100">
                     <thead>
                         <tr>
-                            <th>Division ID</th>
                             <th>Division Name</th>
                             <th>Description</th>
-                            <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -454,24 +426,11 @@
                         @foreach (var d in divisions)
                         {
                             <tr class="vd-row" data-id="@d.DivisionID">
-                                <td><span class="vd-id">#@d.DivisionID</span></td>
                                 <td class="vd-cell-name">
                                     <span class="vd-view vd-name">@d.DivisionName</span>
                                 </td>
                                 <td class="vd-cell-desc">
                                     <span class="vd-view vd-desc" title="@d.Description">@d.Description</span>
-                                </td>
-                                <td class="vd-cell-active" data-active="@d.Active.ToString().ToLower()">
-                                    <span class="vd-view">
-                                        @if (d.Active)
-                                        {
-                                            <span class="vd-pill tone-ok"><span class="vd-pill-dot"></span>Active</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="vd-pill tone-bad"><span class="vd-pill-dot"></span>Inactive</span>
-                                        }
-                                    </span>
                                 </td>
                                 <td>
                                     <span class="vd-row-actions vd-view-actions">
@@ -506,7 +465,7 @@
                 lengthChange: true,
                 order: [[0, 'asc']],
                 columnDefs: [
-                    { orderable: false, targets: [4] }
+                    { orderable: false, targets: [2] }
                 ],
                 dom: "<'vd-dt-top'lf>rt<'vd-dt-bottom'ip>",
                 language: {
@@ -526,47 +485,37 @@
                 return token ? { "RequestVerificationToken": token } : {};
             }
 
-            function refreshKpis() {
-                var active = $('#division-datatable tbody tr .vd-cell-active[data-active="true"]').length;
-                var inactive = $('#division-datatable tbody tr .vd-cell-active[data-active="false"]').length;
-                $('#dvActiveCount').text(active);
-                $('#dvInactiveCount').text(inactive);
-            }
+            // Track the single row currently being edited, as in Vendor Master.
+            var $editingRow = null;
 
-            function activePillHtml(isActive) {
-                return isActive
-                    ? '<span class="vd-pill tone-ok"><span class="vd-pill-dot"></span>Active</span>'
-                    : '<span class="vd-pill tone-bad"><span class="vd-pill-dot"></span>Inactive</span>';
-            }
-
-            // Turn a row into edit mode
             function enterEditMode($row) {
-                $('#division-datatable tbody tr.is-editing').each(function () { exitEditMode($(this), false); });
+                if ($editingRow && $editingRow.length && !$editingRow.is($row)) {
+                    if ($editingRow.data('isNew')) {
+                        table.row($editingRow).remove();
+                        table.draw(false);
+                    } else {
+                        exitEditMode($editingRow, true);
+                    }
+                }
 
                 var $nameCell = $row.find('.vd-cell-name');
                 var $descCell = $row.find('.vd-cell-desc');
-                var $activeCell = $row.find('.vd-cell-active');
 
                 var currentName = $nameCell.find('.vd-view').text().trim();
                 var currentDesc = $descCell.find('.vd-view').attr('title') || '';
-                var isActive = $activeCell.attr('data-active') === 'true';
 
                 $nameCell.data('orig', currentName);
                 $descCell.data('orig', currentDesc);
-                $activeCell.data('orig', isActive);
 
-                $nameCell.html('<input type="text" class="vd-edit-input vd-input-name" value="' + $('<div>').text(currentName).html() + '" />');
-                $descCell.html('<input type="text" class="vd-edit-input vd-input-desc" value="' + $('<div>').text(currentDesc).html() + '" />');
-                $activeCell.html(
-                    '<label class="vd-edit-switch">' +
-                    '<input type="checkbox" class="form-check-input vd-input-active" ' + (isActive ? 'checked' : '') + ' />' +
-                    '<span class="vd-switch-label">' + (isActive ? 'Active' : 'Inactive') + '</span>' +
-                    '</label>'
+                $nameCell.html(
+                    '<input type="text" class="vd-edit-input vd-input-name" value="' +
+                    $('<div>').text(currentName).html() + '" />'
                 );
 
-                $activeCell.off('change', '.vd-input-active').on('change', '.vd-input-active', function () {
-                    $(this).siblings('.vd-switch-label').text($(this).is(':checked') ? 'Active' : 'Inactive');
-                });
+                $descCell.html(
+                    '<input type="text" class="vd-edit-input vd-input-desc" value="' +
+                    $('<div>').text(currentDesc).html() + '" />'
+                );
 
                 $row.find('.vd-view-actions').html(
                     '<button type="button" class="vd-btn vd-btn-save btn-save-division"><i class="ri-check-line"></i> Save</button>' +
@@ -574,28 +523,23 @@
                 );
 
                 $row.addClass('is-editing');
+                $editingRow = $row;
                 $row.find('.vd-input-name').trigger('focus');
             }
 
-            // Restore a row to view mode. restoreOriginal=false after a successful save (caller sets fresh values first).
             function exitEditMode($row, restoreOriginal) {
                 var $nameCell = $row.find('.vd-cell-name');
                 var $descCell = $row.find('.vd-cell-desc');
-                var $activeCell = $row.find('.vd-cell-active');
 
                 if (restoreOriginal !== false) {
-                    var name = $nameCell.data('orig');
-                    var desc = $descCell.data('orig');
-                    var isActive = $activeCell.data('orig');
+                    var name = $nameCell.data('orig') || '';
+                    var desc = $descCell.data('orig') || '';
 
                     $nameCell.html('<span class="vd-view vd-name"></span>');
                     $nameCell.find('.vd-view').text(name);
 
                     $descCell.html('<span class="vd-view vd-desc"></span>');
                     $descCell.find('.vd-view').text(desc).attr('title', desc);
-
-                    $activeCell.attr('data-active', isActive ? 'true' : 'false');
-                    $activeCell.html('<span class="vd-view">' + activePillHtml(isActive) + '</span>');
                 }
 
                 $row.find('.vd-view-actions').html(
@@ -604,6 +548,10 @@
                 );
 
                 $row.removeClass('is-editing');
+
+                if ($editingRow && $editingRow.is($row)) {
+                    $editingRow = null;
+                }
             }
 
             $('#division-datatable tbody').on('click', '.btn-edit-division', function () {
@@ -612,32 +560,40 @@
 
             $('#division-datatable tbody').on('click', '.btn-cancel-division', function () {
                 var $row = $(this).closest('tr');
+
                 if ($row.data('isNew')) {
+                    if ($editingRow && $editingRow.is($row)) {
+                        $editingRow = null;
+                    }
+
                     table.row($row).remove().draw(false);
                     return;
                 }
+
                 exitEditMode($row, true);
             });
 
             $('#division-datatable tbody').on('click', '.btn-save-division', function () {
                 var $row = $(this).closest('tr');
-                var divisionId = $row.data('id');
+                var divisionId = parseInt($row.attr('data-id'), 10) || 0;
                 var isNew = !!$row.data('isNew');
 
-                var name = $row.find('.vd-input-name').val().trim();
-                var desc = $row.find('.vd-input-desc').val().trim();
-                var isActive = $row.find('.vd-input-active').is(':checked');
+                var name = ($row.find('.vd-input-name').val() || '').trim();
+                var desc = ($row.find('.vd-input-desc').val() || '').trim();
 
                 if (!name) {
                     Swal.fire({ title: 'Division name is required', icon: 'warning' });
                     return;
                 }
 
+                // Controller parameters are: DivisionName, Description, Active for Add;
+                // and Id, DivisionName, Description, Active for Edit.
                 var payload = {
-                    Id: isNew ? 0 : divisionId,
+                    Id: divisionId,
                     DivisionName: name,
                     Description: desc,
-                    Active: isActive
+                    Active: true,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
                 };
 
                 var url = isNew
@@ -650,41 +606,39 @@
                     data: payload,
                     headers: antiForgeryHeaders(),
                     success: function (resp) {
-                        var newId = (resp && resp.id) ? resp.id : divisionId;
-                        $row.attr('data-id', newId);
-                        $row.removeData('isNew');
+                        var savedId = (resp && resp.id) ? resp.id : divisionId;
 
-                        $row.find('.vd-cell-name').data('orig', name);
-                        $row.find('.vd-cell-desc').data('orig', desc);
-                        $row.find('.vd-cell-active').data('orig', isActive);
-                        $row.find('.vd-id').text('#' + newId);
+                        $row.attr('data-id', savedId);
+                        $row.removeData('isNew');
+                        $row.removeAttr('data-isnew');
 
                         var $nameCell = $row.find('.vd-cell-name');
+                        $nameCell.data('orig', name);
                         $nameCell.html('<span class="vd-view vd-name"></span>');
                         $nameCell.find('.vd-view').text(name);
 
                         var $descCell = $row.find('.vd-cell-desc');
+                        $descCell.data('orig', desc);
                         $descCell.html('<span class="vd-view vd-desc"></span>');
                         $descCell.find('.vd-view').text(desc).attr('title', desc);
 
-                        var $activeCell = $row.find('.vd-cell-active');
-                        $activeCell.attr('data-active', isActive ? 'true' : 'false');
-                        $activeCell.html('<span class="vd-view">' + activePillHtml(isActive) + '</span>');
-
                         exitEditMode($row, false);
+
+                        // Refresh DataTables' cached values so alphabetical ordering remains correct.
                         table.row($row).invalidate();
-                        refreshKpis();
+                        table.draw(false);
 
                         Swal.fire({
                             title: 'Saved',
-                            text: 'Division details updated.',
+                            text: isNew ? 'Division added successfully.' : 'Division details updated.',
                             icon: 'success',
                             timer: 1200,
                             showConfirmButton: false
                         });
                     },
                     error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to save division. Please try again.';
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
+                            'Failed to save division. Please try again.';
                         Swal.fire({ title: 'Error', text: msg, icon: 'error' });
                     }
                 });
@@ -694,11 +648,14 @@
                 var $row = $(this).closest('tr');
 
                 if ($row.data('isNew')) {
+                    if ($editingRow && $editingRow.is($row)) {
+                        $editingRow = null;
+                    }
                     table.row($row).remove().draw(false);
                     return;
                 }
 
-                var divisionId = $row.data('id');
+                var divisionId = parseInt($row.attr('data-id'), 10) || 0;
                 var divisionName = $row.find('.vd-cell-name .vd-view').text().trim();
 
                 Swal.fire({
@@ -716,43 +673,55 @@
                     $.ajax({
                         url: '@Url.Action("DeleteDivision", "Masters")',
                         type: 'POST',
-                        data: { id: divisionId },
+                        data: {
+                            id: divisionId,
+                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                        },
                         headers: antiForgeryHeaders(),
                         success: function () {
                             table.row($row).remove().draw(false);
-                            refreshKpis();
-                            Swal.fire({ title: 'Deleted', text: 'Division removed.', icon: 'success', timer: 1200, showConfirmButton: false });
+
+                            Swal.fire({
+                                title: 'Deleted',
+                                text: 'Division removed.',
+                                icon: 'success',
+                                timer: 1200,
+                                showConfirmButton: false
+                            });
                         },
                         error: function (xhr) {
-                            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Failed to delete division. Please try again.';
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
+                                'Failed to delete division. Please try again.';
                             Swal.fire({ title: 'Error', text: msg, icon: 'error' });
                         }
                     });
                 });
             });
 
-            // Add new division: insert an empty editable row at the top and focus it
+            // Add a new editable row. The blank name sorts before existing names
+            // under the table's ascending alphabetical order, so it appears first.
             $('#dvAddBtn').on('click', function () {
                 var rowHtml =
                     '<tr class="vd-row" data-id="0">' +
-                    '<td><span class="vd-id">New</span></td>' +
-                    '<td class="vd-cell-name"><span class="vd-view vd-name"></span></td>' +
-                    '<td class="vd-cell-desc"><span class="vd-view vd-desc" title=""></span></td>' +
-                    '<td class="vd-cell-active" data-active="true"><span class="vd-view">' + activePillHtml(true) + '</span></td>' +
-                    '<td><span class="vd-row-actions vd-view-actions">' +
-                    '<button type="button" class="vd-btn vd-btn-edit btn-edit-division"><i class="ri-edit-line"></i> Edit</button>' +
-                    '<button type="button" class="vd-btn vd-btn-delete btn-delete-division"><i class="ri-delete-bin-line"></i></button>' +
-                    '</span></td></tr>';
+                        '<td class="vd-cell-name"><span class="vd-view vd-name"></span></td>' +
+                        '<td class="vd-cell-desc"><span class="vd-view vd-desc" title=""></span></td>' +
+                        '<td><span class="vd-row-actions vd-view-actions">' +
+                            '<button type="button" class="vd-btn vd-btn-edit btn-edit-division"><i class="ri-edit-line"></i> Edit</button>' +
+                            '<button type="button" class="vd-btn vd-btn-delete btn-delete-division"><i class="ri-delete-bin-line"></i></button>' +
+                        '</span></td>' +
+                    '</tr>';
 
-                var $newRow = $(table.row.add($(rowHtml)).draw(false).node());
+                var newRow = table.row.add($(rowHtml));
+                var $newRow = $(newRow.node());
+
                 $newRow.data('isNew', true);
-                table.page('first').draw(false);
+
+                // Keep the existing ascending sort; the empty new name is placed first.
+                table.order([[0, 'asc']]).page('first').draw(false);
+
                 enterEditMode($newRow);
             });
 
-            $('#division-datatable tbody').on('click', 'tr', function (e) {
-                // No row-click-to-open behavior for divisions; edits are explicit via the Edit button.
-            });
         });
     </script>
 }

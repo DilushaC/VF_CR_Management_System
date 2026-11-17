@@ -169,12 +169,13 @@ namespace VF_CR_Management_System.Business.MastersHandler
         {
             const string sql = @"
                 SELECT
-                    Id,
+                    DivisionID,
                     DivisionName,
                     Description,
                     Active
                 FROM [CRManagementDB].[dbo].[Division]
-                ORDER BY Id";
+                WHERE Active = 1
+                ORDER BY DivisionID";
 
             var result = _connectionService.Query<Division>(sql, new { })
                             ?? Enumerable.Empty<Division>();
@@ -189,14 +190,14 @@ namespace VF_CR_Management_System.Business.MastersHandler
 
             const string sql = @"
                 SELECT
-                    Id,
+                    DivisionID,
                     DivisionName,
                     Description,
                     Active
                 FROM [CRManagementDB].[dbo].[Division]
-                WHERE Id = @Id";
+                WHERE DivisionID = @DivisionID";
 
-            var result = _connectionService.Query<Division>(sql, new { Id = id });
+            var result = _connectionService.Query<Division>(sql, new { DivisionID = id });
             var division = result?.FirstOrDefault();
 
             return Task.FromResult(division);
@@ -211,23 +212,50 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 throw new ArgumentException("Division name is required.");
 
             const string sql = @"
-                INSERT INTO [CRManagementDB].[dbo].[Division]
-                    (DivisionName, Description, Active)
-                VALUES
-                    (@DivisionName, @Description, @Active);
-                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                DECLARE @ExistingDivisionID INT;
+                DECLARE @ExistingActive BIT;
+
+                SELECT
+                    @ExistingDivisionID = DivisionID,
+                    @ExistingActive = Active
+                FROM [CRManagementDB].[dbo].[Division]
+                WHERE LTRIM(RTRIM(DivisionName)) = @DivisionName;
+
+                IF @ExistingDivisionID IS NOT NULL
+                BEGIN
+                    IF @ExistingActive = 1
+                    BEGIN
+                        THROW 50001, 'This division already exists.', 1;
+                    END
+                    ELSE
+                    BEGIN
+                        UPDATE [CRManagementDB].[dbo].[Division]
+                        SET Active = 1,
+                            Description = @Description
+                        WHERE DivisionID = @ExistingDivisionID;
+
+                        SELECT @ExistingDivisionID;
+                    END
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO [CRManagementDB].[dbo].[Division]
+                        (DivisionName, Description, Active)
+                    VALUES
+                        (@DivisionName, @Description, 1);
+
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
+                END";
 
             var parameters = new DynamicParameters();
             parameters.Add("@DivisionName", division.DivisionName.Trim());
             parameters.Add("@Description", (division.Description ?? string.Empty).Trim());
-            parameters.Add("@Active", division.Active);
 
             var scalarResult = _connectionService.ExecuteScalar(sql, parameters);
             var newId = scalarResult != null ? Convert.ToInt32(scalarResult) : 0;
 
             return Task.FromResult(newId);
         }
-
         public Task<bool> UpdateDivisionAsync(Division division)
         {
             if (division == null || division.DivisionID <= 0)
@@ -241,13 +269,13 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 SET DivisionName = @DivisionName,
                     Description  = @Description,
                     Active       = @Active
-                WHERE Id         = @Id";
+                WHERE DivisionID         = @DivisionID";
 
             var parameters = new DynamicParameters();
             parameters.Add("@DivisionName", division.DivisionName.Trim());
             parameters.Add("@Description", (division.Description ?? string.Empty).Trim());
             parameters.Add("@Active", division.Active);
-            parameters.Add("@Id", division.DivisionID);
+            parameters.Add("@DivisionID", division.DivisionID);
 
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
 
@@ -260,11 +288,12 @@ namespace VF_CR_Management_System.Business.MastersHandler
                 throw new ArgumentException("Invalid Division.");
 
             const string sql = @"
-                DELETE FROM [CRManagementDB].[dbo].[Division]
-                WHERE Id = @Id";
+                UPDATE [CRManagementDB].[dbo].[Division]
+                SET Active = 0
+                WHERE DivisionID = @DivisionID";
 
             var parameters = new DynamicParameters();
-            parameters.Add("@Id", id);
+            parameters.Add("@DivisionID", id);
 
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
 
