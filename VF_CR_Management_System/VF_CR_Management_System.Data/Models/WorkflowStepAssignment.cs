@@ -12,7 +12,6 @@ namespace VF_CR_Management_System.Data.Models
         public int StepID { get; set; }
         public int StepOrder { get; set; }
         public string StepName { get; set; }
-        public bool ApprovalRequired { get; set; }
         public string AssignedTo { get; set; }        // username from Approval
         public string AssignedToName { get; set; }    // full name (resolved)
         public DateTime? AssignedDate { get; set; }
