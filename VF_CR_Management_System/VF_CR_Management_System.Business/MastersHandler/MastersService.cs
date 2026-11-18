@@ -314,15 +314,44 @@ namespace VF_CR_Management_System.Business.MastersHandler
             if (id <= 0)
                 throw new ArgumentException("Invalid Division.");
 
+            // Block the soft-delete if any active Module or Workflow still
+            // points at this division, so no child row is left orphaned on
+            // a deleted parent.
             const string sql = @"
+                DECLARE @ModuleCount INT, @WorkflowCount INT;
+
+                SELECT @ModuleCount = COUNT(*)
+                FROM [CRManagementDB].[dbo].[Module]
+                WHERE DivisionID = @DivisionID
+                  AND Active = 1;
+
+                SELECT @WorkflowCount = COUNT(*)
+                FROM [CRManagementDB].[dbo].[Workflow]
+                WHERE DivisionID = @DivisionID
+                  AND Active = 1;
+
+                IF @ModuleCount > 0 OR @WorkflowCount > 0
+                BEGIN
+                    SELECT -1;
+                    RETURN;
+                END;
+
                 UPDATE [CRManagementDB].[dbo].[Division]
                 SET Active = 0
-                WHERE DivisionID = @DivisionID";
+                WHERE DivisionID = @DivisionID;
+
+                SELECT @@ROWCOUNT;
+            ";
 
             var parameters = new DynamicParameters();
             parameters.Add("@DivisionID", id);
 
-            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int rowsAffected = result != null ? Convert.ToInt32(result) : 0;
+
+            if (rowsAffected == -1)
+                throw new ArgumentException("This division is assigned to one or more modules or workflows and cannot be deleted.");
+
             return Task.FromResult(rowsAffected > 0);
         }
 
@@ -507,7 +536,6 @@ namespace VF_CR_Management_System.Business.MastersHandler
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
             return Task.FromResult(rowsAffected > 0);
         }
-
 
         // =====================================================================
         // Workflow
