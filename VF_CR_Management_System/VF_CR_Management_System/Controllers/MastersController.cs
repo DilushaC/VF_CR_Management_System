@@ -401,5 +401,111 @@ namespace VF_CR_Management_System.Controllers
             }
         }
 
+        // Add these actions to MastersController, alongside the existing Workflow actions.
+
+        [HttpGet]
+        public async Task<IActionResult> WorkflowStepMaster()
+        {
+            var steps = await _mastersService.GetAllWorkflowStepsAsync();
+            var workflows = await _mastersService.GetAllWorkflowsAsync();
+
+            var model = new WorkflowStepMasterViewModel
+            {
+                Steps = steps,
+                Workflows = workflows
+            };
+
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddWorkflowStep(
+            int WorkflowID,
+            int StepOrder,
+            string StepName,
+            bool Active)
+        {
+            try
+            {
+                var step = new WorkflowStep
+                {
+                    WorkflowID = WorkflowID,
+                    StepOrder = StepOrder,
+                    StepName = StepName,
+                    Active = Active
+                };
+
+                var newId = await _mastersService.AddWorkflowStepAsync(step);
+
+                if (newId <= 0)
+                {
+                    return BadRequest(new { message = "Failed to add the workflow step." });
+                }
+
+                return Json(new { id = newId });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditWorkflowStep(
+            int Id,
+            int WorkflowID,
+            int StepOrder,
+            string StepName,
+            bool Active)
+        {
+            try
+            {
+                var step = new WorkflowStep
+                {
+                    StepID = Id,
+                    WorkflowID = WorkflowID,
+                    StepOrder = StepOrder,
+                    StepName = StepName,
+                    Active = Active
+                };
+
+                var success = await _mastersService.UpdateWorkflowStepAsync(step);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Workflow step not found or could not be updated." });
+                }
+
+                return Json(new { id = Id });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteWorkflowStep(int id)
+        {
+            try
+            {
+                var success = await _mastersService.DeleteWorkflowStepAsync(id);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Workflow step not found." });
+                }
+
+                return Ok();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
     }
 }

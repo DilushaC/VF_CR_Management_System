@@ -30,5 +30,11 @@ namespace VF_CR_Management_System.Business.MastersHandler
         Task<int> AddWorkflowAsync(Workflow workflow);
         Task<bool> UpdateWorkflowAsync(Workflow workflow);
         Task<bool> DeleteWorkflowAsync(int workflowId);
+
+        //----WorkflowStep---------
+        Task<IEnumerable<WorkflowStep>> GetAllWorkflowStepsAsync();
+        Task<int> AddWorkflowStepAsync(WorkflowStep step);
+        Task<bool> UpdateWorkflowStepAsync(WorkflowStep step);
+        Task<bool> DeleteWorkflowStepAsync(int stepId);
     }
 }

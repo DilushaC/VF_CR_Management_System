@@ -720,5 +720,228 @@ namespace VF_CR_Management_System.Business.MastersHandler
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
             return Task.FromResult(rowsAffected > 0);
         }
+
+        // =====================================================================
+        // WorkflowStep
+        // =====================================================================
+
+        public Task<IEnumerable<WorkflowStep>> GetAllWorkflowStepsAsync()
+        {
+            const string sql = @"
+                SELECT
+                    S.StepID,
+                    S.WorkflowID,
+                    S.StepOrder,
+                    S.StepName,
+                    S.Active,
+                    W.WorkflowName
+                FROM [CRManagementDB].[dbo].[WorkflowStep] S
+                LEFT JOIN [CRManagementDB].[dbo].[Workflow] W
+                    ON S.WorkflowID = W.WorkflowID
+                WHERE S.Active = 1
+                ORDER BY S.StepID DESC";
+
+            var result = _connectionService.Query<WorkflowStep>(sql, new { })
+                         ?? Enumerable.Empty<WorkflowStep>();
+
+            return Task.FromResult(result);
+        }
+
+        public Task<int> AddWorkflowStepAsync(WorkflowStep step)
+        {
+            if (step == null)
+                throw new ArgumentException("Invalid Workflow Step.");
+
+            if (step.WorkflowID <= 0)
+                throw new ArgumentException("Please select a workflow.");
+
+            if (string.IsNullOrWhiteSpace(step.StepName))
+                throw new ArgumentException("Step name is required.");
+
+            if (step.StepOrder <= 0)
+                throw new ArgumentException("Step order must be a positive number.");
+
+            // Both StepName and StepOrder are checked for active duplicates,
+            // scoped to the selected workflow only.
+            const string sql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowID = @WorkflowID
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT 0;
+                    RETURN;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[WorkflowStep] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE WorkflowID = @WorkflowID
+                      AND LTRIM(RTRIM(StepName)) = @StepName
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[WorkflowStep] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE WorkflowID = @WorkflowID
+                      AND StepOrder = @StepOrder
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -2;
+                    RETURN;
+                END;
+
+                INSERT INTO [CRManagementDB].[dbo].[WorkflowStep] (WorkflowID, StepOrder, StepName, Active)
+                VALUES (@WorkflowID, @StepOrder, @StepName, 1);
+
+                DECLARE @NewStepID INT = CAST(SCOPE_IDENTITY() AS INT);
+
+                COMMIT TRANSACTION;
+                SELECT @NewStepID;
+            ";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@WorkflowID", step.WorkflowID);
+            parameters.Add("@StepOrder", step.StepOrder);
+            parameters.Add("@StepName", step.StepName.Trim());
+
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int stepId = result != null ? Convert.ToInt32(result) : 0;
+
+            if (stepId == -1)
+                throw new ArgumentException("This step name already exists under the selected workflow.");
+
+            if (stepId == -2)
+                throw new ArgumentException("This step order already exists under the selected workflow.");
+
+            if (stepId == 0)
+                throw new ArgumentException("The selected workflow is invalid or inactive.");
+
+            return Task.FromResult(stepId);
+        }
+
+        public Task<bool> UpdateWorkflowStepAsync(WorkflowStep step)
+        {
+            if (step == null || step.StepID <= 0)
+                throw new ArgumentException("Invalid Workflow Step.");
+
+            if (step.WorkflowID <= 0)
+                throw new ArgumentException("Please select a workflow.");
+
+            if (string.IsNullOrWhiteSpace(step.StepName))
+                throw new ArgumentException("Step name is required.");
+
+            if (step.StepOrder <= 0)
+                throw new ArgumentException("Step order must be a positive number.");
+
+            const string sql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowID = @WorkflowID
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT 0;
+                    RETURN;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[WorkflowStep] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE WorkflowID = @WorkflowID
+                      AND LTRIM(RTRIM(StepName)) = @StepName
+                      AND Active = 1
+                      AND StepID <> @StepID
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[WorkflowStep] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE WorkflowID = @WorkflowID
+                      AND StepOrder = @StepOrder
+                      AND Active = 1
+                      AND StepID <> @StepID
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -2;
+                    RETURN;
+                END;
+
+                UPDATE [CRManagementDB].[dbo].[WorkflowStep]
+                SET WorkflowID = @WorkflowID,
+                    StepOrder = @StepOrder,
+                    StepName = @StepName,
+                    Active = @Active
+                WHERE StepID = @StepID;
+
+                DECLARE @RowsAffected INT = @@ROWCOUNT;
+
+                COMMIT TRANSACTION;
+                SELECT @RowsAffected;
+            ";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@WorkflowID", step.WorkflowID);
+            parameters.Add("@StepOrder", step.StepOrder);
+            parameters.Add("@StepName", step.StepName.Trim());
+            parameters.Add("@Active", step.Active);
+            parameters.Add("@StepID", step.StepID);
+
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int rowsAffected = result != null ? Convert.ToInt32(result) : 0;
+
+            if (rowsAffected == -1)
+                throw new ArgumentException("This step name already exists under the selected workflow.");
+
+            if (rowsAffected == -2)
+                throw new ArgumentException("This step order already exists under the selected workflow.");
+
+            if (rowsAffected == 0)
+                throw new ArgumentException("Unable to update workflow step. Check the selected workflow and step.");
+
+            return Task.FromResult(rowsAffected > 0);
+        }
+
+        public Task<bool> DeleteWorkflowStepAsync(int stepId)
+        {
+            if (stepId <= 0)
+                throw new ArgumentException("Invalid Workflow Step.");
+
+            const string sql = @"
+                UPDATE [CRManagementDB].[dbo].[WorkflowStep]
+                SET Active = 0
+                WHERE StepID = @StepID";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@StepID", stepId);
+
+            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+            return Task.FromResult(rowsAffected > 0);
+        }
     }
 }
