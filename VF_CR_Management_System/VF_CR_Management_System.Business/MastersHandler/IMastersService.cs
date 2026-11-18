@@ -24,5 +24,11 @@ namespace VF_CR_Management_System.Business.MastersHandler
         Task<int> AddModuleAsync(Module module);
         Task<bool> UpdateModuleAsync(Module module);
         Task<bool> DeleteModuleAsync(int moduleId);
+
+        //---- Workflow --------
+        Task<IEnumerable<Workflow>> GetAllWorkflowsAsync();
+        Task<int> AddWorkflowAsync(Workflow workflow);
+        Task<bool> UpdateWorkflowAsync(Workflow workflow);
+        Task<bool> DeleteWorkflowAsync(int workflowId);
     }
 }

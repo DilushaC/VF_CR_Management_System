@@ -294,5 +294,112 @@ namespace VF_CR_Management_System.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        // Add these actions to MastersController, alongside the existing Module actions.
+
+        [HttpGet]
+        public async Task<IActionResult> WorkflowMaster()
+        {
+            var workflows = await _mastersService.GetAllWorkflowsAsync();
+            var divisions = await _mastersService.GetAllDivisionsAsync();
+
+            var model = new WorkflowMasterViewModel
+            {
+                Workflows = workflows,
+                Divisions = divisions
+            };
+
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddWorkflow(
+            int DivisionID,
+            string WorkflowName,
+            string Description,
+            bool Active)
+        {
+            try
+            {
+                var workflow = new Workflow
+                {
+                    DivisionID = DivisionID,
+                    WorkflowName = WorkflowName,
+                    Description = Description,
+                    Active = Active
+                };
+
+                var newId = await _mastersService.AddWorkflowAsync(workflow);
+
+                if (newId <= 0)
+                {
+                    return BadRequest(new { message = "Failed to add the workflow." });
+                }
+
+                return Json(new { id = newId });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditWorkflow(
+            int Id,
+            int DivisionID,
+            string WorkflowName,
+            string Description,
+            bool Active)
+        {
+            try
+            {
+                var workflow = new Workflow
+                {
+                    WorkflowID = Id,
+                    DivisionID = DivisionID,
+                    WorkflowName = WorkflowName,
+                    Description = Description,
+                    Active = Active
+                };
+
+                var success = await _mastersService.UpdateWorkflowAsync(workflow);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Workflow not found or could not be updated." });
+                }
+
+                return Json(new { id = Id });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteWorkflow(int id)
+        {
+            try
+            {
+                var success = await _mastersService.DeleteWorkflowAsync(id);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Workflow not found." });
+                }
+
+                return Ok();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
     }
 }

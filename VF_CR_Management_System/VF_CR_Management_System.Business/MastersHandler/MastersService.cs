@@ -507,5 +507,190 @@ namespace VF_CR_Management_System.Business.MastersHandler
             int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
             return Task.FromResult(rowsAffected > 0);
         }
+
+
+        // =====================================================================
+        // Workflow
+        // =====================================================================
+
+        public Task<IEnumerable<Workflow>> GetAllWorkflowsAsync()
+        {
+            const string sql = @"
+                SELECT
+                    W.WorkflowID,
+                    W.DivisionID,
+                    W.WorkflowName,
+                    W.Description,
+                    W.Active,
+                    D.DivisionName
+                FROM [CRManagementDB].[dbo].[Workflow] W
+                LEFT JOIN [CRManagementDB].[dbo].[Division] D
+                    ON W.DivisionID = D.DivisionID
+                WHERE W.Active = 1
+                ORDER BY W.WorkflowID DESC";
+
+            var result = _connectionService.Query<Workflow>(sql, new { })
+                         ?? Enumerable.Empty<Workflow>();
+
+            return Task.FromResult(result);
+        }
+
+        public Task<int> AddWorkflowAsync(Workflow workflow)
+        {
+            if (workflow == null)
+                throw new ArgumentException("Invalid Workflow.");
+
+            if (workflow.DivisionID <= 0)
+                throw new ArgumentException("Please select a division.");
+
+            if (string.IsNullOrWhiteSpace(workflow.WorkflowName))
+                throw new ArgumentException("Workflow name is required.");
+
+            // Name uniqueness is scoped per division, checking active rows only.
+            // A deleted (inactive) workflow's name never blocks a new, active one.
+            const string sql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Division]
+                    WHERE DivisionID = @DivisionID
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT 0;
+                    RETURN;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Workflow] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE DivisionID = @DivisionID
+                      AND LTRIM(RTRIM(WorkflowName)) = @WorkflowName
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
+
+                INSERT INTO [CRManagementDB].[dbo].[Workflow] (DivisionID, WorkflowName, Description, Active)
+                VALUES (@DivisionID, @WorkflowName, @Description, 1);
+
+                DECLARE @NewWorkflowID INT = CAST(SCOPE_IDENTITY() AS INT);
+
+                COMMIT TRANSACTION;
+                SELECT @NewWorkflowID;
+            ";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@DivisionID", workflow.DivisionID);
+            parameters.Add("@WorkflowName", workflow.WorkflowName.Trim());
+            parameters.Add("@Description", (workflow.Description ?? string.Empty).Trim());
+
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int workflowId = result != null ? Convert.ToInt32(result) : 0;
+
+            if (workflowId == -1)
+                throw new ArgumentException("This workflow already exists under the selected division.");
+
+            if (workflowId == 0)
+                throw new ArgumentException("The selected division is invalid or inactive.");
+
+            return Task.FromResult(workflowId);
+        }
+
+        public Task<bool> UpdateWorkflowAsync(Workflow workflow)
+        {
+            if (workflow == null || workflow.WorkflowID <= 0)
+                throw new ArgumentException("Invalid Workflow.");
+
+            if (workflow.DivisionID <= 0)
+                throw new ArgumentException("Please select a division.");
+
+            if (string.IsNullOrWhiteSpace(workflow.WorkflowName))
+                throw new ArgumentException("Workflow name is required.");
+
+            const string sql = @"
+                SET XACT_ABORT ON;
+                BEGIN TRANSACTION;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Division]
+                    WHERE DivisionID = @DivisionID
+                      AND Active = 1
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT 0;
+                    RETURN;
+                END;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM [CRManagementDB].[dbo].[Workflow] WITH (UPDLOCK, HOLDLOCK)
+                    WHERE DivisionID = @DivisionID
+                      AND LTRIM(RTRIM(WorkflowName)) = @WorkflowName
+                      AND Active = 1
+                      AND WorkflowID <> @WorkflowID
+                )
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT -1;
+                    RETURN;
+                END;
+
+                UPDATE [CRManagementDB].[dbo].[Workflow]
+                SET DivisionID = @DivisionID,
+                    WorkflowName = @WorkflowName,
+                    Description = @Description,
+                    Active = @Active
+                WHERE WorkflowID = @WorkflowID;
+
+                DECLARE @RowsAffected INT = @@ROWCOUNT;
+
+                COMMIT TRANSACTION;
+                SELECT @RowsAffected;
+            ";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@DivisionID", workflow.DivisionID);
+            parameters.Add("@WorkflowName", workflow.WorkflowName.Trim());
+            parameters.Add("@Description", (workflow.Description ?? string.Empty).Trim());
+            parameters.Add("@Active", workflow.Active);
+            parameters.Add("@WorkflowID", workflow.WorkflowID);
+
+            var result = _connectionService.ExecuteScalar(sql, parameters);
+            int rowsAffected = result != null ? Convert.ToInt32(result) : 0;
+
+            if (rowsAffected == -1)
+                throw new ArgumentException("This workflow already exists under the selected division.");
+
+            if (rowsAffected == 0)
+                throw new ArgumentException("Unable to update workflow. Check the selected division and workflow.");
+
+            return Task.FromResult(rowsAffected > 0);
+        }
+
+        public Task<bool> DeleteWorkflowAsync(int workflowId)
+        {
+            if (workflowId <= 0)
+                throw new ArgumentException("Invalid Workflow.");
+
+            const string sql = @"
+                UPDATE [CRManagementDB].[dbo].[Workflow]
+                SET Active = 0
+                WHERE WorkflowID = @WorkflowID";
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@WorkflowID", workflowId);
+
+            int rowsAffected = _connectionService.ExecuteWithPara(sql, parameters);
+            return Task.FromResult(rowsAffected > 0);
+        }
     }
 }

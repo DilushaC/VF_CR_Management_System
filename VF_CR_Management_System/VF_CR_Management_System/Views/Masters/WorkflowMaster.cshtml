@@ -1,0 +1,892 @@
+﻿@using VF_CR_Management_System.Data.Models
+@model WorkflowMasterViewModel
+
+@{
+    ViewData["Title"] = "Workflow Management";
+
+    var workflows = Model?.Workflows ?? Enumerable.Empty<Workflow>();
+    var divisions = Model?.Divisions ?? Enumerable.Empty<Division>();
+}
+
+@Html.AntiForgeryToken()
+
+<style>
+    .vd-page {
+        --vd-ink: #17213b;
+        --vd-accent: #3b5bdb;
+        --vd-ok: #1f9d6b;
+        --vd-bad: #d6384a;
+        --vd-line: var(--bs-border-color, #e3e6ec);
+        --vd-muted: var(--bs-secondary-color, #6b7385);
+        --vd-surface: var(--bs-tertiary-bg, #f5f7fb);
+        --vd-card: var(--bs-card-bg, var(--bs-body-bg, #fff));
+        --vd-hover: var(--bs-tertiary-bg, #f1f4fb);
+    }
+
+    .vd-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: .75rem;
+        margin-bottom: 1.1rem;
+    }
+
+    .vd-head-title {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+    }
+
+    .vd-add-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .55rem 1.1rem;
+        border-radius: .6rem;
+        font-weight: 600;
+        font-size: .88rem;
+        border: 1px solid var(--vd-accent);
+        color: #fff;
+        background: var(--vd-accent);
+        cursor: pointer;
+    }
+
+        .vd-add-btn:hover {
+            background: #2a46c7;
+            border-color: #2a46c7;
+            color: #fff;
+        }
+
+    .vd-table-wrap {
+        border: 1px solid var(--vd-line);
+        border-radius: .85rem;
+        background: var(--vd-card);
+        overflow: hidden;
+    }
+
+    .vd-dt-top,
+    .vd-dt-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: .75rem;
+        padding: .85rem 1rem;
+    }
+
+    .vd-dt-bottom {
+        border-top: 1px solid var(--vd-line);
+    }
+
+    .vd-dt-top .dataTables_filter label,
+    .vd-dt-top .dataTables_length label {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        color: var(--vd-muted);
+        font-size: .88rem;
+    }
+
+    .vd-dt-top .dataTables_filter input {
+        width: 280px;
+        max-width: 100%;
+        margin: 0;
+        padding: .5rem .8rem .5rem 2.2rem;
+        border-radius: 999px;
+        border: 1px solid var(--vd-line);
+        background-color: var(--vd-surface);
+        background-repeat: no-repeat;
+        background-position: .75rem center;
+        background-size: 16px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7385' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+    }
+
+        .vd-dt-top .dataTables_filter input:focus {
+            outline: 0;
+            border-color: var(--vd-accent);
+            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        }
+
+    .vd-dt-top .dataTables_length select {
+        margin: 0;
+        border-radius: .5rem;
+    }
+
+    .vd-dt-bottom .dataTables_info {
+        color: var(--vd-muted);
+        font-size: .85rem;
+        padding: 0;
+    }
+
+    .vd-dt-bottom .dataTables_paginate {
+        margin: 0;
+    }
+
+    .vd-dt-bottom .pagination {
+        margin: 0;
+        gap: .2rem;
+    }
+
+    .vd-dt-bottom .page-link {
+        border: 0;
+        border-radius: .5rem;
+        background: transparent;
+        color: inherit;
+    }
+
+    .vd-dt-bottom .page-item.active .page-link {
+        background: var(--vd-accent);
+        color: #fff;
+    }
+
+    .vd-dt-bottom .page-item.disabled .page-link {
+        opacity: .4;
+    }
+
+    #workflow-datatable {
+        --bs-table-bg: transparent;
+        --bs-table-accent-bg: transparent;
+        --bs-table-hover-bg: transparent;
+        margin: 0 !important;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+        #workflow-datatable > thead > tr > th {
+            padding: .8rem 1rem;
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--vd-muted);
+            white-space: nowrap;
+            background: var(--vd-surface);
+            border-top: 1px solid var(--vd-line);
+            border-bottom: 1px solid var(--vd-line);
+        }
+
+        #workflow-datatable > tbody > tr > td {
+            padding: .7rem 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--vd-line);
+            background: transparent;
+        }
+
+        #workflow-datatable > tbody > tr:last-child > td {
+            border-bottom: 0;
+        }
+
+        #workflow-datatable > tbody > tr:hover > td {
+            background: var(--vd-hover);
+        }
+
+        #workflow-datatable > tbody > tr.is-editing > td {
+            background: rgba(59,91,219,.06);
+        }
+
+        #workflow-datatable > thead > tr > th:last-child,
+        #workflow-datatable > tbody > tr > td:last-child {
+            position: sticky;
+            right: 0;
+            z-index: 2;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        #workflow-datatable > thead > tr > th:last-child {
+            z-index: 3;
+            background: var(--vd-surface);
+        }
+
+        #workflow-datatable > tbody > tr > td:last-child {
+            background: var(--vd-card);
+        }
+
+        #workflow-datatable > tbody > tr:hover > td:last-child {
+            background: var(--vd-hover);
+        }
+
+        #workflow-datatable > tbody > tr.is-editing > td:last-child {
+            background: rgba(59,91,219,.06);
+        }
+
+    .vd-name {
+        font-weight: 600;
+    }
+
+    .vd-desc {
+        display: block;
+        max-width: 420px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--vd-muted);
+        font-size: .88rem;
+    }
+
+    .vd-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        padding: .3rem .7rem;
+        border-radius: .5rem;
+        font-weight: 600;
+        font-size: .8rem;
+        border: 1px solid var(--vd-line);
+        color: var(--vd-ink);
+        background: transparent;
+        cursor: pointer;
+    }
+
+        .vd-btn:hover {
+            background: var(--vd-surface);
+        }
+
+        .vd-btn.vd-btn-edit {
+            border-color: var(--vd-accent);
+            color: var(--vd-accent);
+        }
+
+            .vd-btn.vd-btn-edit:hover {
+                background: var(--vd-accent);
+                color: #fff;
+            }
+
+        .vd-btn.vd-btn-save {
+            border-color: var(--vd-ok);
+            color: var(--vd-ok);
+        }
+
+            .vd-btn.vd-btn-save:hover {
+                background: var(--vd-ok);
+                color: #fff;
+            }
+
+        .vd-btn.vd-btn-cancel {
+            border-color: var(--vd-muted);
+            color: var(--vd-muted);
+        }
+
+        .vd-btn.vd-btn-delete {
+            border-color: var(--vd-bad);
+            color: var(--vd-bad);
+        }
+
+            .vd-btn.vd-btn-delete:hover {
+                background: var(--vd-bad);
+                color: #fff;
+            }
+
+    .vd-row-actions {
+        display: inline-flex;
+        gap: .35rem;
+    }
+
+    .vd-edit-input {
+        width: 100%;
+        min-width: 140px;
+        padding: .3rem .55rem;
+        border-radius: .4rem;
+        border: 1px solid var(--vd-accent);
+        background: var(--vd-card);
+        color: inherit;
+        font-size: .88rem;
+    }
+
+        .vd-edit-input:focus {
+            outline: 0;
+            box-shadow: 0 0 0 3px rgba(59,91,219,.15);
+        }
+
+    .vd-input-division {
+        cursor: pointer;
+    }
+
+    .vd-cell-division .select2-container {
+        width: 100% !important;
+        min-width: 170px;
+    }
+
+    .vd-cell-division .select2-container--default .select2-selection--single {
+        height: 36px;
+        border: 1px solid var(--vd-accent);
+        border-radius: .4rem;
+        background: var(--vd-card);
+    }
+
+        .vd-cell-division .select2-container--default .select2-selection--single
+        .select2-selection__rendered {
+            line-height: 34px;
+            color: inherit;
+            padding-left: .55rem;
+        }
+
+        .vd-cell-division .select2-container--default .select2-selection--single
+        .select2-selection__arrow {
+            height: 34px;
+        }
+
+    .select2-dropdown {
+        z-index: 9999;
+    }
+</style>
+
+<div class="row vd-page">
+    <div class="col-12">
+
+        <div class="vd-head">
+            <div>
+                <h4 class="vd-head-title">Workflow Master</h4>
+            </div>
+
+            <button type="button" class="vd-add-btn" id="wfAddBtn">
+                <i class="ri-add-line"></i> Add Workflow
+            </button>
+        </div>
+
+        <div class="vd-table-wrap">
+            <div class="table-responsive">
+                <table id="workflow-datatable" class="table nowrap w-100">
+                    <thead>
+                        <tr>
+                            <th>Workflow Name</th>
+                            <th>Division</th>
+                            <th>Description</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var w in workflows)
+                        {
+                            <tr class="vd-row" data-id="@w.WorkflowID">
+
+                                <td class="vd-cell-name" data-order="@w.WorkflowID">
+                                    <span class="vd-view vd-name">@w.WorkflowName</span>
+                                </td>
+
+                                <td class="vd-cell-division"
+                                    data-order="@w.DivisionID"
+                                    data-division-id="@w.DivisionID">
+                                    <span class="vd-view vd-division">@w.DivisionName</span>
+                                </td>
+
+                                <td class="vd-cell-desc">
+                                    <span class="vd-view vd-desc"
+                                          title="@w.Description">@w.Description</span>
+                                </td>
+
+                                <td>
+                                    <span class="vd-row-actions vd-view-actions">
+                                        <button type="button"
+                                                class="vd-btn vd-btn-edit btn-edit-workflow">
+                                            <i class="ri-edit-line"></i> Edit
+                                        </button>
+
+                                        <button type="button"
+                                                class="vd-btn vd-btn-delete btn-delete-workflow">
+                                            <i class="ri-delete-bin-line"></i>
+                                        </button>
+                                    </span>
+                                </td>
+
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Division options used by the editable Select2 dropdown -->
+<select id="division-options-template" class="d-none">
+    <option value="">Select Division</option>
+    @foreach (var division in divisions)
+    {
+        <option value="@division.DivisionID">@division.DivisionName</option>
+    }
+</select>
+
+@section Scripts {
+
+    <script src="~/assets/vendor/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/assets/vendor/datatables.net-bs5/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+
+            if (!$.fn.select2) {
+                console.error('Select2 JavaScript is not loaded.');
+            }
+
+            var table = $('#workflow-datatable').DataTable({
+                responsive: false,
+                autoWidth: false,
+                paging: true,
+                pageLength: 10,
+                lengthChange: true,
+                order: [[0, 'desc']],
+                columnDefs: [
+                    { orderable: false, targets: [3] }
+                ],
+                dom: "<'vd-dt-top'lf>rt<'vd-dt-bottom'ip>",
+                language: {
+                    search: '',
+                    searchPlaceholder: 'Search workflows...',
+                    lengthMenu: 'Show _MENU_',
+                    zeroRecords: 'No workflows match your search.',
+                    emptyTable: 'No workflows found.',
+                    info: 'Showing _START_ to _END_ of _TOTAL_',
+                    infoEmpty: 'No workflows',
+                    infoFiltered: '(filtered from _MAX_)'
+                }
+            });
+
+            var $editingRow = null;
+
+            function getToken() {
+                return $('input[name="__RequestVerificationToken"]').val();
+            }
+
+            function antiForgeryHeaders() {
+                var token = getToken();
+
+                return token
+                    ? { "RequestVerificationToken": token }
+                    : {};
+            }
+
+            function buildDivisionSelect(selectedId) {
+
+                var $select = $('<select>', {
+                    class: 'form-control vd-edit-input vd-input-division'
+                });
+
+                $('#division-options-template option').each(function () {
+                    $select.append($(this).clone());
+                });
+
+                $select.val(String(selectedId || ''));
+
+                return $select;
+            }
+
+            function initializeDivisionSelect($select) {
+
+                if (!$.fn.select2) {
+                    return;
+                }
+
+                $select.select2({
+                    width: '100%',
+                    placeholder: 'Select Division',
+                    allowClear: true,
+                    dropdownParent: $(document.body)
+                });
+            }
+
+            function destroyDivisionSelect($row) {
+
+                var $select = $row.find('.vd-input-division');
+
+                if ($select.length &&
+                    $select.hasClass('select2-hidden-accessible')) {
+
+                    $select.select2('destroy');
+                }
+            }
+
+            function enterEditMode($row) {
+
+                if ($editingRow && $editingRow.length && !$editingRow.is($row)) {
+
+                    if ($editingRow.data('isNew')) {
+                        destroyDivisionSelect($editingRow);
+                        table.row($editingRow).remove();
+                        table.draw(false);
+                    } else {
+                        exitEditMode($editingRow, true);
+                    }
+                }
+
+                var $nameCell = $row.find('.vd-cell-name');
+                var $divisionCell = $row.find('.vd-cell-division');
+                var $descCell = $row.find('.vd-cell-desc');
+
+                var currentName = $nameCell.find('.vd-view').text().trim();
+                var currentDivisionId = $divisionCell.attr('data-division-id');
+                var currentDivisionName = $divisionCell.find('.vd-view').text().trim();
+                var currentDesc = $descCell.find('.vd-view').attr('title') || '';
+
+                $nameCell.data('orig', currentName);
+                $divisionCell.data('orig-id', currentDivisionId);
+                $divisionCell.data('orig-name', currentDivisionName);
+                $descCell.data('orig', currentDesc);
+
+                $nameCell.html(
+                    $('<input>', {
+                        type: 'text',
+                        class: 'vd-edit-input vd-input-name',
+                        value: currentName,
+                        maxlength: 150
+                    })
+                );
+
+                var $divisionSelect = buildDivisionSelect(currentDivisionId);
+
+                $divisionCell.empty().append($divisionSelect);
+
+                initializeDivisionSelect($divisionSelect);
+
+                $descCell.html(
+                    $('<input>', {
+                        type: 'text',
+                        class: 'vd-edit-input vd-input-desc',
+                        value: currentDesc,
+                        maxlength: 500
+                    })
+                );
+
+                $row.find('.vd-view-actions').html(
+                    '<button type="button" class="vd-btn vd-btn-save btn-save-workflow">' +
+                    '<i class="ri-check-line"></i> Save</button>' +
+                    '<button type="button" class="vd-btn vd-btn-cancel btn-cancel-workflow">' +
+                    '<i class="ri-close-line"></i> Cancel</button>'
+                );
+
+                $row.addClass('is-editing');
+                $editingRow = $row;
+
+                $row.find('.vd-input-name').trigger('focus');
+            }
+
+            function exitEditMode($row, restoreOriginal) {
+
+                var $nameCell = $row.find('.vd-cell-name');
+                var $divisionCell = $row.find('.vd-cell-division');
+                var $descCell = $row.find('.vd-cell-desc');
+
+                destroyDivisionSelect($row);
+
+                if (restoreOriginal !== false) {
+
+                    var name = $nameCell.data('orig') || '';
+                    var divisionId = $divisionCell.data('orig-id') || '';
+                    var divisionName = $divisionCell.data('orig-name') || '';
+                    var desc = $descCell.data('orig') || '';
+
+                    $nameCell.html(
+                        $('<span>', {
+                            class: 'vd-view vd-name',
+                            text: name
+                        })
+                    );
+
+                    $divisionCell
+                        .attr('data-division-id', divisionId)
+                        .attr('data-order', divisionId)
+                        .html(
+                            $('<span>', {
+                                class: 'vd-view vd-division',
+                                text: divisionName
+                            })
+                        );
+
+                    $descCell.html(
+                        $('<span>', {
+                            class: 'vd-view vd-desc',
+                            text: desc,
+                            title: desc
+                        })
+                    );
+                }
+
+                $row.find('.vd-view-actions').html(
+                    '<button type="button" class="vd-btn vd-btn-edit btn-edit-workflow">' +
+                    '<i class="ri-edit-line"></i> Edit</button>' +
+                    '<button type="button" class="vd-btn vd-btn-delete btn-delete-workflow">' +
+                    '<i class="ri-delete-bin-line"></i></button>'
+                );
+
+                $row.removeClass('is-editing');
+
+                if ($editingRow && $editingRow.is($row)) {
+                    $editingRow = null;
+                }
+            }
+
+            // Edit existing workflow.
+            $('#workflow-datatable tbody').on('click', '.btn-edit-workflow', function () {
+                enterEditMode($(this).closest('tr'));
+            });
+
+            // Cancel editing.
+            $('#workflow-datatable tbody').on('click', '.btn-cancel-workflow', function () {
+
+                var $row = $(this).closest('tr');
+
+                if ($row.data('isNew')) {
+                    destroyDivisionSelect($row);
+                    $editingRow = null;
+                    table.row($row).remove().draw(false);
+                    return;
+                }
+
+                exitEditMode($row, true);
+            });
+
+            // Save workflow.
+            $('#workflow-datatable tbody').on('click', '.btn-save-workflow', function () {
+
+                var $row = $(this).closest('tr');
+
+                var workflowId = parseInt($row.attr('data-id'), 10) || 0;
+                var isNew = !!$row.data('isNew');
+
+                var name = ($row.find('.vd-input-name').val() || '').trim();
+                var divisionId = parseInt(
+                    $row.find('.vd-input-division').val(), 10
+                ) || 0;
+
+                var divisionName = $row.find(
+                    '.vd-input-division option:selected'
+                ).text();
+
+                var desc = ($row.find('.vd-input-desc').val() || '').trim();
+
+                if (!name) {
+                    Swal.fire({
+                        title: 'Workflow name is required',
+                        icon: 'warning'
+                    });
+                    return;
+                }
+
+                if (divisionId <= 0) {
+                    Swal.fire({
+                        title: 'Please select a division',
+                        icon: 'warning'
+                    });
+                    return;
+                }
+
+                var $saveButton = $(this);
+                $saveButton.prop('disabled', true);
+
+                // Property names must match the Workflow model.
+                var payload = {
+                    Id: workflowId,
+                    WorkflowName: name,
+                    DivisionID: divisionId,
+                    Description: desc,
+                    Active: true,
+                    __RequestVerificationToken: getToken()
+                };
+
+                var url = isNew
+                    ? '@Url.Action("AddWorkflow", "Masters")'
+                    : '@Url.Action("EditWorkflow", "Masters")';
+
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    data: payload,
+                    headers: antiForgeryHeaders(),
+
+                    success: function (resp) {
+
+                        if (!resp || !resp.id ||
+                            !Number.isInteger(Number(resp.id))) {
+
+                            $saveButton.prop('disabled', false);
+
+                            Swal.fire({
+                                title: 'Error',
+                                text: 'The workflow was saved, but its ID was not returned. Please refresh the page.',
+                                icon: 'error'
+                            });
+                            return;
+                        }
+
+                        var savedId = parseInt(resp.id, 10);
+
+                        $row.attr('data-id', savedId);
+                        $row.removeData('isNew');
+
+                        var $nameCell = $row.find('.vd-cell-name');
+
+                        $nameCell
+                            .attr('data-order', savedId)
+                            .html(
+                                $('<span>', {
+                                    class: 'vd-view vd-name',
+                                    text: name
+                                })
+                            );
+
+                        var $divisionCell = $row.find('.vd-cell-division');
+
+                        $divisionCell
+                            .attr('data-order', divisionId)
+                            .attr('data-division-id', divisionId)
+                            .html(
+                                $('<span>', {
+                                    class: 'vd-view vd-division',
+                                    text: divisionName
+                                })
+                            );
+
+                        var $descCell = $row.find('.vd-cell-desc');
+
+                        $descCell.html(
+                            $('<span>', {
+                                class: 'vd-view vd-desc',
+                                text: desc,
+                                title: desc
+                            })
+                        );
+
+                        exitEditMode($row, false);
+
+                        table.row($row).invalidate('dom');
+                        table.order([[0, 'desc']]).draw(false);
+
+                        Swal.fire({
+                            title: 'Saved',
+                            text: isNew
+                                ? 'Workflow added successfully.'
+                                : 'Workflow details updated.',
+                            icon: 'success',
+                            timer: 1200,
+                            showConfirmButton: false
+                        });
+                    },
+
+                    error: function (xhr) {
+
+                        $saveButton.prop('disabled', false);
+
+                        var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
+                            'Failed to save workflow. Please try again.';
+
+                        Swal.fire({
+                            title: 'Error',
+                            text: msg,
+                            icon: 'error'
+                        });
+                    }
+                });
+            });
+
+            // Delete workflow.
+            $('#workflow-datatable tbody').on('click', '.btn-delete-workflow', function () {
+
+                var $row = $(this).closest('tr');
+
+                if ($row.data('isNew')) {
+                    destroyDivisionSelect($row);
+                    $editingRow = null;
+                    table.row($row).remove().draw(false);
+                    return;
+                }
+
+                var workflowId = parseInt($row.attr('data-id'), 10) || 0;
+                var workflowName = $row.find('.vd-cell-name .vd-view').text().trim();
+
+                Swal.fire({
+                    title: 'Delete this workflow?',
+                    text: workflowName + ' will be deactivated.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, delete it',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#fa5c7c',
+                    cancelButtonColor: '#6c757d'
+                }).then(function (result) {
+
+                    if (!result.isConfirmed) {
+                        return;
+                    }
+
+                    $.ajax({
+                        url: '@Url.Action("DeleteWorkflow", "Masters")',
+                        type: 'POST',
+                        data: {
+                            id: workflowId,
+                            __RequestVerificationToken: getToken()
+                        },
+                        headers: antiForgeryHeaders(),
+
+                        success: function () {
+
+                            table.row($row).remove().draw(false);
+
+                            Swal.fire({
+                                title: 'Deleted',
+                                text: 'Workflow deactivated successfully.',
+                                icon: 'success',
+                                timer: 1200,
+                                showConfirmButton: false
+                            });
+                        },
+
+                        error: function (xhr) {
+
+                            var msg = (xhr.responseJSON && xhr.responseJSON.message) ||
+                                'Failed to delete workflow. Please try again.';
+
+                            Swal.fire({
+                                title: 'Error',
+                                text: msg,
+                                icon: 'error'
+                            });
+                        }
+                    });
+                });
+            });
+
+            // Add new workflow.
+            $('#wfAddBtn').on('click', function () {
+
+                // Prevent multiple unsaved rows.
+                if ($editingRow && $editingRow.length && $editingRow.data('isNew')) {
+                    $editingRow.find('.vd-input-name').trigger('focus');
+                    return;
+                }
+
+                var rowHtml =
+                    '<tr class="vd-row" data-id="0">' +
+                        '<td class="vd-cell-name" data-order="2147483647">' +
+                            '<span class="vd-view vd-name"></span>' +
+                        '</td>' +
+                        '<td class="vd-cell-division" data-order="0" data-division-id="">' +
+                            '<span class="vd-view vd-division"></span>' +
+                        '</td>' +
+                        '<td class="vd-cell-desc">' +
+                            '<span class="vd-view vd-desc" title=""></span>' +
+                        '</td>' +
+                        '<td>' +
+                            '<span class="vd-row-actions vd-view-actions">' +
+                                '<button type="button" class="vd-btn vd-btn-edit btn-edit-workflow">' +
+                                    '<i class="ri-edit-line"></i> Edit</button>' +
+                                '<button type="button" class="vd-btn vd-btn-delete btn-delete-workflow">' +
+                                    '<i class="ri-delete-bin-line"></i></button>' +
+                            '</span>' +
+                        '</td>' +
+                    '</tr>';
+
+                var newRow = table.row.add($(rowHtml)[0]);
+                var $newRow = $(newRow.node());
+
+                $newRow.data('isNew', true);
+
+                table.order([[0, 'desc']]).page('first').draw(false);
+
+                enterEditMode($newRow);
+            });
+
+        });
+    </script>
+}
