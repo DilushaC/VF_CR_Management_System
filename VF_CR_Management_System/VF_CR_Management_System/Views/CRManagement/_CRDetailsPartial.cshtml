@@ -224,7 +224,7 @@
 
     var canHandoverToFinalApprover = isTestingApproved
         && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
-        && CanActOn(PendingStep("Division Head Approval"));
+        && CanActOn(PendingStep("Division Head Testing Approval"));
 
     var canFinalApprove = isFinalApprovalPending && CanActOn(finalApprovalStep);
 

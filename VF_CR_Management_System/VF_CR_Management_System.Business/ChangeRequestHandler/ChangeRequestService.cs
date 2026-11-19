@@ -2862,7 +2862,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             var files = collection.Files.GetFiles("TestResultFiles");
             var allowedExt = new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt",
-             ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip" };
+                                        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip" };
             const long maxBytes = 10 * 1024 * 1024;
 
             if (files.Count > 10)
@@ -2881,28 +2881,34 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                     throw new ArgumentException($"File is larger than 10 MB: {file.FileName}");
             }
 
-            const string passNextStepName = "Division Head Approval";
-            const string failNextStepName = "Developer Implementation";
-
             const string passTargetStatusName = "TestingApproved";
             const string failTargetStatusName = "QAReturn";
 
             const string sql = @"
+                DECLARE @WorkflowID INT = (
+                    SELECT TOP 1 WorkflowID FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1);
+
                 DECLARE @TestingStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Testing' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 3 AND WorkflowID = @WorkflowID AND Active = 1);
 
+                DECLARE @TestingRollBackStepOrder INT = (
+                    SELECT TOP 1 RollBackStepOrder FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepID = @TestingStepID);
+
+                -- Pass -> StepOrder 8 (Division Head Testing Approval)
+                -- Fail -> the Testing step's own RollBackStepOrder (Developer Implementation, StepOrder 7)
                 DECLARE @NextStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = @NextStepName AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE WorkflowID = @WorkflowID AND Active = 1
+                      AND StepOrder = CASE WHEN @IsPassed = 1 THEN 8 ELSE @TestingRollBackStepOrder END);
 
                 DECLARE @TargetStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = @TargetStatusName AND Active = 1);
 
-                IF @TestingStepID IS NULL OR @NextStepID IS NULL OR @TargetStatusID IS NULL
+                IF @WorkflowID IS NULL OR @TestingStepID IS NULL OR @NextStepID IS NULL OR @TargetStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
                     RETURN;
@@ -2933,7 +2939,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 END
 
                 -- Who gets the next step:
-                -- Pass  -> the ORIGINAL Division Head Approval assignee for this CR (the very first
+                -- Pass  -> the ORIGINAL Division Head Approval (StepOrder 1) assignee for this CR (the very first
                 --          Division Head Approval row, earliest ApprovalID) — the person who started
                 --          the whole approval flow, for final sign-off. NOT the Testing row's AssignedBy,
                 --          which may just be whoever last handed the CR to the tester (e.g. the developer).
@@ -2944,8 +2950,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 BEGIN
                     DECLARE @DivHeadStepID INT = (
                         SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                        WHERE StepName = 'Division Head Approval' AND Active = 1
-                        ORDER BY StepOrder ASC);
+                        WHERE StepOrder = 1 AND WorkflowID = @WorkflowID AND Active = 1);
 
                     SELECT TOP 1 @NextAssignedTo = AssignedTo
                     FROM [CRManagementDB].[dbo].[Approval]
@@ -2956,8 +2961,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 BEGIN
                     DECLARE @DevImplStepID INT = (
                         SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                        WHERE StepName = 'Developer Implementation' AND Active = 1
-                        ORDER BY StepOrder ASC);
+                        WHERE StepOrder = 7 AND WorkflowID = @WorkflowID AND Active = 1);
 
                     SELECT TOP 1 @NextAssignedTo = AssignedTo
                     FROM [CRManagementDB].[dbo].[Approval]
@@ -3001,7 +3005,7 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 INSERT INTO [CRManagementDB].[dbo].[Approval]
                     (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active, Comments)
                 VALUES
-                    (@CRID, @NextStepID, @EmpId, @NextAssignedTo, @Now, 1, 'v3-divhead-fix');
+                    (@CRID, @NextStepID, @EmpId, @NextAssignedTo, @Now, 1, 'Approved');
 
                 UPDATE [CRManagementDB].[dbo].[ChangeRequest]
                 SET StatusID = @TargetStatusID
@@ -3017,7 +3021,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             parameters.Add("@TestResult", testResult);
             parameters.Add("@IsPassed", isPass);
             parameters.Add("@Decision", isPass ? "Test Passed" : "Test Failed");
-            parameters.Add("@NextStepName", isPass ? passNextStepName : failNextStepName);
             parameters.Add("@TargetStatusName", isPass ? passTargetStatusName : failTargetStatusName);
             parameters.Add("@Now", DateTime.Now);
 
@@ -3036,7 +3039,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return true;
         }
-
         public async Task<bool> AssignFinalApproverAsync(int crId, int approverId, string approvedByEmpId)
         {
             if (crId <= 0)
@@ -3045,21 +3047,23 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 throw new ArgumentException("Please select a valid user to assign.");
 
             const string sql = @"
+                DECLARE @WorkflowID INT = (
+                    SELECT TOP 1 WorkflowID FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1);
+
                 DECLARE @DeptHeadStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Division Head Approval' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 8 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @FinalApprovalStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Final Approval' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 9 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @TargetStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = 'FinalApprovalPending' AND Active = 1);
 
-                IF @DeptHeadStepID IS NULL OR @FinalApprovalStepID IS NULL OR @TargetStatusID IS NULL
+                IF @WorkflowID IS NULL OR @DeptHeadStepID IS NULL OR @FinalApprovalStepID IS NULL OR @TargetStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
                     RETURN;
@@ -3458,21 +3462,23 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             uatLink = uatLink.Trim();
 
             const string sql = @"
+                DECLARE @WorkflowID INT = (
+                    SELECT TOP 1 WorkflowID FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1);
+
                 DECLARE @DevImplStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Developer Implementation' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 7 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @TestingStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Testing' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 3 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @DevReturnStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = 'DevReturn' AND Active = 1);
 
-                IF @DevImplStepID IS NULL OR @TestingStepID IS NULL OR @DevReturnStatusID IS NULL
+                IF @WorkflowID IS NULL OR @DevImplStepID IS NULL OR @TestingStepID IS NULL OR @DevReturnStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
                     RETURN;
@@ -3555,7 +3561,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
-
         public async Task<bool> ReturnToQAAsync(int crId, string reason, string empNo)
         {
             if (crId <= 0)
@@ -3735,26 +3740,27 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             empNo = empNo.Trim();
 
             const string sql = @"
+                DECLARE @WorkflowID INT = (
+                    SELECT TOP 1 WorkflowID FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1);
+
                 DECLARE @FinalApprovalStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Final Approval' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 9 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @DevDocStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Developer Documentation' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 7 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @ReleaseClosureStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Release Closure' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 10 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @FinalApprovedStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = 'FinalApproved' AND Active = 1);
 
-                IF @FinalApprovalStepID IS NULL OR @DevDocStepID IS NULL
+                IF @WorkflowID IS NULL OR @FinalApprovalStepID IS NULL OR @DevDocStepID IS NULL
                    OR @ReleaseClosureStepID IS NULL OR @FinalApprovedStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
@@ -3844,16 +3850,19 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             empNo = empNo.Trim();
 
             const string sql = @"
+                DECLARE @WorkflowID INT = (
+                    SELECT TOP 1 WorkflowID FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1);
+
                 DECLARE @ReleaseClosureStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Release Closure' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 10 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @DeployedStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = 'Deployed' AND Active = 1);
 
-                IF @ReleaseClosureStepID IS NULL OR @DeployedStatusID IS NULL
+                IF @WorkflowID IS NULL OR @ReleaseClosureStepID IS NULL OR @DeployedStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
                     RETURN;
@@ -3921,7 +3930,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
-
         public async Task<DashboardMetrics> GetDashboardMetricsAsync()
         {
             const string sql = @"
