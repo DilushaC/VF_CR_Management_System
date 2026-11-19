@@ -40,7 +40,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             bool isSubmit = statusId == 2;
 
-            // ---- Parse everything leniently first ----
             int.TryParse(collection["ChangeTypeID"], out var changeTypeId);
             int.TryParse(collection["PriorityID"], out var priorityId);
             var changeTitle = collection["ChangeTitle"].ToString();
@@ -53,7 +52,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             int approverId = 0;
             bool hasApprover = int.TryParse(approverIdRaw, out approverId);
 
-            // ---- Full validation only applies when actually submitting ----
             if (isSubmit)
             {
                 if (changeTypeId <= 0)
