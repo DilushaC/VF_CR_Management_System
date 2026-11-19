@@ -208,12 +208,12 @@
 
     var canGoQA = isDevReturn && CanActOn(testingStep);
 
-    var canDevDocDecide = isAssessment && CanActOn(PendingStep("Division Head Approval"));
+    var canDevDocDecide = isAssessment && CanActOn(PendingStep("Division Head Documentation Approval"));
 
     var canGoSecurity = isAssessmentAccepted && CanActOn(securityStep);
     var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
 
-    var canApproveToDevelopment = isSecurityApproved && CanActOn(PendingStep("Division Head Approval"));
+    var canApproveToDevelopment = isSecurityApproved && CanActOn(PendingStep("Division Head Security Approval"));
 
     var canProceedToDevelopment =
         (isDevelopmentApproved || isQaReturn)
