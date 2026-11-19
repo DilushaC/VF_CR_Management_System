@@ -3365,26 +3365,27 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 throw new ArgumentException("Invalid Change Request.");
 
             const string sql = @"
+                DECLARE @WorkflowID INT = (
+                    SELECT TOP 1 WorkflowID FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1);
+
                 DECLARE @DeptHeadStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Division Head Approval' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 6 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @DevDocStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Developer Documentation' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 2 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @DevImplStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Developer Implementation' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 7 AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @DevelopmentApprovedStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = 'DevelopmentApproved' AND Active = 1);
 
-                IF @DeptHeadStepID IS NULL OR @DevDocStepID IS NULL OR @DevImplStepID IS NULL OR @DevelopmentApprovedStatusID IS NULL
+                IF @WorkflowID IS NULL OR @DeptHeadStepID IS NULL OR @DevDocStepID IS NULL OR @DevImplStepID IS NULL OR @DevelopmentApprovedStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
                     RETURN;
