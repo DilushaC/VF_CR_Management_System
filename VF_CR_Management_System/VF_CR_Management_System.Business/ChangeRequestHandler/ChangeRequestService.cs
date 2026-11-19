@@ -2622,9 +2622,9 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             {
                 // Draft save: just persist the fields and status, no workflow step movement.
                 const string getStatusIdSql = @"
-            SELECT TOP 1 StatusID
-            FROM [CRManagementDB].[dbo].[CRStatus]
-            WHERE StatusName = @StatusName AND Active = 1";
+                    SELECT TOP 1 StatusID
+                    FROM [CRManagementDB].[dbo].[CRStatus]
+                    WHERE StatusName = @StatusName AND Active = 1";
 
                 var statusIdObj = _connectionService.ExecuteScalar(getStatusIdSql, new { StatusName = targetStatusName });
                 if (statusIdObj == null || statusIdObj == DBNull.Value)
@@ -2633,15 +2633,15 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
                 int draftStatusId = Convert.ToInt32(statusIdObj);
 
                 const string updateCrSql = @"
-            UPDATE ChangeRequest
-            SET RiskAssessment = @RiskAssessment,
-                SecurityRequirements = @SecurityRequirements,
-                SecurityRisksIdentified = @SecurityRisksIdentified,
-                RiskTreatmentControls = @RiskTreatmentControls,
-                DependenciesImpact = @DependenciesImpact,
-                ImpactID = @ImpactID,
-                StatusID = @StatusID
-            WHERE CRID = @CRID AND Active = 1";
+                    UPDATE ChangeRequest
+                    SET RiskAssessment = @RiskAssessment,
+                        SecurityRequirements = @SecurityRequirements,
+                        SecurityRisksIdentified = @SecurityRisksIdentified,
+                        RiskTreatmentControls = @RiskTreatmentControls,
+                        DependenciesImpact = @DependenciesImpact,
+                        ImpactID = @ImpactID,
+                        StatusID = @StatusID
+                    WHERE CRID = @CRID AND Active = 1";
 
                 var draftParams = new DynamicParameters();
                 draftParams.Add("@RiskAssessment", riskAssessment);
