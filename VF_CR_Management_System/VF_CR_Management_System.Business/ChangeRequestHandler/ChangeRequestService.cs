@@ -3286,21 +3286,28 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             empNo = empNo.Trim();
 
             const string sql = @"
+                DECLARE @WorkflowID INT = (
+                    SELECT TOP 1 WorkflowID FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1);
+
                 DECLARE @DivHeadStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Division Head Approval' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 4 AND WorkflowID = @WorkflowID AND Active = 1);
+
+                DECLARE @DivHeadRollBackStepOrder INT = (
+                    SELECT TOP 1 RollBackStepOrder FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepID = @DivHeadStepID);
 
                 DECLARE @DevDocStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Developer Documentation' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = @DivHeadRollBackStepOrder AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @AssessmentReturnedStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = 'AssessmentReturned' AND Active = 1);
 
-                IF @DivHeadStepID IS NULL OR @DevDocStepID IS NULL OR @AssessmentReturnedStatusID IS NULL
+                IF @WorkflowID IS NULL OR @DivHeadStepID IS NULL OR @DivHeadRollBackStepOrder IS NULL
+                   OR @DevDocStepID IS NULL OR @AssessmentReturnedStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
                     RETURN;
@@ -3362,7 +3369,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return success != null && success != DBNull.Value && Convert.ToBoolean(success);
         }
-
         public async Task<bool> ApproveToDevelopmentAsync(int crId, string empNo)
         {
             if (crId <= 0)
