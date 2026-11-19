@@ -2779,21 +2779,28 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
             empId = empId.Trim();
 
             const string sql = @"
+                DECLARE @WorkflowID INT = (
+                    SELECT TOP 1 WorkflowID FROM [CRManagementDB].[dbo].[Workflow]
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1);
+
                 DECLARE @SecurityStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Security' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = 5 AND WorkflowID = @WorkflowID AND Active = 1);
+
+                DECLARE @SecurityRollBackStepOrder INT = (
+                    SELECT TOP 1 RollBackStepOrder FROM [CRManagementDB].[dbo].[WorkflowStep]
+                    WHERE StepID = @SecurityStepID);
 
                 DECLARE @DevDocStepID INT = (
                     SELECT TOP 1 StepID FROM [CRManagementDB].[dbo].[WorkflowStep]
-                    WHERE StepName = 'Developer Documentation' AND Active = 1
-                    ORDER BY StepOrder ASC);
+                    WHERE StepOrder = @SecurityRollBackStepOrder AND WorkflowID = @WorkflowID AND Active = 1);
 
                 DECLARE @SecurityRejectedStatusID INT = (
                     SELECT TOP 1 StatusID FROM [CRManagementDB].[dbo].[CRStatus]
                     WHERE StatusName = 'SecurityRejected' AND Active = 1);
 
-                IF @SecurityStepID IS NULL OR @DevDocStepID IS NULL OR @SecurityRejectedStatusID IS NULL
+                IF @WorkflowID IS NULL OR @SecurityStepID IS NULL OR @SecurityRollBackStepOrder IS NULL
+                   OR @DevDocStepID IS NULL OR @SecurityRejectedStatusID IS NULL
                 BEGIN
                     SELECT CAST(0 AS BIT) AS Success;
                     RETURN;
