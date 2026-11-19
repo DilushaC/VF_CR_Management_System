@@ -121,29 +121,44 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             if (hasApprover)
             {
-                // 1. Fetch the StepID dynamically based on the StepName
-                const string getStepIdSql = @"
-                SELECT TOP 1 StepID 
-                FROM WorkflowStep 
-                WHERE StepName LIKE '%Division Head Approval%' AND Active = 1
-                ORDER BY StepOrder ASC;";
+                // 1. Fetch the WorkflowID for "Development CR Workflow"
+                const string getWorkflowIdSql = @"
+                    SELECT TOP 1 WorkflowID 
+                    FROM Workflow 
+                    WHERE WorkflowName = 'Development CR Workflow' AND Active = 1;";
 
-                // Use ExecuteScalar or similar helper method from your connection service
-                var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql);
+                var workflowIdObj = _connectionService.ExecuteScalar(getWorkflowIdSql);
+
+                if (workflowIdObj == null || workflowIdObj == DBNull.Value)
+                {
+                    throw new InvalidOperationException("Workflow 'Development CR Workflow' was not found or is inactive.");
+                }
+
+                int workflowId = Convert.ToInt32(workflowIdObj);
+
+                // 2. Fetch the StepID for StepOrder 1 within that workflow
+                const string getStepIdSql = @"
+                    SELECT TOP 1 StepID 
+                    FROM WorkflowStep 
+                    WHERE StepOrder = 1 AND Active = 1 AND WorkflowID = @WorkflowID;";
+
+                var stepIdParams = new DynamicParameters();
+                stepIdParams.Add("@WorkflowID", workflowId);
+                var stepIdObj = _connectionService.ExecuteScalar(getStepIdSql, stepIdParams);
 
                 if (stepIdObj == null || stepIdObj == DBNull.Value)
                 {
-                    throw new InvalidOperationException("Workflow step for 'Division Head' approval was not found or is inactive.");
+                    throw new InvalidOperationException("Workflow step with StepOrder 1 was not found or is inactive for the Development CR Workflow.");
                 }
 
                 int targetStepId = Convert.ToInt32(stepIdObj);
 
-                // 2. Insert into Approval table using the dynamically fetched StepID
+                // 3. Insert into Approval table using the dynamically fetched StepID
                 const string approvalSql = @"
-                INSERT INTO Approval
-                    (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
-                VALUES
-                    (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active);";
+                    INSERT INTO Approval
+                        (CRID, StepID, AssignedBy, AssignedTo, AssignedDate, Active)
+                    VALUES
+                        (@CRID, @StepID, @AssignedBy, @AssignedTo, @AssignedDate, @Active);";
 
                 var approvalParameters = new DynamicParameters();
                 approvalParameters.Add("@CRID", newCrId);
@@ -160,7 +175,6 @@ namespace VF_CR_Management_System.Business.ChangeRequestHandler
 
             return newCrId;
         }
-
 
         public async Task<ChangeRequest> GetChangeRequestByIdAsync(int crId)
         {
