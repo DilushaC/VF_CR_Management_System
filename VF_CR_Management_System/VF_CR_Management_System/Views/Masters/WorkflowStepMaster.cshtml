@@ -969,15 +969,21 @@
             // Add new step.
             $('#wsAddBtn').on('click', function () {
 
-                // Prevent multiple unsaved rows.
-                if ($editingRow && $editingRow.length && $editingRow.data('isNew')) {
+                // Prevent multiple unsaved rows — but only if that row still exists in the table.
+                if ($editingRow && $editingRow.length &&
+                    $editingRow.data('isNew') &&
+                    $.contains(document, $editingRow[0])) {
+
                     $editingRow.find('.vd-input-name').trigger('focus');
                     return;
                 }
 
+                // Stale reference — clear it so we fall through and create a fresh row.
+                $editingRow = null;
+
                 var rowHtml =
                     '<tr class="vd-row" data-id="0">' +
-                        '<td class="vd-cell-order" data-order="2147483647">' +
+                        '<td class="vd-cell-order" data-order="-1">' +
                             '<span class="vd-view vd-order"></span>' +
                         '</td>' +
                         '<td class="vd-cell-name" data-order="">' +

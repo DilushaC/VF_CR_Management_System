@@ -30,6 +30,50 @@ namespace VF_CR_Management_System.Presentation.Controllers
             return View();
         }
 
+        //[HttpPost]
+        //public async Task<IActionResult> Login(string username, string password)
+        //{
+        //    try
+        //    {
+        //        UserModel user = await _userService.ValidateUserAsync(username, password);
+
+        //        if (user != null)
+        //        {
+        //            if (user == null)
+        //                return Json(new { success = false, message = "Invalid login" });
+
+        //            if (user.ProductNames == null)
+        //                return Json(new { success = false, message = "Unauthorized product access" });
+
+        //            // Session storage
+        //            HttpContext.Session.SetString("UserName", user.DisplayName);
+        //            HttpContext.Session.SetString("EmpNo", user.UserName);
+        //            HttpContext.Session.SetString("Designation", user.DisplayDesignation);
+        //            HttpContext.Session.SetString("Department", user.DisplayDepartment);
+        //            HttpContext.Session.SetString("Email", user.Email);
+        //            HttpContext.Session.SetString("UserId", user.Id.ToString());
+
+        //            // Store MenuItems
+        //            var menuJson = JsonSerializer.Serialize(user.MenuItems ?? new List<MenuItem>());
+        //            HttpContext.Session.SetString("MenuItems", menuJson);
+
+        //            //HttpContext.Session.SetString("AccessPages", jsonData);
+        //            return Json(new { success = true, redirectUrl = Url.Action("Index", "Home"), loggedUser = user.DisplayName });
+        //        }
+        //        else
+        //        {
+        //            //log.Info($"Failed login.");
+        //            return Json(new { success = false });
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        //log.Error($"Error Login : {ex.Message}.");
+        //        throw;
+        //    }
+        //}
+
+
         [HttpPost]
         public async Task<IActionResult> Login(string username, string password)
         {
