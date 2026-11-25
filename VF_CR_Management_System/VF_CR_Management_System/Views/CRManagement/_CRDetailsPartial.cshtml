@@ -71,93 +71,107 @@
             string.Equals(EmpNoOf(c), id, StringComparison.OrdinalIgnoreCase));
     }
 
-    bool IsPending(WorkflowStepAssignment? step) =>
-        step != null
-        && step.IsApproved != true
-        && (string.IsNullOrWhiteSpace(step.Decision)
-            || string.Equals(step.Decision.Trim(), "Pending", StringComparison.OrdinalIgnoreCase));
-
     string StepKey(string? s) => (s ?? string.Empty).Replace(" ", string.Empty);
 
     var allSteps = Model.StepAssignments ?? new List<WorkflowStepAssignment>();
 
-    List<WorkflowStepAssignment> StepRows(string stepName) =>
+    // ---- Core rule: a step's action is available to the current user only when
+    // there's an Approval row for that StepName, assigned to them, with IsApproved == null.
+    DateTime? RowTimestamp(WorkflowStepAssignment s) => s.ApprovalDate ?? s.AssignedDate;
+
+    // Latest row for a given step name (by ApprovalDate, falling back to AssignedDate),
+    // used for stepper coloring. "Latest" matters when a step has been retried.
+    WorkflowStepAssignment? LatestStep(string stepName) =>
         allSteps
             .Where(s => string.Equals(StepKey(s.StepName), StepKey(stepName), StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-    // --- Draft-snapshot handling -------------------------------------------------
-    // A "draft snapshot" is a row where progress was saved (it has Comments
-    // and/or an ApprovalDate) but no real Decision text was ever recorded
-    // (IsApproved = 0, Decision = NULL/empty). This happens e.g. when the
-    // Security officer saves a draft via the SecurityDraft flow. A second row
-    // later captures the real outcome (IsApproved = 1, or a real Decision).
-    // Such a draft row should never be treated as "the latest state" of that
-    // step once a real outcome exists for the same step + assignee.
-    DateTime? RowTimestamp(WorkflowStepAssignment s) => s.ApprovalDate ?? (DateTime?)s.AssignedDate;
-
-    bool IsDraftSnapshot(WorkflowStepAssignment s) =>
-        s.IsApproved == false
-        && string.IsNullOrWhiteSpace(s.Decision)
-        && s.ApprovalDate.HasValue;
-
-    bool IsSupersededDraft(WorkflowStepAssignment s) =>
-        IsDraftSnapshot(s)
-        && allSteps.Any(other =>
-            !ReferenceEquals(other, s)
-            && other.StepID == s.StepID
-            && string.Equals(Normalize(other.AssignedTo), Normalize(s.AssignedTo), StringComparison.OrdinalIgnoreCase)
-            && !IsDraftSnapshot(other)
-            && (RowTimestamp(other) ?? DateTime.MinValue) >= (RowTimestamp(s) ?? DateTime.MinValue));
-
-    // Picks the chronologically latest row for a step, ignoring superseded
-    // drafts, and ordering by actual timestamp rather than relying on
-    // whatever order EF happens to return StepAssignments in.
-    WorkflowStepAssignment? LatestStep(string stepName) =>
-        StepRows(stepName)
-            .Where(s => !IsSupersededDraft(s))
             .OrderBy(s => RowTimestamp(s) ?? DateTime.MinValue)
             .LastOrDefault();
 
-    WorkflowStepAssignment? PendingStep(string stepName) => StepRows(stepName).LastOrDefault(IsPending);
+    // The row that currently grants the CURRENT USER an action for this step name:
+    // assigned to them AND still pending (IsApproved == null).
+    WorkflowStepAssignment? ActionableStepFor(string stepName) =>
+        allSteps.LastOrDefault(s =>
+            string.Equals(StepKey(s.StepName), StepKey(stepName), StringComparison.OrdinalIgnoreCase)
+            && s.IsApproved == null
+            && IsCurrentUser(s.AssignedTo));
 
-    bool CanActOn(WorkflowStepAssignment? step) =>
-        step != null && IsPending(step) && IsCurrentUser(step.AssignedTo);
+    // ---- Per-step action flags (fully replaces the old status-string flags) ----
+    var divHeadApprovalStep = ActionableStepFor("Division Head Approval");
+    var devDocStep = ActionableStepFor("Developer Documentation");
+    var testingStepAction = ActionableStepFor("Testing");
+    var divHeadDocApprovalStep = ActionableStepFor("Division Head Documentation Approval");
+    var securityStepAction = ActionableStepFor("Security");
+    var divHeadSecurityApprovalStep = ActionableStepFor("Division Head Security Approval");
+    var devImplementationStep = ActionableStepFor("Developer Implementation");
+    var divHeadTestingApprovalStep = ActionableStepFor("Division Head Testing Approval");
+    var finalApprovalStepAction = ActionableStepFor("Final Approval");
+    var releaseClosureStepAction = ActionableStepFor("Release Closure");
 
-    var statusKey = StepKey(Model.Status);
+    var canApprove = divHeadApprovalStep != null;          // Approve / Reject
+    var canGoAssessment = devDocStep != null;                   // Go to Assessment
+    var canGoQA = testingStepAction != null;            // Proceed to QA
+    var canDevDocDecide = divHeadDocApprovalStep != null;       // Accept / Return
+    var canGoSecurity = securityStepAction != null;          // Proceed to Security
+    var canApproveToDevelopment = divHeadSecurityApprovalStep != null;  // Approve to Development
+    var canProceedToDevelopment = devImplementationStep != null;        // Proceed to Development
+    var canHandoverToFinalApprover = divHeadTestingApprovalStep != null;   // Send to Final Approval
+    var canFinalApprove = finalApprovalStepAction != null;      // Final Approval
+    var canSubmitLiveLink = releaseClosureStepAction != null;     // Add Live Link
 
-    bool StatusIs(params string[] names) =>
-        names.Any(n => string.Equals(statusKey, StepKey(n), StringComparison.OrdinalIgnoreCase));
+    var hasAction = canApprove || canGoAssessment || canGoQA || canDevDocDecide || canGoSecurity
+        || canApproveToDevelopment || canProceedToDevelopment || canHandoverToFinalApprover
+        || canFinalApprove || canSubmitLiveLink;
 
-    // Real workflow steps (WorkflowStep table, WorkflowID 3):
-    // Division Head Approval, Security, Testing, Final Approval,
-    // Developer Documentation, Release Closure, Developer Implementation.
-    var deptHeadRows = StepRows("Division Head Approval");
-    var devDocRows = StepRows("Developer Documentation");
+    // ---- Stepper: fixed named stages, left to right, colored by each step's own IsApproved ----
+    var stageDefs = new (string Name, string Icon)[]
+    {
+        ("Division Head Approval",               "ri-user-follow-line"),
+        ("Developer Documentation",               "ri-file-search-line"),
+        ("Division Head Documentation Approval",  "ri-user-follow-line"),
+        ("Security",                              "ri-shield-check-line"),
+        ("Division Head Security Approval",       "ri-user-follow-line"),
+        ("Developer Implementation",              "ri-code-s-slash-line"),
+        ("Testing",                               "ri-test-tube-line"),
+        ("Division Head Testing Approval",        "ri-user-follow-line"),
+        ("Final Approval",                        "ri-check-double-line"),
+        ("Release Closure",                       "ri-rocket-line"),
+    };
 
-    var creatorStep = deptHeadRows
-    .Where(s => s.AssignedDate.HasValue)
-    .OrderBy(s => s.AssignedDate)
-    .FirstOrDefault() ?? deptHeadRows.FirstOrDefault();
-
-    var creatorUser = creatorStep?.AssignedBy;
-
-    var securityStep = LatestStep("Security");
-    var testingStep = LatestStep("Testing");
-    var finalApprovalStep = LatestStep("Final Approval");
-    var releaseClosureStep = LatestStep("Release Closure");
-    var developerImplementationStep = LatestStep("Developer Implementation");
+    // (Css, HasRow) for a bubble: no row yet => empty/grey; else by IsApproved.
+    (string Css, bool HasRow) BubbleState(string stepName)
+    {
+        var step = LatestStep(stepName);
+        if (step == null) { return ("is-empty", false); }
+        if (step.IsApproved == null) { return ("is-current", true); }   // white/pending
+        if (step.IsApproved == true) { return ("is-done", true); }      // green
+        return ("is-rejected", true);                                    // red
+    }
 
     // Developer Documentation: 1st row -> developer does the work,
     // later row(s) -> goes back to the approver to Accept / Return.
+    var devDocRows = allSteps
+        .Where(s => string.Equals(StepKey(s.StepName), StepKey("Developer Documentation"), StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
     var developerUser = devDocRows.FirstOrDefault()?.AssignedTo;
     if (string.IsNullOrWhiteSpace(developerUser))
     {
         developerUser = Model.AssessmentUserName;
     }
 
-    var isOriginalDeveloper = IsCurrentUser(developerUser);
-    var isAssignedDeveloper = devDocRows.Any(r => r.IsApproved == null && IsCurrentUser(r.AssignedTo));
+    var deptHeadRows = allSteps
+        .Where(s => string.Equals(StepKey(s.StepName), StepKey("Division Head Approval"), StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var creatorStep = deptHeadRows
+        .Where(s => s.AssignedDate.HasValue)
+        .OrderBy(s => s.AssignedDate)
+        .FirstOrDefault() ?? deptHeadRows.FirstOrDefault();
+
+    var creatorUser = creatorStep?.AssignedBy;
+
+    var securityStep = LatestStep("Security");
+    var testingStep = LatestStep("Testing");
 
     var hasAssignedUsers = new[]
     {
@@ -171,68 +185,12 @@
         Model.TestingApproverUserName
     }.Any(u => !string.IsNullOrWhiteSpace(u));
 
-    // Status flags
-    var isDraft = StatusIs("Draft");
-    var isSubmitted = StatusIs("Submitted");
-    var isApproved = StatusIs("Approved");
-    var isAssessment = StatusIs("Assessment");
-    var isAssessmentDraft = StatusIs("AssessmentDraft");
-    var isAssessmentAccepted = StatusIs("AssessmentAccepted");
-    var isAssessmentReturned = StatusIs("AssessmentReturned");
-    var isSecurityDraft = StatusIs("SecurityDraft");
-    var isSecurityRejected = StatusIs("SecurityRejected");
-    var isSecurityApproved = StatusIs("SecurityApproved");
-    var isDevelopmentApproved = StatusIs("DevelopmentApproved");
-    var isDevReturn = StatusIs("DevReturn");
-    var isTestingStatus = StatusIs("Testing");
-    var isTestingDraft = StatusIs("TestingDraft");
-    var isTestingRejected = StatusIs("TestingRejected");
-    var isQaReturn = StatusIs("QAReturn");
-    var isTestingApproved = StatusIs("TestingApproved");
-    var isFinalApprovalPending = StatusIs("FinalApprovalPending"); // matches DB's "FInalApprovalPending" too (OrdinalIgnoreCase)
-    var isFinalApproved = StatusIs("FinalApproved");
-    var isFinalRejected = StatusIs("FinalRejected");
-    var isDeployed = StatusIs("Deployed");
-    var isReleasedStatus = StatusIs("Released");
-    var isRejected = StatusIs("Rejected");
-
-    var isReleased = Model.CompletedDate.HasValue || isReleasedStatus || isDeployed;
-    var isReturned = isAssessmentReturned || isSecurityRejected || isQaReturn
-                   || isDevReturn || isTestingRejected || isFinalRejected;
-
-    //end of status flags
-
-    var canApprove = isSubmitted && CanActOn(PendingStep("Division Head Approval"));
-
-    var canGoAssessment = isApproved && isAssignedDeveloper || isAssessmentReturned && isAssignedDeveloper || isSecurityRejected && isAssignedDeveloper;
-
-    var canGoQA = isDevReturn && CanActOn(testingStep);
-
-    var canDevDocDecide = isAssessment && CanActOn(PendingStep("Division Head Documentation Approval"));
-
-    var canGoSecurity = isAssessmentAccepted && CanActOn(securityStep);
-    var canEditSecurityDraft = isSecurityDraft && IsCurrentUser(securityStep?.AssignedTo);
-
-    var canApproveToDevelopment = isSecurityApproved && CanActOn(PendingStep("Division Head Security Approval"));
-
-    var canProceedToDevelopment =
-        (isDevelopmentApproved || isQaReturn)
-        && CanActOn(developerImplementationStep);
-
-    var testerAlreadyAssigned = testingStep != null && !string.IsNullOrWhiteSpace(testingStep.AssignedTo);
-    var canHandoverToTester = CanActOn(testingStep) && !testerAlreadyAssigned;
-
-    var canHandoverToFinalApprover = isTestingApproved
-        && string.IsNullOrWhiteSpace(Model.FinalApproverUserName)
-        && CanActOn(PendingStep("Division Head Testing Approval"));
-
-    var canFinalApprove = isFinalApprovalPending && CanActOn(finalApprovalStep);
-
-    var canReturnToQA = isTestingApproved && CanActOn(testingStep);
-
-    var canSubmitLiveLink = isFinalApproved && CanActOn(releaseClosureStep);
-
-    var isAssignedFinalApprover = IsCurrentUser(Model.FinalApproverUserName);
+    var isRejected = string.Equals(StepKey(Model.Status), StepKey("Rejected"), StringComparison.OrdinalIgnoreCase);
+    var isReturned = (Model.Status ?? string.Empty).IndexOf("return", StringComparison.OrdinalIgnoreCase) >= 0
+                   || (Model.Status ?? string.Empty).IndexOf("reject", StringComparison.OrdinalIgnoreCase) >= 0;
+    var isReleased = Model.CompletedDate.HasValue
+                   || string.Equals(StepKey(Model.Status), StepKey("Released"), StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(StepKey(Model.Status), StepKey("Deployed"), StringComparison.OrdinalIgnoreCase);
 
     var userLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     var nameLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -268,156 +226,10 @@
         return raw;
     }
 
-    var dbgMe = string.Join(",", currentIds);
-    var dbgSteps = string.Join(" | ", allSteps.Select(x => $"{x.StepID}:{x.StepName}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
-    var dbgDevDoc = string.Join(" | ", devDocRows.Select(x => $"{x.StepID}:{x.AssignedTo}:{x.Decision}:{x.IsApproved}"));
-
     var showDebug = false;
 }
 
 @{
-    // 11 stages: 3 of them are "Division Head Approval" gates that recur at
-    // different points in the flow (after Assessment, after Security, after QA).
-    var stageNames = new[] {
-        "Requested", "Div. Head Approval", "Assessment", "Div. Head Approval", "Security",
-        "Div. Head Approval", "Development", "QA", "Div. Head Approval",
-        "Final approval", "Release"
-    };
-    var stageIcons = new[] {
-        "ri-file-add-line", "ri-user-follow-line", "ri-file-search-line", "ri-user-follow-line",
-        "ri-shield-check-line", "ri-user-follow-line", "ri-code-s-slash-line", "ri-test-tube-line",
-        "ri-user-follow-line", "ri-check-double-line", "ri-rocket-line"
-    };
-
-    int activeStage =
-        isReleased ? stageNames.Length :
-        isRejected || isFinalRejected ? 9 :
-        isFinalApproved ? 10 :                 
-        isFinalApprovalPending ? 9 :           
-        isTestingApproved ? 8 :
-        (isTestingStatus || isTestingDraft || isTestingRejected
-            || isDevReturn) ? 7 :
-        (isDevelopmentApproved || isQaReturn) ? 6 :
-        isSecurityApproved ? 5 :
-        isSecurityDraft ? 4 :
-        isAssessmentAccepted ? 4 :
-        isAssessment ? 3 :
-        (isApproved || isAssessmentDraft || isAssessmentReturned || isSecurityRejected) ? 2 :
-        isSubmitted ? 1 :
-        0;
-
-    var hasAction = canApprove || canDevDocDecide || canGoAssessment || canGoSecurity || canEditSecurityDraft
-        || canApproveToDevelopment || canProceedToDevelopment || canGoQA || canHandoverToTester
-        || canHandoverToFinalApprover || canReturnToQA || canFinalApprove || canSubmitLiveLink;
-
-    var attachmentCount = srsFiles.Count + baFiles.Count + qaFiles.Count + vendorFiles.Count;
-    var stepRows = allSteps;
-
-    // IsSupersededDraft / IsDraftSnapshot / RowTimestamp are defined in the
-    // first @{ } block above (shared with LatestStep()) — not redefined here.
-    var displayStepRows = stepRows
-        .Where(s => !string.IsNullOrEmpty(StepKey(s.StepName)))
-        .Where(s => !IsSupersededDraft(s))
-        .ToList();
-
-    // ===== Workflow diagram: stage mapping, retries, and from/to flow =====
-
-    int StageIndexOf(WorkflowStepAssignment? step)
-    {
-        if (step == null) { return -1; }
-        var k = StepKey(step.StepName);
-
-        if (string.Equals(k, StepKey("Division Head Approval"), StringComparison.OrdinalIgnoreCase))
-        {
-            var deptHeadRowsInOrder = displayStepRows
-                .Where(s => string.Equals(StepKey(s.StepName), StepKey("Division Head Approval"), StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            var occurrenceIndex = deptHeadRowsInOrder.FindIndex(s => ReferenceEquals(s, step));
-
-            return occurrenceIndex switch
-            {
-                0 => 1,  
-                1 => 3,  
-                2 => 5,  
-                3 => 8, 
-                _ => 8   
-            };
-        }
-
-        if (string.Equals(k, StepKey("Developer Documentation"), StringComparison.OrdinalIgnoreCase)) return 2;
-        if (string.Equals(k, StepKey("Security"), StringComparison.OrdinalIgnoreCase)) return 4;
-        if (string.Equals(k, StepKey("Developer Implementation"), StringComparison.OrdinalIgnoreCase)) return 6;
-        if (string.Equals(k, StepKey("Testing"), StringComparison.OrdinalIgnoreCase)) return 7;
-        if (string.Equals(k, StepKey("Final Approval"), StringComparison.OrdinalIgnoreCase)) return 9;
-        if (string.Equals(k, StepKey("Release Closure"), StringComparison.OrdinalIgnoreCase)) return 10;
-        return -1;
-    }
-
-    var furthestStageReached = displayStepRows
-        .Select(s => StageIndexOf(s))
-        .Where(i => i >= 0)
-        .DefaultIfEmpty(0)
-        .Max();
-
-    var stageVisitCounts = displayStepRows
-        .Select(s => StageIndexOf(s))
-        .Where(i => i >= 0)
-        .GroupBy(i => i)
-        .ToDictionary(g => g.Key, g => g.Count());
-
-    int RetryCountFor(int stageIndex) =>
-        stageVisitCounts.TryGetValue(stageIndex, out var c) ? c : 0;
-
-    int DevelopmentCycleCount() =>
-        stageVisitCounts.TryGetValue(6, out var c) ? c : 0;
-
-    int QaCycleCount()
-    {
-        var testingRecordsForBadge = Model.Tests ?? new List<Testing>();
-        var activeForBadge = testingRecordsForBadge.Where(t => t.Active).ToList();
-        if (!activeForBadge.Any()) { return 0; }
-        return Math.Max(activeForBadge.Count, activeForBadge.Max(t => t.TestCycleNumber));
-    }
-
-    var testingStepRowsInOrder = displayStepRows
-        .Where(s => string.Equals(StepKey(s.StepName), StepKey("Testing"), StringComparison.OrdinalIgnoreCase))
-        .ToList();
-
-    string? FromCaption(int index)
-    {
-        if (index < 0 || index >= displayStepRows.Count) { return null; }
-        var current = displayStepRows[index];
-
-
-        if (testingStepRowsInOrder.Count > 0 && ReferenceEquals(current, testingStepRowsInOrder[0]))
-        {
-            return "Assigned by: Division Head Approval";
-        }
-
-        if (index == 0) { return "From: Created"; }
-
-        var prev = displayStepRows[index - 1];
-        var prevState = StepState(prev);
-        return $"From: {Pretty(prev.StepName)} ({prevState.Label})";
-    }
-
-    string? ToCaption(int index)
-    {
-        if (index < 0 || index >= displayStepRows.Count - 1) { return null; }
-        var next = displayStepRows[index + 1];
-        var bounce = IsBounceBackToNext(index);
-        var label = "To";
-        return $"{label}: {Pretty(next.StepName)}";
-    }
-
-    bool IsBounceBackToNext(int index)
-    {
-        if (index < 0 || index >= displayStepRows.Count - 1) { return false; }
-        var curStage = StageIndexOf(displayStepRows[index]);
-        var nextStage = StageIndexOf(displayStepRows[index + 1]);
-        return curStage >= 0 && nextStage >= 0 && nextStage < curStage;
-    }
-
     var hasAssessmentData = new[]
     {
         Model.ChangeImpact, Model.Vendor, Model.ProposalNumber, Model.BusinessImpact, Model.Reason,
@@ -441,6 +253,12 @@
     }.Any(v => !string.IsNullOrWhiteSpace(v)) || testingStep != null || activeTestingRecords.Any();
 
     var isOverdue = Model.DueDate.HasValue && Model.DueDate.Value.Date < DateTime.Today && !isReleased && !isRejected;
+
+    var attachmentCount = srsFiles.Count + baFiles.Count + qaFiles.Count + vendorFiles.Count;
+
+    var displayStepRows = allSteps
+        .Where(s => !string.IsNullOrEmpty(StepKey(s.StepName)))
+        .ToList();
 
     string Pretty(string? s) =>
         string.IsNullOrWhiteSpace(s)
@@ -475,26 +293,18 @@
 
     (string Label, string Css) StepState(WorkflowStepAssignment s)
     {
-        if (isRejected) { return ("Rejected", "bad"); }
-
         if (s.IsApproved == true) { return ("Completed", "ok"); }
 
         if (s.IsApproved == false)
         {
             var decision = (s.Decision ?? string.Empty).Trim();
-            if (decision.Length == 0 || decision.Equals("Pending", StringComparison.OrdinalIgnoreCase))
-            {
-                return ("Pending", "wait");
-            }
-
             var isNegative = decision.IndexOf("reject", StringComparison.OrdinalIgnoreCase) >= 0
                 || decision.Equals("Returned", StringComparison.OrdinalIgnoreCase);
-            return (decision, isNegative ? "bad" : "warn");
+            return (decision.Length == 0 ? "Rejected" : decision, isNegative || decision.Length == 0 ? "bad" : "warn");
         }
 
         return ("Pending", "wait");
     }
-
 
     DateTime? StepTimestamp(WorkflowStepAssignment s) =>
         s.ApprovalDate ?? (DateTime?)s.AssignedDate;
@@ -872,15 +682,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             display: none;
         }
 
-        .cr-step.is-done::before,
-        .cr-step.is-current::before {
-            background-image: linear-gradient(var(--cr-ok), var(--cr-ok));
-            background-repeat: no-repeat;
-            background-size: 0 100%;
-            animation: cr-fill .45s ease-out forwards;
-            animation-delay: calc(var(--i) * 110ms);
-        }
-
     @@keyframes cr-fill {
         to {
             background-size: 100% 100%;
@@ -901,27 +702,20 @@ void FileGroup(string title, string icon, List<Attachment> items)
         border: 2px solid rgba(255,255,255,.22);
     }
 
-    .cr-retry-badge {
-        position: absolute;
-        top: -6px;
-        right: -6px;
-        min-width: 16px;
-        height: 16px;
-        padding: 0 3px;
-        border-radius: 999px;
-        background: var(--cr-warn);
-        color: #3a2600;
-        font-size: .65rem;
-        font-weight: 800;
-        line-height: 16px;
-        text-align: center;
-        box-shadow: 0 0 0 2px var(--cr-ink);
+    /* ---- New stepper bubble states ----
+           is-empty    : no Approval row yet for this step           -> grey / dim
+           is-current  : row exists, IsApproved == null (pending)    -> white
+           is-done     : row exists, IsApproved == true               -> green
+           is-rejected : row exists, IsApproved == false              -> red
+        */
+    .cr-step.is-empty .cr-dot {
+        background: #26304f;
+        border-color: rgba(255,255,255,.22);
+        opacity: .55;
     }
 
-    .cr-step.is-done .cr-dot {
-        background: var(--cr-ok);
-        border-color: var(--cr-ok);
-        color: #0c2a1e;
+    .cr-step.is-empty {
+        color: rgba(255,255,255,.4);
     }
 
     .cr-step.is-current .cr-dot {
@@ -931,25 +725,36 @@ void FileGroup(string title, string icon, List<Attachment> items)
         box-shadow: 0 0 0 5px rgba(255,255,255,.18);
     }
 
-    .cr-step.is-current.is-returned .cr-dot {
-        background: var(--cr-warn);
-        border-color: var(--cr-warn);
+    .cr-step.is-done .cr-dot {
+        background: var(--cr-ok);
+        border-color: var(--cr-ok);
+        color: #0c2a1e;
     }
 
-    .cr-step.is-current.is-rejected .cr-dot {
+    .cr-step.is-rejected .cr-dot {
         background: var(--cr-bad);
         border-color: var(--cr-bad);
         color: #fff;
     }
 
-    .cr-step.is-done, .cr-step.is-current {
-        color: rgba(255,255,255,.85);
-    }
-
-    .cr-step.is-current {
-        color: #fff;
+    .cr-step.is-done, .cr-step.is-current, .cr-step.is-rejected {
+        color: rgba(255,255,255,.9);
         font-weight: 600;
     }
+
+        .cr-step.is-done::before,
+        .cr-step.is-current::before,
+        .cr-step.is-rejected::before {
+            background-image: linear-gradient(var(--cr-ok), var(--cr-ok));
+            background-repeat: no-repeat;
+            background-size: 0 100%;
+            animation: cr-fill .45s ease-out forwards;
+            animation-delay: calc(var(--i) * 110ms);
+        }
+
+        .cr-step.is-rejected::before {
+            background-image: linear-gradient(var(--cr-bad), var(--cr-bad));
+        }
 
     .cr-body {
         padding: 0;
@@ -1381,34 +1186,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
         margin-top: .1rem;
     }
 
-    .cr-tl-flow {
-        display: flex;
-        align-items: center;
-        gap: .35rem;
-        margin-top: .3rem;
-        font-size: .78rem;
-        color: var(--cr-muted);
-    }
-
-        .cr-tl-flow i {
-            font-size: .9rem;
-            color: var(--cr-accent);
-        }
-
-        .cr-tl-flow.is-bounce {
-            color: #b57600;
-            font-weight: 600;
-        }
-
-            .cr-tl-flow.is-bounce i {
-                color: var(--cr-warn);
-            }
-
-    // .cr-tl-item.cr-tl-bounce::before {
-    //     background: repeating-linear-gradient( to bottom, var(--cr-warn) 0, var(--cr-warn) 4px, transparent 4px, transparent 8px );
-    //     width: 2px;
-    // }
-
     .cr-empty {
         text-align: center;
         padding: 2.5rem 1rem;
@@ -1746,7 +1523,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
     }
 
     @@media (prefers-reduced-motion: reduce) {
-        .cr-step.is-done::before, .cr-step.is-current::before {
+        .cr-step.is-done::before, .cr-step.is-current::before, .cr-step.is-rejected::before {
             animation: none;
             background-size: 100% 100%;
         }
@@ -1797,49 +1574,19 @@ void FileGroup(string title, string icon, List<Attachment> items)
     </div>
 
     <ol class="cr-stepper" aria-label="Workflow progress">
-        @{
-            var effectiveStage = activeStage;
-        }
-        @for (var si = 0; si < stageNames.Length; si++)
+        @for (var si = 0; si < stageDefs.Length; si++)
         {
-            var isDone = si < effectiveStage;
-            var isCurrent = si == effectiveStage;
-            var isDivHeadStage = si == 1 || si == 3 || si == 5 || si == 8;
-            var isAssessmentStage = si == 2;
-            var isSecurityStage = si == 4;
-            var isDevStage = si == 6;
-            var isQaStage = si == 7;
+            var (name, icon) = stageDefs[si];
+            var (css, hasRow) = BubbleState(name);
+            var dotIcon = css == "is-done" ? "ri-check-line"
+            : css == "is-rejected" ? "ri-close-line"
+            : icon;
 
-            var isPersistentBadgeStage = isAssessmentStage || isSecurityStage || isDevStage || isQaStage;
-
-            var cycleCount = isPersistentBadgeStage
-                            ? (isDevStage ? DevelopmentCycleCount()
-                               : isQaStage ? QaCycleCount()
-                               : RetryCountFor(si))
-                            : 0;
-
-            var badgeTitle = isAssessmentStage ? $"Assessment cycle {cycleCount}"
-                            : isSecurityStage ? $"Security cycle {cycleCount}"
-                            : isDevStage ? $"Development cycle {cycleCount}"
-                            : isQaStage ? $"QA test cycle {cycleCount}"
-                            : string.Empty;
-
-            var isRetried = isPersistentBadgeStage && cycleCount > 1;
-            var showBadge = isRetried;
-
-            var stateCss = isDone ? "is-done" : isCurrent ? "is-current" : "";
-            if (isCurrent && isRejected) { stateCss += " is-rejected"; }
-            else if (isCurrent && isRetried) { stateCss += " is-returned"; }
-
-            <li class="cr-step @stateCss" style="--i:@(si)" aria-current="@(isCurrent ? "step" : null)">
+            <li class="cr-step @css" style="--i:@(si)">
                 <div class="cr-dot">
-                    <i class="@(isDone ? "ri-check-line" : stageIcons[si])"></i>
-                    @if (showBadge)
-                    {
-                        <span class="cr-retry-badge cr-cycle-badge" title="@badgeTitle">@cycleCount</span>
-                    }
+                    <i class="@dotIcon"></i>
                 </div>
-                <div>@stageNames[si]</div>
+                <div>@name</div>
             </li>
         }
     </ol>
@@ -2102,7 +1849,7 @@ void FileGroup(string title, string icon, List<Attachment> items)
                     {
                         var step = displayStepRows[i];
                         var state = StepState(step);
-                        var waitingOnMe = IsPending(step) && IsCurrentUser(step.AssignedTo);
+                        var waitingOnMe = step.IsApproved == null && IsCurrentUser(step.AssignedTo);
                         var dotIcon = state.Css == "ok" ? "ri-check-line"
                         : state.Css == "bad" ? "ri-close-line"
                         : state.Css == "warn" ? "ri-arrow-go-back-line"
@@ -2142,13 +1889,10 @@ void FileGroup(string title, string icon, List<Attachment> items)
 {
     <div class="px-3 pb-2">
         <small class="text-muted d-block" style="font-size:11px; word-break:break-all;">
-            DEBUG | status=[@Model.Status] | qaReturn=[@isQaReturn] | testingApproved=[@isTestingApproved] | finalApprover=[@Model.FinalApproverUserName] |
-            me=[@dbgMe] | isFinalApprover=[@isAssignedFinalApprover] |
-            developer=[@developerUser] | isAssignedDev=[@isAssignedDeveloper] | isOriginalDev=[@isOriginalDeveloper] | devDocRows=[@dbgDevDoc] |
-            canApprove=[@canApprove] | canDevDocDecide=[@canDevDocDecide] | canGoAssessment=[@canGoAssessment] | canGoSecurity=[@canGoSecurity] |
-            canApproveToDevelopment=[@canApproveToDevelopment] | canProceedToDevelopment=[@canProceedToDevelopment] |
-            canHandoverToTester=[@canHandoverToTester] | canHandoverToFinalApprover=[@canHandoverToFinalApprover] |
-            canReturnToQA=[@canReturnToQA] | canFinalApprove=[@canFinalApprove] | canSubmitLiveLink=[@canSubmitLiveLink] | steps=[@dbgSteps]
+            DEBUG | status=[@Model.Status] |
+            canApprove=[@canApprove] | canGoAssessment=[@canGoAssessment] | canGoQA=[@canGoQA] | canDevDocDecide=[@canDevDocDecide] |
+            canGoSecurity=[@canGoSecurity] | canApproveToDevelopment=[@canApproveToDevelopment] | canProceedToDevelopment=[@canProceedToDevelopment] |
+            canHandoverToFinalApprover=[@canHandoverToFinalApprover] | canFinalApprove=[@canFinalApprove] | canSubmitLiveLink=[@canSubmitLiveLink]
         </small>
     </div>
 }
@@ -2163,6 +1907,18 @@ void FileGroup(string title, string icon, List<Attachment> items)
             <i class="ri-close-circle-line"></i>Reject
         </button>
     }
+    @if (canGoAssessment)
+    {
+        <a href="@Url.Action("Assessment", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-warning">
+            <i class="ri-file-search-line"></i>Go to Assessment
+        </a>
+    }
+    @if (canGoQA)
+    {
+        <a href="@Url.Action("Testing", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-primary">
+            <i class="ri-test-tube-line"></i>Proceed to QA
+        </a>
+    }
     @if (canDevDocDecide)
     {
         <button type="button" id="modal-devdoc-approve-btn" class="cr-action-btn is-approve" data-id="@Model.CRID">
@@ -2172,23 +1928,10 @@ void FileGroup(string title, string icon, List<Attachment> items)
             <i class="ri-arrow-go-back-line"></i>Return
         </button>
     }
-    @if (canGoAssessment)
-    {
-        <a href="@Url.Action("Assessment", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-warning">
-            <i class="ri-file-search-line"></i>Go to Assessment
-        </a>
-    }
     @if (canGoSecurity)
     {
         <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-info">
-            <i class="ri-shield-check-line"></i>Security Assessment
-        </a>
-    }
-    @if (canEditSecurityDraft)
-    {
-        <a href="@Url.Action("AssesmentSecurity", "CRManagement", new { id = Model.CRID })"
-           class="cr-action-btn is-outline" title="Edit Security Assessment">
-            <i class="ri-pencil-line"></i>Edit Security Assessment
+            <i class="ri-shield-check-line"></i>Proceed to Security
         </a>
     }
     @if (canApproveToDevelopment)
@@ -2203,28 +1946,10 @@ void FileGroup(string title, string icon, List<Attachment> items)
             <i class="ri-code-s-slash-line"></i>Proceed to Development
         </button>
     }
-    @if (canGoQA)
-    {
-        <a href="@Url.Action("Testing", "CRManagement", new { id = Model.CRID })" class="cr-action-btn is-primary">
-            <i class="ri-test-tube-line"></i>Proceed to QA Test
-        </a>
-    }
-    @if (canHandoverToTester)
-    {
-        <button type="button" id="modal-handover-tester-btn" class="cr-action-btn is-primary" data-id="@Model.CRID">
-            <i class="ri-user-shared-line"></i>Handover to Tester
-        </button>
-    }
     @if (canHandoverToFinalApprover)
     {
         <button type="button" id="modal-handover-final-btn" class="cr-action-btn is-final" data-id="@Model.CRID">
             <i class="ri-send-plane-line"></i>Send to Final Approval
-        </button>
-    }
-    @if (canReturnToQA)
-    {
-        <button type="button" id="modal-return-qa-btn" class="cr-action-btn is-danger" data-id="@Model.CRID">
-            <i class="ri-arrow-go-back-line"></i>Return to QA
         </button>
     }
     @if (canFinalApprove)
@@ -2255,13 +1980,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                    foreach (var user in ViewBag.Users)
-                    {
-                            string uId = user.UserName;
-                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                            if (string.IsNullOrEmpty(uId)) { continue; }
-                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                    }
+                        foreach (var user in ViewBag.Users)
+                        {
+                                    string uId = user.UserName;
+                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                    if (string.IsNullOrEmpty(uId)) { continue; }
+                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                        }
             }
         ];
 
@@ -2645,36 +2370,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
             });
         });
 
-        $(document).off('click', '#modal-handover-tester-btn')
-                   .on('click', '#modal-handover-tester-btn', function () {
-
-            var crId = $(this).data('id');
-
-            pickUser('Handover to Tester', 'Select Tester:', 'Confirm Handover',
-                'ri-user-shared-line', 'uat-swal-icon', 'uat-swal-confirm')
-                .then((result) => {
-                    if (!result.isConfirmed) return;
-
-                    $.ajax({
-                        url: '@(Url.Action("AssignTester", "CRManagement"))',
-                        type: 'POST',
-                        data: { id: crId, testerID: result.value },
-                        success: function (response) {
-                            if (response.success) {
-                                successAndClose(response.message || 'Handover successfully created.');
-                            } else {
-                                Swal.fire('Error', response.message || 'Failed to assign tester.', 'error');
-                            }
-                        },
-                        error: function (xhr) {
-                            var msg = (xhr.responseJSON && xhr.responseJSON.message)
-                                || 'An error occurred processing the server request.';
-                            Swal.fire('Error', msg, 'error');
-                        }
-                    });
-                });
-        });
-
         $(document).off('click', '#modal-handover-final-btn')
                    .on('click', '#modal-handover-final-btn', function () {
 
@@ -3032,54 +2727,6 @@ void FileGroup(string title, string icon, List<Attachment> items)
                     error: function (xhr) {
                         var msg = (xhr.responseJSON && xhr.responseJSON.message)
                             || 'Failed to save the live link. Please try again.';
-                        Swal.fire('Error', msg, 'error');
-                    }
-                });
-            });
-        });
-
-        $(document).off('click', '#modal-return-qa-btn')
-                   .on('click', '#modal-return-qa-btn', function () {
-
-            var crId = $(this).data('id');
-
-            Swal.fire({
-                title: 'Return to QA?',
-                input: 'textarea',
-                inputLabel: 'Reason for returning to QA',
-                inputPlaceholder: 'Explain what QA needs to re-test or fix...',
-                inputAttributes: { 'aria-label': 'Reason for returning to QA', maxlength: 1000 },
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Yes, return to QA',
-                confirmButtonColor: '#dc3545',
-                cancelButtonText: 'Cancel',
-                focusConfirm: false,
-                inputValidator: (value) => {
-                    if (!value || !value.trim()) {
-                        return 'Please enter a reason.';
-                    }
-                }
-            }).then((result) => {
-                if (!result.isConfirmed) return;
-
-                var token = $('input[name="__RequestVerificationToken"]').val();
-
-                $.ajax({
-                    url: '@(Url.Action("ReturnToQA", "CRManagement"))',
-                    type: 'POST',
-                    data: { id: crId, reason: result.value.trim() },
-                    headers: token ? { "RequestVerificationToken": token } : {},
-                    success: function (response) {
-                        if (response && response.success === false) {
-                            Swal.fire('Error', response.message || 'Failed to return the CR to QA.', 'error');
-                        } else {
-                            successAndClose((response && response.message) || 'Change Request returned to QA.');
-                        }
-                    },
-                    error: function (xhr) {
-                        var msg = (xhr.responseJSON && xhr.responseJSON.message)
-                            || 'Failed to return the Change Request to QA. Please try again.';
                         Swal.fire('Error', msg, 'error');
                     }
                 });

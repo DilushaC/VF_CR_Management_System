@@ -475,28 +475,6 @@
                 console.error('Select2 JavaScript is not loaded.');
             }
 
-            // Custom predicate so the workflow filter matches on the row's
-            // actual data-workflow-id attribute instead of the Workflow
-            // column's rendered HTML/text, which the default column search
-            // can't match reliably (and rendered text can collide anyway).
-            var activeWorkflowFilterId = '';
-
-            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex, rowData, counter) {
-
-                if (settings.nTable.id !== 'workflowstep-datatable') {
-                    return true;
-                }
-
-                if (!activeWorkflowFilterId) {
-                    return true;
-                }
-
-                var rowNode = settings.aoData[dataIndex].nTr;
-                var rowWorkflowId = $(rowNode).find('.vd-cell-workflow').attr('data-workflow-id');
-
-                return String(rowWorkflowId) === String(activeWorkflowFilterId);
-            });
-
             var table = $('#workflowstep-datatable').DataTable({
                 responsive: false,
                 autoWidth: false,
@@ -517,38 +495,6 @@
                     info: 'Showing _START_ to _END_ of _TOTAL_',
                     infoEmpty: 'No workflow steps',
                     infoFiltered: '(filtered from _MAX_)'
-                },
-                initComplete: function () {
-
-                    var $wrap = $('<div>', { class: 'vd-filter-wrap' });
-
-                    $wrap.append($('<label>', { text: 'Workflow' }));
-
-                    var $filterSelect = $('<select>', { id: 'wsWorkflowFilter' });
-
-                    $('#workflow-filter-template option').each(function () {
-                        $filterSelect.append($(this).clone());
-                    });
-
-                    $wrap.append($filterSelect);
-
-                    // Sits next to the "Show" length control in the toolbar.
-                    $('div.vd-dt-top div.dataTables_length').after($wrap);
-
-                    if ($.fn.select2) {
-                        $filterSelect.select2({
-                            width: 'resolve',
-                            minimumResultsForSearch: 0,
-                            dropdownParent: $(document.body)
-                        });
-                    }
-
-                    // Drives the custom search predicate above, matching on
-                    // the row's actual WorkflowID rather than column text.
-                    $filterSelect.on('change', function () {
-                        activeWorkflowFilterId = $(this).val() || '';
-                        table.draw();
-                    });
                 }
             });
 
