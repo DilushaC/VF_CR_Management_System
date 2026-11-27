@@ -107,9 +107,14 @@
     var finalApprovalStepAction = ActionableStepFor("Final Approval");
     var releaseClosureStepAction = ActionableStepFor("Release Closure");
 
+    // NEW: "Proceed to QA" must additionally require that the Developer Implementation
+    // step has actually been approved (IsApproved == true) — not just pending/rejected.
+    var devImplementationLatest = LatestStep("Developer Implementation");
+    var devImplementationApproved = devImplementationLatest != null && devImplementationLatest.IsApproved == true;
+
     var canApprove = divHeadApprovalStep != null;          // Approve / Reject
     var canGoAssessment = devDocStep != null;                   // Go to Assessment
-    var canGoQA = testingStepAction != null;            // Proceed to QA
+    var canGoQA = testingStepAction != null && devImplementationApproved;            // Proceed to QA
     var canDevDocDecide = divHeadDocApprovalStep != null;       // Accept / Return
     var canGoSecurity = securityStepAction != null;          // Proceed to Security
     var canApproveToDevelopment = divHeadSecurityApprovalStep != null;  // Approve to Development
@@ -142,7 +147,20 @@
     {
         var step = LatestStep(stepName);
         if (step == null) { return ("is-empty", false); }
-        if (step.IsApproved == null) { return ("is-current", true); }   // white/pending
+
+        if (step.IsApproved == null)
+        {
+            // Testing's "pending/white" bubble should not light up until
+            // Developer Implementation has actually been approved (IsApproved == true).
+            if (string.Equals(StepKey(stepName), StepKey("Testing"), StringComparison.OrdinalIgnoreCase)
+                && !devImplementationApproved)
+            {
+                return ("is-empty", false);
+            }
+
+            return ("is-current", true);   // white/pending
+        }
+
         if (step.IsApproved == true) { return ("is-done", true); }      // green
         return ("is-rejected", true);                                    // red
     }
@@ -703,11 +721,11 @@ void FileGroup(string title, string icon, List<Attachment> items)
     }
 
     /* ---- New stepper bubble states ----
-           is-empty    : no Approval row yet for this step           -> grey / dim
-           is-current  : row exists, IsApproved == null (pending)    -> white
-           is-done     : row exists, IsApproved == true               -> green
-           is-rejected : row exists, IsApproved == false              -> red
-        */
+               is-empty    : no Approval row yet for this step           -> grey / dim
+               is-current  : row exists, IsApproved == null (pending)    -> white
+               is-done     : row exists, IsApproved == true               -> green
+               is-rejected : row exists, IsApproved == false              -> red
+            */
     .cr-step.is-empty .cr-dot {
         background: #26304f;
         border-color: rgba(255,255,255,.22);
@@ -1980,13 +1998,13 @@ void FileGroup(string title, string icon, List<Attachment> items)
         var userOptions = [
             @if (ViewBag.Users != null)
             {
-                        foreach (var user in ViewBag.Users)
-                        {
-                                    string uId = user.UserName;
-                                    string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
-                                    if (string.IsNullOrEmpty(uId)) { continue; }
-                                    <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
-                        }
+                            foreach (var user in ViewBag.Users)
+                            {
+                                            string uId = user.UserName;
+                                            string label = user.FirstName + " " + user.LastName + " - " + user.UserName;
+                                            if (string.IsNullOrEmpty(uId)) { continue; }
+                                            <text>{ id: @Html.Raw(Json.Serialize(uId)), text: @Html.Raw(Json.Serialize(label)) },</text>
+                            }
             }
         ];
 
